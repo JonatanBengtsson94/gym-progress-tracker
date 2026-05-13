@@ -1,0 +1,11 @@
+# Environment variables
+/backend/.env
+/frontend/.env
+
+# Node
+/frontend/node_modules
+/frontend/dist
+
+# GO
+/backend/bin
+/backend/tmp

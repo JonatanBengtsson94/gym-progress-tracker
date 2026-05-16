@@ -1,6 +1,6 @@
 CREATE TABLE users (
   user_id SERIAL PRIMARY KEY,
-  username VARCHAR(100) NOT NULL,
+  username VARCHAR(100) UNIQUE NOT NULL,
   password VARCHAR(255) NOT NULL,
   first_name VARCHAR(100),
   last_name VARCHAR(100),
@@ -19,7 +19,7 @@ CREATE TABLE templates (
 
 CREATE TABLE workouts (
   workout_id SERIAL PRIMARY KEY,
-  template_id INTEGER REFERENCES templates(template_id),
+  template_id INTEGER NOT NULL REFERENCES templates(template_id),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

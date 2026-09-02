@@ -6,8 +6,6 @@ The purpose of the application is to provide a easy way to keep track of progres
 ## Local Development
 
 ### Requirements
-- Go 1.26+
-- Node.js 26+
 - Docker
 
 ### Backend
@@ -23,14 +21,4 @@ Create a .env file at `docker/.env` with the following content:
 Start the database and backend applications inside docker containers by running `docker compose up -d` inside the `/docker` dir.
 
 ### Frontend
-#### Configure environment variables
-Create a .env file at `frontned/.env` with the following content:
-
-    API_URL=
-    API_KEY=
-
-#### Install dependencies
-Install the required dependencies by running `npm install` inside `/frontend`
-
-#### Running the application
-Start the application by running `npm run dev` inside `/frontend`
+TODO

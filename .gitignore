@@ -1,4 +1,5 @@
 # Environment variables
+/docker/.env
 /backend/.env
 /frontend/.env
 

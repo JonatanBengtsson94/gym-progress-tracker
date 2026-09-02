@@ -12,19 +12,15 @@ The purpose of the application is to provide a easy way to keep track of progres
 
 ### Backend
 #### Configure environent variables
-Create a .env file at `backend/.env` with the following content:
+Create a .env file at `docker/.env` with the following content:
 
     DB_HOST=localhost
     DB_PORT=5432
     DB_USER=gym_progress_tracker
     DB_PWD=gym_progress_tracker
 
-#### Install dependencies
-Install the required dependencies by running `go mod tidy` inside `/backend`
-
 #### Running the application
-First start the database by running `docker compose up -d` inside the `/database` dir.
-Then start the go application by running `go run .cmd/api`
+Start the database and backend applications inside docker containers by running `docker compose up -d` inside the `/docker` dir.
 
 ### Frontend
 #### Configure environment variables

@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: gym_progress_tracker
+      POSTGRES_PASSWORD: gym_progress_tracker
+      POSTGRES_DB: gym_progress_tracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./migrations:/docker-entrypoint-initdb.d
+
+volumes:
+  postgres_data:

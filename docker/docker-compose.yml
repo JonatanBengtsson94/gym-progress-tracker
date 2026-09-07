@@ -4,12 +4,22 @@ services:
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PWD}
-      POSTGRES_DB: gym_progress_tracker
+      POSTGRES_DB: ${DB_NAME}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
       - ../database/migrations:/docker-entrypoint-initdb.d
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
 
   backend:
     build:
@@ -17,8 +27,9 @@ services:
     environment:
       DB_USER: ${DB_USER}
       DB_PWD: ${DB_PWD}
-      DB_HOST: ${DB_HOST}
-      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_HOST: db
+      DB_PORT: 5432
     depends_on:
       - db
 

@@ -21,13 +21,18 @@ CREATE TABLE workouts (
   workout_id SERIAL PRIMARY KEY,
   template_id INTEGER NOT NULL REFERENCES templates(template_id),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  completed_at TIMESTAMP
 );
 
 CREATE TABLE exercises (
   exercise_id SERIAL PRIMARY KEY,
-  exercise_name VARCHAR(100) NOT NULL
+  user_id INTEGER REFERENCES users(user_id),
+  exercise_name VARCHAR(100) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT uq_exercises_user_name UNIQUE (user_id, exercise_name)
 );
 
 CREATE TABLE sets (
@@ -37,3 +42,8 @@ CREATE TABLE sets (
   reps INTEGER NOT NULL,
   weight NUMERIC(6,2) NOT NULL
 );
+
+CREATE INDEX idx_templates_user_id ON templates(user_id);
+CREATE INDEX idx_workouts_template_id ON workouts(template_id);
+CREATE INDEX idx_sets_workout_id ON sets(workout_id);
+CREATE INDEX idx_sets_exercise_id ON sets(exercise_id);

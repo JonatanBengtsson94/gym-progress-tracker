@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
+	"net/http"
+	"time"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/config"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/database"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercises"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/server"
 )
 
 func main() {
@@ -15,41 +18,22 @@ func main() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	dsn := fmt.Sprintf(
-		"postgres://%s:%s@%s:%s/%s",
-		cfg.DB.Username,
-		cfg.DB.Password,
-		cfg.DB.Host,
-		cfg.DB.Port,
-		cfg.DB.DBName,
-	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	pool, err := pgxpool.New(context.TODO(), dsn)
+	pool, err := database.NewPool(ctx, cfg.DB)
 	if err != nil {
-		log.Fatalf("Failed to create pool: %v", err)
+		log.Fatalf("Failed to setup database: %v", err)
 	}
 	defer pool.Close()
-
-	if err := pool.Ping(context.TODO()); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
-	}
 	log.Println("Connected to database")
 
-	rows, err := pool.Query(context.TODO(), "SELECT exercise_name FROM exercises")
-	if err != nil {
-		log.Fatalf("Failed to query exercises: %v", err)
-	}
-	defer rows.Close()
+	exerciseRepo := exercises.NewExercisesRepository(pool)
+	exerciseService := exercises.NewExerciseService(exerciseRepo)
+	exerciseHandler := exercises.NewExerciseHandler(exerciseService)
 
-	for rows.Next() {
-		var exerciseName string
-		if err := rows.Scan(&exerciseName); err != nil {
-			log.Fatalf("Failed to scan row: %v", err)
-		}
-		fmt.Println(exerciseName)
-	}
+	router := server.NewRouter(exerciseHandler)
 
-	if err := rows.Err(); err != nil {
-		log.Fatalf("Row iteration error: %v", err)
-	}
+	log.Println("Listening on port 8080")
+	log.Fatal(http.ListenAndServe(":8080", router))
 }

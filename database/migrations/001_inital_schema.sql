@@ -1,3 +1,5 @@
+-- USERS
+
 CREATE TABLE users (
   user_id SERIAL PRIMARY KEY,
   username VARCHAR(100) UNIQUE NOT NULL,
@@ -9,6 +11,8 @@ CREATE TABLE users (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- TEMPLATES
+
 CREATE TABLE templates (
   template_id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(user_id),
@@ -16,6 +20,11 @@ CREATE TABLE templates (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX idx_templates_user_id 
+  ON templates(user_id);
+
+-- WORKOUTS
 
 CREATE TABLE workouts (
   workout_id SERIAL PRIMARY KEY,
@@ -25,15 +34,28 @@ CREATE TABLE workouts (
   completed_at TIMESTAMP
 );
 
+CREATE INDEX idx_workouts_template_id 
+  ON workouts(template_id);
+
+-- EXERCISES
+
 CREATE TABLE exercises (
   exercise_id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(user_id),
   exercise_name VARCHAR(100) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
-  CONSTRAINT uq_exercises_user_name UNIQUE (user_id, exercise_name)
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE UNIQUE INDEX uq_exercises_user_name
+  ON exercises (user_id, lower(exercise_name))
+  WHERE user_id IS NOT NULL;
+
+CREATE UNIQUE INDEX uq_exercises_global_name 
+  ON exercises (lower(exercise_name)) 
+  WHERE user_id IS NULL;
+
+-- SETS
 
 CREATE TABLE sets (
   set_id SERIAL PRIMARY KEY,
@@ -43,7 +65,8 @@ CREATE TABLE sets (
   weight NUMERIC(6,2) NOT NULL
 );
 
-CREATE INDEX idx_templates_user_id ON templates(user_id);
-CREATE INDEX idx_workouts_template_id ON workouts(template_id);
-CREATE INDEX idx_sets_workout_id ON sets(workout_id);
-CREATE INDEX idx_sets_exercise_id ON sets(exercise_id);
+CREATE INDEX idx_sets_workout_id 
+  ON sets(workout_id);
+CREATE INDEX idx_sets_exercise_id 
+  ON sets(exercise_id);
+

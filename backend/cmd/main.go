@@ -8,7 +8,7 @@ import (
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/config"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/database"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercises"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/server"
 )
 
@@ -28,9 +28,9 @@ func main() {
 	defer pool.Close()
 	log.Println("Connected to database")
 
-	exerciseRepo := exercises.NewExercisesRepository(pool)
-	exerciseService := exercises.NewExerciseService(exerciseRepo)
-	exerciseHandler := exercises.NewExerciseHandler(exerciseService)
+	exerciseRepo := exercise.NewExerciseRepository(pool)
+	exerciseService := exercise.NewExerciseService(exerciseRepo)
+	exerciseHandler := exercise.NewExerciseHandler(exerciseService)
 
 	router := server.NewRouter(exerciseHandler)
 

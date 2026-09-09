@@ -1,4 +1,4 @@
-package exercises
+package exercise
 
 type Exercise struct {
 	ExerciseId   uint32 `json:"exercise_id"`

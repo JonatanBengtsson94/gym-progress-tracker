@@ -1,15 +1,23 @@
-package exercises
+package exercise
 
 import (
 	"encoding/json"
 	"net/http"
 )
 
-type ExerciseHandler struct {
-	service *ExerciseService
+type ExerciseGetterService interface {
+	GetExercises() ([]Exercise, error)
 }
 
-func NewExerciseHandler(service *ExerciseService) *ExerciseHandler {
+type ExerciseService interface {
+	ExerciseGetterService
+}
+
+type ExerciseHandler struct {
+	service ExerciseService
+}
+
+func NewExerciseHandler(service ExerciseService) *ExerciseHandler {
 	return &ExerciseHandler{service: service}
 }
 

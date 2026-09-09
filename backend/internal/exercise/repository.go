@@ -1,4 +1,4 @@
-package exercises
+package exercise
 
 import (
 	"context"
@@ -7,18 +7,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type ExerciseRepository struct {
+type PostgresExerciseRepository struct {
 	db *pgxpool.Pool
 }
 
-func NewExercisesRepository(db *pgxpool.Pool) *ExerciseRepository {
-	return &ExerciseRepository{db: db}
+func NewExerciseRepository(db *pgxpool.Pool) *PostgresExerciseRepository {
+	return &PostgresExerciseRepository{db: db}
 }
 
-func (r *ExerciseRepository) GetExercises() ([]Exercise, error) {
+func (r *PostgresExerciseRepository) GetExercises() ([]Exercise, error) {
 	rows, err := r.db.Query(context.TODO(), "SELECT exercise_id, exercise_name FROM exercises")
 	if err != nil {
-		return nil, fmt.Errorf("get exercises failed: %w", err)
+		return nil, fmt.Errorf("Get exercises failed: %w", err)
 	}
 	defer rows.Close()
 

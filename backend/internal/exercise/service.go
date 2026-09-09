@@ -1,7 +1,11 @@
 package exercise
 
+import (
+	"context"
+)
+
 type ExerciseGetter interface {
-	GetExercises() ([]Exercise, error)
+	GetExercises(context.Context, uint32) ([]Exercise, error)
 }
 
 type ExerciseRepository interface {
@@ -16,6 +20,6 @@ func NewExerciseService(repo ExerciseRepository) *ExerciseServiceImpl {
 	return &ExerciseServiceImpl{repo: repo}
 }
 
-func (s *ExerciseServiceImpl) GetExercises() ([]Exercise, error) {
-	return s.repo.GetExercises()
+func (s *ExerciseServiceImpl) GetExercises(ctx context.Context, userId uint32) ([]Exercise, error) {
+	return s.repo.GetExercises(ctx, userId)
 }

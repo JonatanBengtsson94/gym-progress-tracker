@@ -1,12 +1,13 @@
 package exercise
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 )
 
 type ExerciseGetterService interface {
-	GetExercises() ([]Exercise, error)
+	GetExercises(context.Context, uint32) ([]Exercise, error)
 }
 
 type ExerciseService interface {
@@ -22,7 +23,10 @@ func NewExerciseHandler(service ExerciseService) *ExerciseHandler {
 }
 
 func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
-	exercises, err := h.service.GetExercises()
+	// TODO: Get userId from authentication
+	const userId uint32 = 1
+
+	exercises, err := h.service.GetExercises(r.Context(), userId)
 	if err != nil {
 		http.Error(w, "Internal server errror", http.StatusInternalServerError)
 		return

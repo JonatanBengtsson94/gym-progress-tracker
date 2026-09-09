@@ -1,21 +1,23 @@
 package exercise_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
 )
 
 type mockExerciseService struct {
-	getExercisesFunc func() ([]exercise.Exercise, error)
+	getExercisesFunc func(ctx context.Context, userId uint32) ([]exercise.Exercise, error)
 }
 
-func (m *mockExerciseService) GetExercises() ([]exercise.Exercise, error) {
-	return m.getExercisesFunc()
+func (m *mockExerciseService) GetExercises(ctx context.Context, userId uint32) ([]exercise.Exercise, error) {
+	return m.getExercisesFunc(ctx, userId)
 }
 
 func TestExerciseHandler_GetExercises_Success(t *testing.T) {
@@ -31,7 +33,7 @@ func TestExerciseHandler_GetExercises_Success(t *testing.T) {
 	}
 
 	service := &mockExerciseService{
-		getExercisesFunc: func() ([]exercise.Exercise, error) {
+		getExercisesFunc: func(ctx context.Context, userId uint32) ([]exercise.Exercise, error) {
 			return expected, nil
 		},
 	}
@@ -62,11 +64,15 @@ func TestExerciseHandler_GetExercises_Success(t *testing.T) {
 	if len(got) != len(expected) {
 		t.Fatalf("Expected %d exercises, got %d", len(expected), len(got))
 	}
+
+	if !reflect.DeepEqual(got, expected) {
+		t.Errorf("GetExercises() got = %v, want %v", got, expected)
+	}
 }
 
 func TestExerciseHandler_GetExercises_ServiceError(t *testing.T) {
 	service := &mockExerciseService{
-		getExercisesFunc: func() ([]exercise.Exercise, error) {
+		getExercisesFunc: func(context.Context, uint32) ([]exercise.Exercise, error) {
 			return nil, errors.New("db exploded")
 		},
 	}

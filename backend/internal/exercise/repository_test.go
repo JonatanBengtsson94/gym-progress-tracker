@@ -31,12 +31,15 @@ func TestMain(m *testing.M) {
 		log.Fatal("no migration files found")
 	}
 
+	seedFile := filepath.Join("testdata", "seed.sql")
+	initScripts := append(migrationFiles, seedFile)
+
 	pgContainer, err := postgres.Run(ctx,
 		"docker.io/postgres:latest",
 		postgres.WithDatabase("testDB"),
 		postgres.WithUsername("testUser"),
 		postgres.WithPassword("testPass"),
-		postgres.WithInitScripts(migrationFiles...),
+		postgres.WithInitScripts(initScripts...),
 		testcontainers.WithWaitStrategy(
 			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(2).
@@ -71,10 +74,11 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestExerciseRepository_GetExercises(t *testing.T) {
+func TestExerciseRepository_GetGlobalExercises(t *testing.T) {
+	ctx := t.Context()
 	repo := exercise.NewExerciseRepository(testPool)
 
-	exercises, err := repo.GetExercises()
+	exercises, err := repo.GetExercises(ctx, 0)
 	if err != nil {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
@@ -82,4 +86,56 @@ func TestExerciseRepository_GetExercises(t *testing.T) {
 	if len(exercises) != 7 {
 		t.Errorf("Expected 7 exercises got: %d", len(exercises))
 	}
+
+	expectedNames := []string{
+		"Bench Press",
+		"Squat",
+	}
+
+	for _, expected := range expectedNames {
+		found := false
+		for _, e := range exercises {
+			if e.ExerciseName == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected exercise %q not found in results", expected)
+		}
+	}
+}
+
+func TestExerciseRepository_GetUserExercises(t *testing.T) {
+	ctx := t.Context()
+	repo := exercise.NewExerciseRepository(testPool)
+
+	exercises, err := repo.GetExercises(ctx, 1)
+	if err != nil {
+		t.Fatalf("GetExercises returned error: %v", err)
+	}
+
+	if len(exercises) != 8 {
+		t.Errorf("Expected 8 exercises got: %d", len(exercises))
+	}
+
+	expectedNames := []string{
+		"Bench Press",
+		"Squat",
+		"Custom Test Exercise",
+	}
+
+	for _, expected := range expectedNames {
+		found := false
+		for _, e := range exercises {
+			if e.ExerciseName == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected exercise %q not found in results", expected)
+		}
+	}
+
 }

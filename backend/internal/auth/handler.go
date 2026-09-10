@@ -28,6 +28,10 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+type LoginResponse struct {
+	SessionId string `json:"session_id"`
+}
+
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -47,5 +51,5 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(session)
+	json.NewEncoder(w).Encode(LoginResponse{SessionId: session.SessionId.String()})
 }

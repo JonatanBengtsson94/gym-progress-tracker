@@ -22,20 +22,18 @@ func (m *mockExerciseService) GetExercises(ctx context.Context, userId uint32) (
 }
 
 func TestExerciseHandler_GetExercises_Success(t *testing.T) {
-	expected := []exercise.Exercise{
-		{
-			ExerciseId:   1,
-			ExerciseName: "Test Exercise 1",
-		},
-		{
-			ExerciseId:   2,
-			ExerciseName: "Test Exercise 2",
-		},
+	serviceExercises := []exercise.Exercise{
+		{ExerciseId: 1, UserId: 99, ExerciseName: "Test Exercise 1"},
+		{ExerciseId: 2, UserId: 99, ExerciseName: "Test Exercise 2"},
+	}
+	expected := []exercise.ExerciseResponse{
+		{ExerciseId: 1, ExerciseName: "Test Exercise 1"},
+		{ExerciseId: 2, ExerciseName: "Test Exercise 2"},
 	}
 
 	service := &mockExerciseService{
 		getExercisesFunc: func(ctx context.Context, userId uint32) ([]exercise.Exercise, error) {
-			return expected, nil
+			return serviceExercises, nil
 		},
 	}
 
@@ -58,17 +56,51 @@ func TestExerciseHandler_GetExercises_Success(t *testing.T) {
 		t.Errorf("Expected Content-Type application/json, got %q", ct)
 	}
 
-	var got []exercise.Exercise
+	var got []exercise.ExerciseResponse
 	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
 		t.Fatalf("Failed to decode response body: %v", err)
 	}
 
-	if len(got) != len(expected) {
-		t.Fatalf("Expected %d exercises, got %d", len(expected), len(got))
-	}
-
 	if !reflect.DeepEqual(got, expected) {
 		t.Errorf("GetExercises() got = %v, want %v", got, expected)
+	}
+}
+
+func TestExerciseHandler_GetExercises_ResponseContainsOnlyExpectedFields(t *testing.T) {
+	service := &mockExerciseService{
+		getExercisesFunc: func(ctx context.Context, userId uint32) ([]exercise.Exercise, error) {
+			return []exercise.Exercise{
+				{ExerciseId: 1, UserId: 99, ExerciseName: "Test Exercise 1"},
+			}, nil
+		},
+	}
+
+	handler := exercise.NewExerciseHandler(service)
+
+	req := httptest.NewRequest(http.MethodGet, "/exercises", nil)
+	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	rec := httptest.NewRecorder()
+
+	handler.GetExercises(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	var got []map[string]any
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("Failed to decode response body: %v", err)
+	}
+
+	if len(got) != 1 {
+		t.Fatalf("Expected 1 exercise, got %d", len(got))
+	}
+
+	want := map[string]any{
+		"exercise_id":   float64(1),
+		"exercise_name": "Test Exercise 1",
+	}
+	if !reflect.DeepEqual(got[0], want) {
+		t.Errorf("GetExercises() response fields = %v, want exactly %v", got[0], want)
 	}
 }
 

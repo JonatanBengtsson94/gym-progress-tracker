@@ -24,6 +24,11 @@ func NewExerciseHandler(service ExerciseService) *ExerciseHandler {
 	return &ExerciseHandler{service: service}
 }
 
+type ExerciseResponse struct {
+	ExerciseId   uint32 `json:"exercise_id"`
+	ExerciseName string `json:"exercise_name"`
+}
+
 func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
 	userId, ok := auth.UserIdFromContext(r.Context())
 	if !ok {
@@ -37,6 +42,11 @@ func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	response := make([]ExerciseResponse, len(exercises))
+	for i, e := range exercises {
+		response[i] = ExerciseResponse{ExerciseId: e.ExerciseId, ExerciseName: e.ExerciseName}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(exercises)
+	json.NewEncoder(w).Encode(response)
 }

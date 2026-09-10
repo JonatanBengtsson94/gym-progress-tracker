@@ -6,8 +6,10 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 	"uuid"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
@@ -53,12 +55,47 @@ func TestAuthHandler_Login_Success(t *testing.T) {
 		t.Errorf("expected Login called with (alice, secret), got (%s, %s)", gotUsername, gotPassword)
 	}
 
-	var got auth.Session
+	var got auth.LoginResponse
 	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
 		t.Fatalf("failed to decode response body: %v", err)
 	}
-	if got.SessionId != wantSession.SessionId {
-		t.Errorf("expected session_id %v, got %v", wantSession.SessionId, got.SessionId)
+	want := auth.LoginResponse{SessionId: wantSession.SessionId.String()}
+	if got != want {
+		t.Errorf("Login() response = %+v, want %+v", got, want)
+	}
+}
+
+func TestAuthHandler_Login_ResponseContainsOnlyExpectedFields(t *testing.T) {
+	sessionId := uuid.New()
+	service := &mockAuthService{
+		loginFunc: func(ctx context.Context, username, password string) (auth.Session, error) {
+			return auth.Session{
+				UserId:    99,
+				SessionId: sessionId,
+				ExpiresAt: time.Now().Add(time.Hour),
+			}, nil
+		},
+	}
+	handler := auth.NewAuthHandler(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(`{"username":"alice","password":"secret"}`))
+	rec := httptest.NewRecorder()
+
+	handler.Login(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	var got map[string]any
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("failed to decode response body: %v", err)
+	}
+
+	want := map[string]any{
+		"session_id": sessionId.String(),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Login() response fields = %v, want exactly %v", got, want)
 	}
 }
 

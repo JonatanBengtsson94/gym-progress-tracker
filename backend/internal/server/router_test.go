@@ -114,13 +114,13 @@ func TestIntegration_LoginAndAccessProtectedRoute(t *testing.T) {
 		t.Fatalf("expected login status 200, got %d", loginRes.StatusCode)
 	}
 
-	var session auth.Session
-	if err := json.NewDecoder(loginRes.Body).Decode(&session); err != nil {
+	var loginResponse auth.LoginResponse
+	if err := json.NewDecoder(loginRes.Body).Decode(&loginResponse); err != nil {
 		t.Fatalf("failed to decode login response: %v", err)
 	}
 
 	exercisesReq := httptest.NewRequest(http.MethodGet, "/exercises", nil)
-	exercisesReq.Header.Set("Authorization", "Bearer "+session.SessionId.String())
+	exercisesReq.Header.Set("Authorization", "Bearer "+loginResponse.SessionId)
 	exercisesRec := httptest.NewRecorder()
 	router.ServeHTTP(exercisesRec, exercisesReq)
 
@@ -131,7 +131,7 @@ func TestIntegration_LoginAndAccessProtectedRoute(t *testing.T) {
 		t.Fatalf("expected exercises status 200, got %d", exercisesRes.StatusCode)
 	}
 
-	var exercises []exercise.Exercise
+	var exercises []exercise.ExerciseResponse
 	if err := json.NewDecoder(exercisesRes.Body).Decode(&exercises); err != nil {
 		t.Fatalf("failed to decode exercises response: %v", err)
 	}

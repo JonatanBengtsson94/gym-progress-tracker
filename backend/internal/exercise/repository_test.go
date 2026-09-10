@@ -76,7 +76,10 @@ func TestMain(m *testing.M) {
 
 func TestExerciseRepository_GetGlobalExercises(t *testing.T) {
 	ctx := t.Context()
-	repo := exercise.NewExerciseRepository(testPool)
+	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	if err != nil {
+		t.Fatalf("NewExerciseRepository returned error: %v", err)
+	}
 
 	exercises, err := repo.GetExercises(ctx, 0)
 	if err != nil {
@@ -108,7 +111,10 @@ func TestExerciseRepository_GetGlobalExercises(t *testing.T) {
 
 func TestExerciseRepository_GetUserExercises(t *testing.T) {
 	ctx := t.Context()
-	repo := exercise.NewExerciseRepository(testPool)
+	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	if err != nil {
+		t.Fatalf("NewExerciseRepository returned error: %v", err)
+	}
 
 	exercises, err := repo.GetExercises(ctx, 1)
 	if err != nil {
@@ -138,4 +144,45 @@ func TestExerciseRepository_GetUserExercises(t *testing.T) {
 		}
 	}
 
+}
+
+func TestExerciseRepository_GetExercises_UsersDoNotSeeEachOthersCustomExercises(t *testing.T) {
+	ctx := t.Context()
+	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	if err != nil {
+		t.Fatalf("NewExerciseRepository returned error: %v", err)
+	}
+
+	user1Exercises, err := repo.GetExercises(ctx, 1)
+	if err != nil {
+		t.Fatalf("GetExercises returned error: %v", err)
+	}
+
+	user2Exercises, err := repo.GetExercises(ctx, 2)
+	if err != nil {
+		t.Fatalf("GetExercises returned error: %v", err)
+	}
+
+	if containsExerciseName(user1Exercises, "Second User Exercise") {
+		t.Errorf("User 1 should not see user 2's custom exercise")
+	}
+	if !containsExerciseName(user1Exercises, "Custom Test Exercise") {
+		t.Errorf("User 1 should see their own custom exercise")
+	}
+
+	if containsExerciseName(user2Exercises, "Custom Test Exercise") {
+		t.Errorf("User 2 should not see user 1's custom exercise")
+	}
+	if !containsExerciseName(user2Exercises, "Second User Exercise") {
+		t.Errorf("User 2 should see their own custom exercise")
+	}
+}
+
+func containsExerciseName(exercises []exercise.Exercise, name string) bool {
+	for _, e := range exercises {
+		if e.ExerciseName == name {
+			return true
+		}
+	}
+	return false
 }

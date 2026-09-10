@@ -28,7 +28,10 @@ func main() {
 	defer pool.Close()
 	log.Println("Connected to database")
 
-	exerciseRepo := exercise.NewExerciseRepository(pool)
+	exerciseRepo, err := exercise.NewExerciseRepository(ctx, pool)
+	if err != nil {
+		log.Fatalf("Failed to create exercise repository: %v", err)
+	}
 	exerciseService := exercise.NewExerciseService(exerciseRepo)
 	exerciseHandler := exercise.NewExerciseHandler(exerciseService)
 

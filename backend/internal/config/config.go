@@ -3,10 +3,12 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 )
 
 type Config struct {
-	DB PostgresConfig
+	DB      PostgresConfig
+	Session SessionConfig
 }
 
 type PostgresConfig struct {
@@ -17,7 +19,21 @@ type PostgresConfig struct {
 	Port     string
 }
 
+type SessionConfig struct {
+	SessionDuration time.Duration
+}
+
 func LoadConfig() (*Config, error) {
+	sessionDurationStr := os.Getenv("SESSION_DURATION")
+	if sessionDurationStr == "" {
+		return nil, fmt.Errorf("SESSION_DURATION is not set")
+	}
+
+	sessionDuration, err := time.ParseDuration(sessionDurationStr)
+	if err != nil {
+		return nil, fmt.Errorf("SESSION_DURATION is invalid: %w", err)
+	}
+
 	cfg := &Config{
 		DB: PostgresConfig{
 			DBName:   os.Getenv("DB_NAME"),
@@ -25,6 +41,9 @@ func LoadConfig() (*Config, error) {
 			Password: os.Getenv("DB_PWD"),
 			Host:     os.Getenv("DB_HOST"),
 			Port:     os.Getenv("DB_PORT"),
+		},
+		Session: SessionConfig{
+			SessionDuration: sessionDuration,
 		},
 	}
 

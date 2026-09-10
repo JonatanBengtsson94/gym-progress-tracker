@@ -30,6 +30,7 @@ services:
       DB_NAME: ${DB_NAME}
       DB_HOST: db
       DB_PORT: 5432
+      SESSION_DURATION: ${SESSION_DURATION}
     ports:
       - "8080:8080"
     depends_on:

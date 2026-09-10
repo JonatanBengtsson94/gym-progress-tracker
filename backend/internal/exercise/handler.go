@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
 )
 
 type ExerciseGetterService interface {
@@ -23,8 +25,11 @@ func NewExerciseHandler(service ExerciseService) *ExerciseHandler {
 }
 
 func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
-	// TODO: Get userId from authentication
-	const userId uint32 = 1
+	userId, ok := auth.UserIdFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 
 	exercises, err := h.service.GetExercises(r.Context(), userId)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
 )
 
@@ -41,6 +42,7 @@ func TestExerciseHandler_GetExercises_Success(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/exercises", nil)
+	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.GetExercises(rec, req)
@@ -80,6 +82,7 @@ func TestExerciseHandler_GetExercises_ServiceError(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/exercises", nil)
+	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.GetExercises(rec, req)

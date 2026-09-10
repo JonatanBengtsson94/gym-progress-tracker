@@ -32,7 +32,7 @@ func (r *PostgresExerciseRepository) GetExercises(ctx context.Context, userId ui
 	}
 	defer rows.Close()
 
-	exercises := make([]Exercise, 0, 8)
+	exercises := make([]Exercise, 0, len(r.globalExercises))
 
 	for rows.Next() {
 		var exercise Exercise

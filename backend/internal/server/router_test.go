@@ -3,6 +3,7 @@ package server_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -169,5 +170,118 @@ func TestIntegration_Login_WrongPassword(t *testing.T) {
 
 	if rec.Result().StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected status 401, got %d", rec.Result().StatusCode)
+	}
+}
+
+func mustLogin(t *testing.T, router http.Handler, username, password string) string {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(fmt.Sprintf(`{"username":%q,"password":%q}`, username, password)))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("login failed: expected status 200, got %d", res.StatusCode)
+	}
+
+	var loginResponse auth.LoginResponse
+	if err := json.NewDecoder(res.Body).Decode(&loginResponse); err != nil {
+		t.Fatalf("failed to decode login response: %v", err)
+	}
+
+	return loginResponse.SessionId
+}
+
+func TestIntegration_CreateExerciseAndSeeItInList(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	createReq := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_name":"Lunge"}`))
+	createReq.Header.Set("Authorization", "Bearer "+token)
+	createRec := httptest.NewRecorder()
+	router.ServeHTTP(createRec, createReq)
+
+	createRes := createRec.Result()
+	defer createRes.Body.Close()
+
+	if createRes.StatusCode != http.StatusCreated {
+		t.Fatalf("expected create status 201, got %d", createRes.StatusCode)
+	}
+
+	var created exercise.ExerciseResponse
+	if err := json.NewDecoder(createRes.Body).Decode(&created); err != nil {
+		t.Fatalf("failed to decode create response: %v", err)
+	}
+	if created.ExerciseName != "Lunge" || created.ExerciseId == 0 {
+		t.Errorf("unexpected create response: %+v", created)
+	}
+
+	exercisesReq := httptest.NewRequest(http.MethodGet, "/exercises", nil)
+	exercisesReq.Header.Set("Authorization", "Bearer "+token)
+	exercisesRec := httptest.NewRecorder()
+	router.ServeHTTP(exercisesRec, exercisesReq)
+
+	exercisesRes := exercisesRec.Result()
+	defer exercisesRes.Body.Close()
+
+	var exercises []exercise.ExerciseResponse
+	if err := json.NewDecoder(exercisesRes.Body).Decode(&exercises); err != nil {
+		t.Fatalf("failed to decode exercises response: %v", err)
+	}
+
+	found := false
+	for _, e := range exercises {
+		if e.ExerciseName == "Lunge" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected newly created exercise to appear in GET /exercises, got %+v", exercises)
+	}
+}
+
+func TestIntegration_CreateExercise_NoToken(t *testing.T) {
+	router := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_name":"Lunge"}`))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_CreateExercise_DuplicateName(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_name":"Custom Test Exercise"}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_CreateExercise_DuplicatesGlobalExercise(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	// "Bench Press" is a seeded global exercise; alice should not be able
+	// to create a custom exercise with the same name.
+	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_name":"Bench Press"}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", rec.Result().StatusCode)
 	}
 }

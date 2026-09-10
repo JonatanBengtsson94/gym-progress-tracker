@@ -2,10 +2,18 @@ package exercise
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// uniqueViolationCode is the Postgres error code for a unique constraint
+// violation (23505), returned e.g. when a user already has an exercise
+// with the same name (see uq_exercises_user_name).
+const uniqueViolationCode = "23505"
 
 type PostgresExerciseRepository struct {
 	db              *pgxpool.Pool
@@ -78,4 +86,28 @@ func getGlobalExercisesCache(ctx context.Context, db *pgxpool.Pool) ([]Exercise,
 	}
 
 	return globalExercises, nil
+}
+
+func (r *PostgresExerciseRepository) CreateExercise(ctx context.Context, exercise Exercise) (Exercise, error) {
+	for _, global := range r.globalExercises {
+		if strings.EqualFold(global.ExerciseName, exercise.ExerciseName) {
+			return Exercise{}, ErrExerciseAlreadyExists
+		}
+	}
+
+	query := `
+		INSERT INTO exercises (user_id, exercise_name)
+		VALUES ($1, $2)
+		RETURNING exercise_id
+	`
+	err := r.db.QueryRow(ctx, query, exercise.UserId, exercise.ExerciseName).Scan(&exercise.ExerciseId)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
+			return Exercise{}, ErrExerciseAlreadyExists
+		}
+		return Exercise{}, fmt.Errorf("Create exercise failed: %w", err)
+	}
+
+	return exercise, nil
 }

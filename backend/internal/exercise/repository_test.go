@@ -2,6 +2,7 @@ package exercise_test
 
 import (
 	"context"
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -175,6 +176,88 @@ func TestExerciseRepository_GetExercises_UsersDoNotSeeEachOthersCustomExercises(
 	}
 	if !containsExerciseName(user2Exercises, "Second User Exercise") {
 		t.Errorf("User 2 should see their own custom exercise")
+	}
+}
+
+func TestExerciseRepository_CreateExercise(t *testing.T) {
+	ctx := t.Context()
+	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	if err != nil {
+		t.Fatalf("NewExerciseRepository returned error: %v", err)
+	}
+
+	created, err := repo.CreateExercise(ctx, exercise.Exercise{ExerciseName: "Lunge", UserId: 1})
+	if err != nil {
+		t.Fatalf("CreateExercise returned error: %v", err)
+	}
+
+	if created.ExerciseId == 0 {
+		t.Error("expected a non-zero ExerciseId to be assigned")
+	}
+	if created.ExerciseName != "Lunge" || created.UserId != 1 {
+		t.Errorf("CreateExercise() = %+v, want ExerciseName=Lunge, UserId=1", created)
+	}
+
+	exercises, err := repo.GetExercises(ctx, 1)
+	if err != nil {
+		t.Fatalf("GetExercises returned error: %v", err)
+	}
+	if !containsExerciseName(exercises, "Lunge") {
+		t.Errorf("expected newly created exercise to appear in GetExercises, got %+v", exercises)
+	}
+}
+
+func TestExerciseRepository_CreateExercise_DuplicateName(t *testing.T) {
+	ctx := t.Context()
+	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	if err != nil {
+		t.Fatalf("NewExerciseRepository returned error: %v", err)
+	}
+
+	// "Custom Test Exercise" is already seeded for user 1.
+	_, err = repo.CreateExercise(ctx, exercise.Exercise{ExerciseName: "Custom Test Exercise", UserId: 1})
+	if !errors.Is(err, exercise.ErrExerciseAlreadyExists) {
+		t.Fatalf("Expected ErrExerciseAlreadyExists, got %v", err)
+	}
+}
+
+func TestExerciseRepository_CreateExercise_DuplicateName_CaseInsensitive(t *testing.T) {
+	ctx := t.Context()
+	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	if err != nil {
+		t.Fatalf("NewExerciseRepository returned error: %v", err)
+	}
+
+	_, err = repo.CreateExercise(ctx, exercise.Exercise{ExerciseName: "custom test exercise", UserId: 1})
+	if !errors.Is(err, exercise.ErrExerciseAlreadyExists) {
+		t.Fatalf("Expected ErrExerciseAlreadyExists for a case-insensitive duplicate, got %v", err)
+	}
+}
+
+func TestExerciseRepository_CreateExercise_DuplicatesGlobalExercise(t *testing.T) {
+	ctx := t.Context()
+	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	if err != nil {
+		t.Fatalf("NewExerciseRepository returned error: %v", err)
+	}
+
+	// "Bench Press" is a seeded global exercise.
+	_, err = repo.CreateExercise(ctx, exercise.Exercise{ExerciseName: "Bench Press", UserId: 1})
+	if !errors.Is(err, exercise.ErrExerciseAlreadyExists) {
+		t.Fatalf("Expected ErrExerciseAlreadyExists, got %v", err)
+	}
+}
+
+func TestExerciseRepository_CreateExercise_DuplicatesGlobalExercise_CaseInsensitive(t *testing.T) {
+	ctx := t.Context()
+	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	if err != nil {
+		t.Fatalf("NewExerciseRepository returned error: %v", err)
+	}
+
+	_, err = repo.CreateExercise(ctx, exercise.Exercise{ExerciseName: "bench press", UserId: 1})
+	if !errors.Is(err, exercise.ErrExerciseAlreadyExists) {
+		t.Fatalf("Expected ErrExerciseAlreadyExists for a case-insensitive duplicate, got %v", err)
 	}
 }
 

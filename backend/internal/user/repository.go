@@ -13,11 +13,11 @@ type PostgresUserRepository struct {
 	db *pgxpool.Pool
 }
 
-func NewUserRepository(db *pgxpool.Pool) *PostgresUserRepository {
+func NewPostgresUserRepository(db *pgxpool.Pool) *PostgresUserRepository {
 	return &PostgresUserRepository{db: db}
 }
 
-func (r *PostgresUserRepository) GetUser(ctx context.Context, username string) (User, error) {
+func (r *PostgresUserRepository) GetUserByUsername(ctx context.Context, username string) (User, error) {
 	var user User
 	query := `
 		SELECT user_id, username, password
@@ -29,7 +29,7 @@ func (r *PostgresUserRepository) GetUser(ctx context.Context, username string) (
 		return user, ErrUserNotFound
 	}
 	if err != nil {
-		return user, fmt.Errorf("GetUser failed: %w", err)
+		return user, fmt.Errorf("GetUserByUsername failed: %w", err)
 	}
 
 	return user, nil

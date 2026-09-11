@@ -14,7 +14,7 @@ type mockExerciseRepository struct {
 	modifyExerciseFunc func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error)
 }
 
-func (m *mockExerciseRepository) GetExercises(ctx context.Context, userId uint32) ([]exercise.Exercise, error) {
+func (m *mockExerciseRepository) GetExercisesByUserId(ctx context.Context, userId uint32) ([]exercise.Exercise, error) {
 	return m.getExerciseFunc(ctx, userId)
 }
 

@@ -30,15 +30,15 @@ func main() {
 	defer pool.Close()
 	log.Println("Connected to database")
 
-	exerciseRepo, err := exercise.NewExerciseRepository(ctx, pool)
+	exerciseRepo, err := exercise.NewPostgresExerciseRepository(ctx, pool)
 	if err != nil {
 		log.Fatalf("Failed to create exercise repository: %v", err)
 	}
 	exerciseService := exercise.NewExerciseService(exerciseRepo)
 	exerciseHandler := exercise.NewExerciseHandler(exerciseService)
 
-	userRepo := user.NewUserRepository(pool)
-	sessionRepo := auth.NewSessionRepository(cfg.Session.SessionDuration)
+	userRepo := user.NewPostgresUserRepository(pool)
+	sessionRepo := auth.NewInMemorySessionRepository(cfg.Session.SessionDuration)
 	authService := auth.NewAuthService(userRepo, sessionRepo)
 	authHandler := auth.NewAuthHandler(authService)
 	authMiddleware := auth.NewAuthMiddleware(authService)

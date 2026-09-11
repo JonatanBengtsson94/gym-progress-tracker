@@ -77,12 +77,12 @@ func TestMain(m *testing.M) {
 
 func TestExerciseRepository_GetGlobalExercises(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
 
-	exercises, err := repo.GetExercises(ctx, 0)
+	exercises, err := repo.GetExercisesByUserId(ctx, 0)
 	if err != nil {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
@@ -112,12 +112,12 @@ func TestExerciseRepository_GetGlobalExercises(t *testing.T) {
 
 func TestExerciseRepository_GetUserExercises(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
 
-	exercises, err := repo.GetExercises(ctx, 1)
+	exercises, err := repo.GetExercisesByUserId(ctx, 1)
 	if err != nil {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
@@ -149,17 +149,17 @@ func TestExerciseRepository_GetUserExercises(t *testing.T) {
 
 func TestExerciseRepository_GetExercises_UsersDoNotSeeEachOthersCustomExercises(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
 
-	user1Exercises, err := repo.GetExercises(ctx, 1)
+	user1Exercises, err := repo.GetExercisesByUserId(ctx, 1)
 	if err != nil {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
 
-	user2Exercises, err := repo.GetExercises(ctx, 2)
+	user2Exercises, err := repo.GetExercisesByUserId(ctx, 2)
 	if err != nil {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestExerciseRepository_GetExercises_UsersDoNotSeeEachOthersCustomExercises(
 
 func TestExerciseRepository_CreateExercise(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestExerciseRepository_CreateExercise(t *testing.T) {
 		t.Errorf("CreateExercise() = %+v, want ExerciseName=Lunge, UserId=1", created)
 	}
 
-	exercises, err := repo.GetExercises(ctx, 1)
+	exercises, err := repo.GetExercisesByUserId(ctx, 1)
 	if err != nil {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestExerciseRepository_CreateExercise(t *testing.T) {
 
 func TestExerciseRepository_CreateExercise_DuplicateName(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestExerciseRepository_CreateExercise_DuplicateName(t *testing.T) {
 
 func TestExerciseRepository_CreateExercise_DuplicateName_CaseInsensitive(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestExerciseRepository_CreateExercise_DuplicateName_CaseInsensitive(t *test
 
 func TestExerciseRepository_CreateExercise_DuplicatesGlobalExercise(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
@@ -250,7 +250,7 @@ func TestExerciseRepository_CreateExercise_DuplicatesGlobalExercise(t *testing.T
 
 func TestExerciseRepository_CreateExercise_DuplicatesGlobalExercise_CaseInsensitive(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
@@ -263,7 +263,7 @@ func TestExerciseRepository_CreateExercise_DuplicatesGlobalExercise_CaseInsensit
 
 func TestExerciseRepository_ModifyExercise(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
@@ -285,7 +285,7 @@ func TestExerciseRepository_ModifyExercise(t *testing.T) {
 		t.Errorf("expected ExerciseName %q, got %q", "Romanian Deadlift", modified.ExerciseName)
 	}
 
-	exercises, err := repo.GetExercises(ctx, 1)
+	exercises, err := repo.GetExercisesByUserId(ctx, 1)
 	if err != nil {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
@@ -299,12 +299,12 @@ func TestExerciseRepository_ModifyExercise(t *testing.T) {
 
 func TestExerciseRepository_ModifyExercise_GlobalExercise(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
 
-	globalExercises, err := repo.GetExercises(ctx, 0)
+	globalExercises, err := repo.GetExercisesByUserId(ctx, 0)
 	if err != nil {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
@@ -328,7 +328,7 @@ func TestExerciseRepository_ModifyExercise_GlobalExercise(t *testing.T) {
 
 func TestExerciseRepository_ModifyExercise_NotFound(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
@@ -341,7 +341,7 @@ func TestExerciseRepository_ModifyExercise_NotFound(t *testing.T) {
 
 func TestExerciseRepository_ModifyExercise_WrongUser(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
@@ -360,7 +360,7 @@ func TestExerciseRepository_ModifyExercise_WrongUser(t *testing.T) {
 
 func TestExerciseRepository_ModifyExercise_DuplicateName(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
@@ -379,7 +379,7 @@ func TestExerciseRepository_ModifyExercise_DuplicateName(t *testing.T) {
 
 func TestExerciseRepository_ModifyExercise_DuplicateName_CaseInsensitive(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
@@ -397,7 +397,7 @@ func TestExerciseRepository_ModifyExercise_DuplicateName_CaseInsensitive(t *test
 
 func TestExerciseRepository_ModifyExercise_DuplicatesGlobalExercise(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
@@ -416,7 +416,7 @@ func TestExerciseRepository_ModifyExercise_DuplicatesGlobalExercise(t *testing.T
 
 func TestExerciseRepository_ModifyExercise_DuplicatesGlobalExercise_CaseInsensitive(t *testing.T) {
 	ctx := t.Context()
-	repo, err := exercise.NewExerciseRepository(ctx, testPool)
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}

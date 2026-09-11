@@ -14,7 +14,7 @@ type mockUserRepository struct {
 	getUserFunc func(ctx context.Context, username string) (user.User, error)
 }
 
-func (m *mockUserRepository) GetUser(ctx context.Context, username string) (user.User, error) {
+func (m *mockUserRepository) GetUserByUsername(ctx context.Context, username string) (user.User, error) {
 	return m.getUserFunc(ctx, username)
 }
 
@@ -23,7 +23,7 @@ type mockSessionRepository struct {
 	createSessionFunc func(userId uint32) auth.Session
 }
 
-func (m *mockSessionRepository) GetSession(sessionId uuid.UUID) (auth.Session, error) {
+func (m *mockSessionRepository) GetSessionBySessionId(sessionId uuid.UUID) (auth.Session, error) {
 	return m.getSessionFunc(sessionId)
 }
 

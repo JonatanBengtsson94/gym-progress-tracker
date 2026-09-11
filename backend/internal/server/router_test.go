@@ -85,15 +85,15 @@ func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	ctx := t.Context()
 
-	exerciseRepo, err := exercise.NewExerciseRepository(ctx, testPool)
+	exerciseRepo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("failed to create exercise repository: %v", err)
 	}
 	exerciseService := exercise.NewExerciseService(exerciseRepo)
 	exerciseHandler := exercise.NewExerciseHandler(exerciseService)
 
-	userRepo := user.NewUserRepository(testPool)
-	sessionRepo := auth.NewSessionRepository(time.Hour)
+	userRepo := user.NewPostgresUserRepository(testPool)
+	sessionRepo := auth.NewInMemorySessionRepository(time.Hour)
 	authService := auth.NewAuthService(userRepo, sessionRepo)
 	authHandler := auth.NewAuthHandler(authService)
 	authMiddleware := auth.NewAuthMiddleware(authService)

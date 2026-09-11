@@ -21,7 +21,7 @@ type PostgresExerciseRepository struct {
 	globalExercises []Exercise
 }
 
-func NewExerciseRepository(ctx context.Context, db *pgxpool.Pool) (*PostgresExerciseRepository, error) {
+func NewPostgresExerciseRepository(ctx context.Context, db *pgxpool.Pool) (*PostgresExerciseRepository, error) {
 	globalExercises, err := getGlobalExercisesCache(ctx, db)
 	if err != nil {
 		return nil, fmt.Errorf("Could not create exercise repository: %w", err)
@@ -29,7 +29,7 @@ func NewExerciseRepository(ctx context.Context, db *pgxpool.Pool) (*PostgresExer
 	return &PostgresExerciseRepository{db: db, globalExercises: globalExercises}, nil
 }
 
-func (r *PostgresExerciseRepository) GetExercises(ctx context.Context, userId uint32) ([]Exercise, error) {
+func (r *PostgresExerciseRepository) GetExercisesByUserId(ctx context.Context, userId uint32) ([]Exercise, error) {
 	query := `
 		SELECT exercise_id, exercise_name
 		FROM exercises

@@ -77,9 +77,9 @@ func TestMain(m *testing.M) {
 
 func TestUserRepository_GetUser_Success(t *testing.T) {
 	ctx := t.Context()
-	repo := user.NewUserRepository(testPool)
+	repo := user.NewPostgresUserRepository(testPool)
 
-	got, err := repo.GetUser(ctx, "Test User")
+	got, err := repo.GetUserByUsername(ctx, "Test User")
 	if err != nil {
 		t.Fatalf("GetUser returned error: %v", err)
 	}
@@ -97,9 +97,9 @@ func TestUserRepository_GetUser_Success(t *testing.T) {
 
 func TestUserRepository_GetUser_NotFound(t *testing.T) {
 	ctx := t.Context()
-	repo := user.NewUserRepository(testPool)
+	repo := user.NewPostgresUserRepository(testPool)
 
-	_, err := repo.GetUser(ctx, "Nonexistent User")
+	_, err := repo.GetUserByUsername(ctx, "Nonexistent User")
 	if !errors.Is(err, user.ErrUserNotFound) {
 		t.Fatalf("Expected ErrUserNotFound, got %v", err)
 	}

@@ -21,7 +21,3 @@ func (r *PostgresSetRepository) GetSetsByExerciseId(ctx context.Context, exercis
 func (r *PostgresSetRepository) GetSetsByWorkoutId(ctx context.Context, workoutId uint32) ([]Set, error) {
 	// TODO:
 }
-
-func (r *PostgresSetRepository) GetSetsByWorkoutIdAndExerciseId(ctx context.Context, workoutId uint32, exerciseId uint32) ([]Set, error) {
-	// TODO:
-}

@@ -6,4 +6,5 @@ type Set struct {
 	Exercise    exercise.Exercise
 	Reps        uint8
 	WeightGrams uint32
+	WorkoutId   uint32
 }

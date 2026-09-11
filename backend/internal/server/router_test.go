@@ -285,3 +285,172 @@ func TestIntegration_CreateExercise_DuplicatesGlobalExercise(t *testing.T) {
 		t.Fatalf("expected status 409, got %d", rec.Result().StatusCode)
 	}
 }
+
+func mustCreateExercise(t *testing.T, router http.Handler, token, name string) exercise.ExerciseResponse {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(fmt.Sprintf(`{"exercise_name":%q}`, name)))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("create exercise failed: expected status 201, got %d", res.StatusCode)
+	}
+
+	var created exercise.ExerciseResponse
+	if err := json.NewDecoder(res.Body).Decode(&created); err != nil {
+		t.Fatalf("failed to decode create response: %v", err)
+	}
+
+	return created
+}
+
+func TestIntegration_ModifyExerciseAndSeeUpdatedInList(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	created := mustCreateExercise(t, router, token, "Row")
+
+	modifyReq := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(
+		fmt.Sprintf(`{"exercise_id":%d,"exercise_name":"Bent Over Row"}`, created.ExerciseId)))
+	modifyReq.Header.Set("Authorization", "Bearer "+token)
+	modifyRec := httptest.NewRecorder()
+	router.ServeHTTP(modifyRec, modifyReq)
+
+	modifyRes := modifyRec.Result()
+	defer modifyRes.Body.Close()
+
+	if modifyRes.StatusCode != http.StatusOK {
+		t.Fatalf("expected modify status 200, got %d", modifyRes.StatusCode)
+	}
+
+	var modified exercise.ExerciseResponse
+	if err := json.NewDecoder(modifyRes.Body).Decode(&modified); err != nil {
+		t.Fatalf("failed to decode modify response: %v", err)
+	}
+	if modified.ExerciseId != created.ExerciseId || modified.ExerciseName != "Bent Over Row" {
+		t.Errorf("unexpected modify response: %+v", modified)
+	}
+
+	exercisesReq := httptest.NewRequest(http.MethodGet, "/exercises", nil)
+	exercisesReq.Header.Set("Authorization", "Bearer "+token)
+	exercisesRec := httptest.NewRecorder()
+	router.ServeHTTP(exercisesRec, exercisesReq)
+
+	var exercises []exercise.ExerciseResponse
+	if err := json.NewDecoder(exercisesRec.Result().Body).Decode(&exercises); err != nil {
+		t.Fatalf("failed to decode exercises response: %v", err)
+	}
+
+	found := false
+	for _, e := range exercises {
+		if e.ExerciseName == "Bent Over Row" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected modified exercise to appear in GET /exercises, got %+v", exercises)
+	}
+}
+
+func TestIntegration_ModifyExercise_NoToken(t *testing.T) {
+	router := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"Lunge"}`))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_ModifyExercise_GlobalExercise(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	exercisesReq := httptest.NewRequest(http.MethodGet, "/exercises", nil)
+	exercisesReq.Header.Set("Authorization", "Bearer "+token)
+	exercisesRec := httptest.NewRecorder()
+	router.ServeHTTP(exercisesRec, exercisesReq)
+
+	var exercises []exercise.ExerciseResponse
+	if err := json.NewDecoder(exercisesRec.Result().Body).Decode(&exercises); err != nil {
+		t.Fatalf("failed to decode exercises response: %v", err)
+	}
+
+	var benchPressId uint32
+	for _, e := range exercises {
+		if e.ExerciseName == "Bench Press" {
+			benchPressId = e.ExerciseId
+			break
+		}
+	}
+	if benchPressId == 0 {
+		t.Fatal("expected seeded global exercise \"Bench Press\" to be found")
+	}
+
+	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(
+		fmt.Sprintf(`{"exercise_id":%d,"exercise_name":"Bench Press Variant"}`, benchPressId)))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusForbidden {
+		t.Fatalf("expected status 403, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_ModifyExercise_NotFound(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":999999,"exercise_name":"Lunge"}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_ModifyExercise_DuplicateName(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	created := mustCreateExercise(t, router, token, "Cable Fly")
+
+	// "Custom Test Exercise" is already seeded for alice (user 1).
+	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(
+		fmt.Sprintf(`{"exercise_id":%d,"exercise_name":"Custom Test Exercise"}`, created.ExerciseId)))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_ModifyExercise_NameRequired(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	created := mustCreateExercise(t, router, token, "Face Pull")
+
+	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(
+		fmt.Sprintf(`{"exercise_id":%d,"exercise_name":"   "}`, created.ExerciseId)))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
+	}
+}

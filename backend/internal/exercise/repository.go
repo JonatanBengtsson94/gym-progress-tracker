@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -59,6 +60,58 @@ func (r *PostgresExerciseRepository) GetExercises(ctx context.Context, userId ui
 	return allExercises, nil
 }
 
+func (r *PostgresExerciseRepository) CreateExercise(ctx context.Context, exercise Exercise) (Exercise, error) {
+	if r.isGlobalNameCollision(exercise.ExerciseName) {
+		return Exercise{}, ErrExerciseAlreadyExists
+	}
+
+	query := `
+		INSERT INTO exercises (user_id, exercise_name)
+		VALUES ($1, $2)
+		RETURNING exercise_id
+	`
+	err := r.db.QueryRow(ctx, query, exercise.UserId, exercise.ExerciseName).Scan(&exercise.ExerciseId)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
+			return Exercise{}, ErrExerciseAlreadyExists
+		}
+		return Exercise{}, fmt.Errorf("Create exercise failed: %w", err)
+	}
+
+	return exercise, nil
+}
+
+func (r *PostgresExerciseRepository) ModifyExercise(ctx context.Context, exercise Exercise) (Exercise, error) {
+	if r.isGlobalExerciseId(exercise.ExerciseId) {
+		return Exercise{}, ErrCannotModifyGlobalExercise
+	}
+
+	if r.isGlobalNameCollision(exercise.ExerciseName) {
+		return Exercise{}, ErrExerciseAlreadyExists
+	}
+
+	query := `
+		UPDATE exercises
+		SET exercise_name = $1
+		WHERE exercise_id = $2 AND user_id = $3
+		RETURNING exercise_id
+	`
+	err := r.db.QueryRow(ctx, query, exercise.ExerciseName, exercise.ExerciseId, exercise.UserId).Scan(&exercise.ExerciseId)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Exercise{}, ErrExerciseNotFound
+		}
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
+			return Exercise{}, ErrExerciseAlreadyExists
+		}
+		return Exercise{}, fmt.Errorf("Modify exercise failed: %w", err)
+	}
+
+	return exercise, nil
+}
+
 func getGlobalExercisesCache(ctx context.Context, db *pgxpool.Pool) ([]Exercise, error) {
 	query := `
 		SELECT exercise_id, exercise_name
@@ -88,26 +141,20 @@ func getGlobalExercisesCache(ctx context.Context, db *pgxpool.Pool) ([]Exercise,
 	return globalExercises, nil
 }
 
-func (r *PostgresExerciseRepository) CreateExercise(ctx context.Context, exercise Exercise) (Exercise, error) {
+func (r *PostgresExerciseRepository) isGlobalNameCollision(name string) bool {
 	for _, global := range r.globalExercises {
-		if strings.EqualFold(global.ExerciseName, exercise.ExerciseName) {
-			return Exercise{}, ErrExerciseAlreadyExists
+		if strings.EqualFold(global.ExerciseName, name) {
+			return true
 		}
 	}
+	return false
+}
 
-	query := `
-		INSERT INTO exercises (user_id, exercise_name)
-		VALUES ($1, $2)
-		RETURNING exercise_id
-	`
-	err := r.db.QueryRow(ctx, query, exercise.UserId, exercise.ExerciseName).Scan(&exercise.ExerciseId)
-	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
-			return Exercise{}, ErrExerciseAlreadyExists
+func (r *PostgresExerciseRepository) isGlobalExerciseId(exerciseId uint32) bool {
+	for _, global := range r.globalExercises {
+		if global.ExerciseId == exerciseId {
+			return true
 		}
-		return Exercise{}, fmt.Errorf("Create exercise failed: %w", err)
 	}
-
-	return exercise, nil
+	return false
 }

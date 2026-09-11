@@ -2,17 +2,14 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
+
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/httpx"
 )
 
-type LoginService interface {
-	Login(context.Context, string, string) (Session, error)
-}
-
 type AuthService interface {
-	LoginService
+	Login(context.Context, string, string) (Session, error)
 }
 
 type AuthHandler struct {
@@ -34,8 +31,7 @@ type LoginResponse struct {
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	if !httpx.DecodeJSONBody(w, r, &req) {
 		return
 	}
 
@@ -50,6 +46,5 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(LoginResponse{SessionId: session.SessionId.String()})
+	httpx.WriteJSON(w, http.StatusOK, LoginResponse{SessionId: session.SessionId.String()})
 }

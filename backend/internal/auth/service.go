@@ -8,25 +8,13 @@ import (
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
 )
 
-type UserGetter interface {
+type UserRepository interface {
 	GetUser(context.Context, string) (user.User, error)
 }
 
-type UserRepository interface {
-	UserGetter
-}
-
-type SessionGetter interface {
-	GetSession(uuid.UUID) (Session, error)
-}
-
-type SessionCreater interface {
-	CreateSession(uint32) Session
-}
-
 type SessionRepository interface {
-	SessionGetter
-	SessionCreater
+	GetSession(uuid.UUID) (Session, error)
+	CreateSession(uint32) Session
 }
 
 type AuthServiceImpl struct {

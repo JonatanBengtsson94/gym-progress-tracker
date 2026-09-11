@@ -2,19 +2,13 @@ package exercise
 
 import (
 	"context"
+	"strings"
 )
 
-type ExerciseGetter interface {
-	GetExercises(context.Context, uint32) ([]Exercise, error)
-}
-
-type ExerciseCreator interface {
-	CreateExercise(context.Context, Exercise) (Exercise, error)
-}
-
 type ExerciseRepository interface {
-	ExerciseGetter
-	ExerciseCreator
+	GetExercises(context.Context, uint32) ([]Exercise, error)
+	CreateExercise(context.Context, Exercise) (Exercise, error)
+	ModifyExercise(context.Context, Exercise) (Exercise, error)
 }
 
 type ExerciseServiceImpl struct {
@@ -30,5 +24,15 @@ func (s *ExerciseServiceImpl) GetExercises(ctx context.Context, userId uint32) (
 }
 
 func (s *ExerciseServiceImpl) CreateExercise(ctx context.Context, exercise Exercise) (Exercise, error) {
+	if strings.TrimSpace(exercise.ExerciseName) == "" {
+		return Exercise{}, ErrExerciseNameRequired
+	}
 	return s.repo.CreateExercise(ctx, exercise)
+}
+
+func (s *ExerciseServiceImpl) ModifyExercise(ctx context.Context, exercise Exercise) (Exercise, error) {
+	if strings.TrimSpace(exercise.ExerciseName) == "" {
+		return Exercise{}, ErrExerciseNameRequired
+	}
+	return s.repo.ModifyExercise(ctx, exercise)
 }

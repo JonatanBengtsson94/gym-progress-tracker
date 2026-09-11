@@ -15,6 +15,7 @@ func NewRouter(
 	mux := http.NewServeMux()
 	mux.Handle("GET /exercises", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.GetExercises)))
 	mux.Handle("POST /exercises", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.CreateExercise)))
+	mux.Handle("PATCH /exercises", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.ModifyExercise)))
 	mux.HandleFunc("POST /login", authHandler.Login)
 	return mux
 }

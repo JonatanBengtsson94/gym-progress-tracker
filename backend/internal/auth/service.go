@@ -9,11 +9,11 @@ import (
 )
 
 type UserRepository interface {
-	GetUser(context.Context, string) (user.User, error)
+	GetUserByUsername(context.Context, string) (user.User, error)
 }
 
 type SessionRepository interface {
-	GetSession(uuid.UUID) (Session, error)
+	GetSessionBySessionId(uuid.UUID) (Session, error)
 	CreateSession(uint32) Session
 }
 
@@ -27,7 +27,7 @@ func NewAuthService(userRepo UserRepository, sessionRepo SessionRepository) *Aut
 }
 
 func (s *AuthServiceImpl) Login(ctx context.Context, username string, password string) (Session, error) {
-	u, err := s.userRepo.GetUser(ctx, username)
+	u, err := s.userRepo.GetUserByUsername(ctx, username)
 	if errors.Is(err, user.ErrUserNotFound) {
 		return Session{}, ErrInvalidCredentials
 	}
@@ -45,7 +45,7 @@ func (s *AuthServiceImpl) Login(ctx context.Context, username string, password s
 }
 
 func (s *AuthServiceImpl) ValidateSession(sessionId uuid.UUID) (uint32, error) {
-	session, err := s.sessionRepo.GetSession(sessionId)
+	session, err := s.sessionRepo.GetSessionBySessionId(sessionId)
 	if err != nil {
 		return 0, err
 	}

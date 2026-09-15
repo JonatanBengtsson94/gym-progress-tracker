@@ -62,7 +62,7 @@ CREATE TABLE sets (
   exercise_id INTEGER NOT NULL REFERENCES exercises(exercise_id),
   workout_id INTEGER NOT NULL REFERENCES workouts(workout_id),
   reps INTEGER NOT NULL,
-  weight NUMERIC(6,2) NOT NULL
+  weight_grams INTEGER NOT NULL
 );
 
 CREATE INDEX idx_sets_workout_id 

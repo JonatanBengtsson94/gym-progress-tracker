@@ -6,7 +6,7 @@ import (
 )
 
 type ExerciseRepository interface {
-	GetExercises(context.Context, uint32) ([]Exercise, error)
+	GetExercisesByUserId(context.Context, uint32) ([]Exercise, error)
 	CreateExercise(context.Context, Exercise) (Exercise, error)
 	ModifyExercise(context.Context, Exercise) (Exercise, error)
 }
@@ -20,7 +20,7 @@ func NewExerciseService(repo ExerciseRepository) *ExerciseServiceImpl {
 }
 
 func (s *ExerciseServiceImpl) GetExercises(ctx context.Context, userId uint32) ([]Exercise, error) {
-	return s.repo.GetExercises(ctx, userId)
+	return s.repo.GetExercisesByUserId(ctx, userId)
 }
 
 func (s *ExerciseServiceImpl) CreateExercise(ctx context.Context, exercise Exercise) (Exercise, error) {

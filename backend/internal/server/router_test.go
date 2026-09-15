@@ -18,6 +18,7 @@ import (
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/server"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/workout"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -85,20 +86,24 @@ func newTestRouter(t *testing.T) http.Handler {
 	t.Helper()
 	ctx := t.Context()
 
-	exerciseRepo, err := exercise.NewExerciseRepository(ctx, testPool)
+	exerciseRepo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
 	if err != nil {
 		t.Fatalf("failed to create exercise repository: %v", err)
 	}
 	exerciseService := exercise.NewExerciseService(exerciseRepo)
 	exerciseHandler := exercise.NewExerciseHandler(exerciseService)
 
-	userRepo := user.NewUserRepository(testPool)
-	sessionRepo := auth.NewSessionRepository(time.Hour)
+	workoutRepo := workout.NewPostgresWorkoutRepository(testPool)
+	workoutService := workout.NewWorkoutService(workoutRepo)
+	workoutHandler := workout.NewWorkoutHandler(workoutService)
+
+	userRepo := user.NewPostgresUserRepository(testPool)
+	sessionRepo := auth.NewInMemorySessionRepository(time.Hour)
 	authService := auth.NewAuthService(userRepo, sessionRepo)
 	authHandler := auth.NewAuthHandler(authService)
 	authMiddleware := auth.NewAuthMiddleware(authService)
 
-	return server.NewRouter(exerciseHandler, authHandler, authMiddleware)
+	return server.NewRouter(exerciseHandler, workoutHandler, authHandler, authMiddleware)
 }
 
 func TestIntegration_LoginAndAccessProtectedRoute(t *testing.T) {
@@ -435,6 +440,90 @@ func TestIntegration_ModifyExercise_DuplicateName(t *testing.T) {
 
 	if rec.Result().StatusCode != http.StatusConflict {
 		t.Fatalf("expected status 409, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_GetWorkout(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	req := httptest.NewRequest(http.MethodGet, "/workouts/1", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.StatusCode)
+	}
+
+	var got workout.WorkoutResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("failed to decode workout response: %v", err)
+	}
+
+	if got.WorkoutId != 1 || got.TemplateName != "Push Day" {
+		t.Errorf("unexpected workout response: %+v", got)
+	}
+	if len(got.Sets) != 1 || got.Sets[0].ExerciseName != "Bench Press" {
+		t.Errorf("expected 1 set for Bench Press, got %+v", got.Sets)
+	}
+}
+
+func TestIntegration_GetWorkout_NoToken(t *testing.T) {
+	router := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/workouts/1", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_GetWorkout_NotFound(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	req := httptest.NewRequest(http.MethodGet, "/workouts/999999", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_GetWorkout_WrongUser(t *testing.T) {
+	router := newTestRouter(t)
+	// workout 1 belongs to alice (user 1), not bob.
+	token := mustLogin(t, router, "bob", "secret")
+
+	req := httptest.NewRequest(http.MethodGet, "/workouts/1", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_GetWorkout_InvalidWorkoutId(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	req := httptest.NewRequest(http.MethodGet, "/workouts/not-a-number", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
 	}
 }
 

@@ -55,3 +55,14 @@ func UserIdFromContext(ctx context.Context) (uint32, bool) {
 	userId, ok := ctx.Value(userIdContextKey).(uint32)
 	return userId, ok
 }
+
+// RequireUserId extracts the authenticated user id from r's context. If
+// there isn't one, it writes an Unauthorized response and returns ok=false;
+// callers should return immediately in that case.
+func RequireUserId(w http.ResponseWriter, r *http.Request) (userId uint32, ok bool) {
+	userId, ok = UserIdFromContext(r.Context())
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+	}
+	return userId, ok
+}

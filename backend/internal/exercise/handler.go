@@ -38,9 +38,8 @@ type ExerciseResponse struct {
 }
 
 func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.UserIdFromContext(r.Context())
+	userId, ok := auth.RequireUserId(w, r)
 	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -59,9 +58,8 @@ func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ExerciseHandler) CreateExercise(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.UserIdFromContext(r.Context())
+	userId, ok := auth.RequireUserId(w, r)
 	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -89,9 +87,8 @@ func (h *ExerciseHandler) CreateExercise(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *ExerciseHandler) ModifyExercise(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.UserIdFromContext(r.Context())
+	userId, ok := auth.RequireUserId(w, r)
 	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 

@@ -12,14 +12,14 @@ type InMemorySessionRepository struct {
 	sessionDuration time.Duration
 }
 
-func NewSessionRepository(sessionDuration time.Duration) *InMemorySessionRepository {
+func NewInMemorySessionRepository(sessionDuration time.Duration) *InMemorySessionRepository {
 	return &InMemorySessionRepository{
 		sessions:        make(map[uuid.UUID]Session),
 		sessionDuration: sessionDuration,
 	}
 }
 
-func (r *InMemorySessionRepository) GetSession(sessionId uuid.UUID) (Session, error) {
+func (r *InMemorySessionRepository) GetSessionBySessionId(sessionId uuid.UUID) (Session, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 

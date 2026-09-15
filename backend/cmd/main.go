@@ -12,6 +12,7 @@ import (
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/server"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/workout"
 )
 
 func main() {
@@ -30,20 +31,24 @@ func main() {
 	defer pool.Close()
 	log.Println("Connected to database")
 
-	exerciseRepo, err := exercise.NewExerciseRepository(ctx, pool)
+	exerciseRepo, err := exercise.NewPostgresExerciseRepository(ctx, pool)
 	if err != nil {
 		log.Fatalf("Failed to create exercise repository: %v", err)
 	}
 	exerciseService := exercise.NewExerciseService(exerciseRepo)
 	exerciseHandler := exercise.NewExerciseHandler(exerciseService)
 
-	userRepo := user.NewUserRepository(pool)
-	sessionRepo := auth.NewSessionRepository(cfg.Session.SessionDuration)
+	workoutRepo := workout.NewPostgresWorkoutRepository(pool)
+	workoutService := workout.NewWorkoutService(workoutRepo)
+	workoutHandler := workout.NewWorkoutHandler(workoutService)
+
+	userRepo := user.NewPostgresUserRepository(pool)
+	sessionRepo := auth.NewInMemorySessionRepository(cfg.Session.SessionDuration)
 	authService := auth.NewAuthService(userRepo, sessionRepo)
 	authHandler := auth.NewAuthHandler(authService)
 	authMiddleware := auth.NewAuthMiddleware(authService)
 
-	router := server.NewRouter(exerciseHandler, authHandler, authMiddleware)
+	router := server.NewRouter(exerciseHandler, workoutHandler, authHandler, authMiddleware)
 
 	log.Println("Listening on port 8080")
 	log.Fatal(http.ListenAndServe(":8080", router))

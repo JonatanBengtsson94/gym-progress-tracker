@@ -55,7 +55,7 @@ func (h *WorkoutHandler) GetWorkout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Workout not found", http.StatusNotFound)
 		return
 	case err != nil:
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		httpx.InternalError(w, err)
 		return
 	}
 

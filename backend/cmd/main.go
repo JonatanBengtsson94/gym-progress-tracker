@@ -2,8 +2,9 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
@@ -18,7 +19,8 @@ import (
 func main() {
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		slog.Error("Failed to load config", "error", err)
+		os.Exit(1)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -26,14 +28,16 @@ func main() {
 
 	pool, err := database.NewPool(ctx, cfg.DB)
 	if err != nil {
-		log.Fatalf("Failed to setup database: %v", err)
+		slog.Error("Failed to setup database", "error", err)
+		os.Exit(1)
 	}
 	defer pool.Close()
-	log.Println("Connected to database")
+	slog.Info("Connected to database")
 
 	exerciseRepo, err := exercise.NewPostgresExerciseRepository(ctx, pool)
 	if err != nil {
-		log.Fatalf("Failed to create exercise repository: %v", err)
+		slog.Error("Failed to create exercise repository", "error", err)
+		os.Exit(1)
 	}
 	exerciseService := exercise.NewExerciseService(exerciseRepo)
 	exerciseHandler := exercise.NewExerciseHandler(exerciseService)
@@ -50,6 +54,9 @@ func main() {
 
 	router := server.NewRouter(exerciseHandler, workoutHandler, authHandler, authMiddleware)
 
-	log.Println("Listening on port 8080")
-	log.Fatal(http.ListenAndServe(":8080", router))
+	slog.Info("Listening on port 8080")
+	if err := http.ListenAndServe(":8080", router); err != nil {
+		slog.Error("Server stopped", "error", err)
+		os.Exit(1)
+	}
 }

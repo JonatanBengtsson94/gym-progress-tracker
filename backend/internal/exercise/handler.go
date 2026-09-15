@@ -45,7 +45,7 @@ func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
 
 	exercises, err := h.service.GetExercises(r.Context(), userId)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		httpx.InternalError(w, err)
 		return
 	}
 
@@ -79,7 +79,7 @@ func (h *ExerciseHandler) CreateExercise(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Exercise already exists", http.StatusConflict)
 		return
 	case err != nil:
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		httpx.InternalError(w, err)
 		return
 	}
 
@@ -114,7 +114,7 @@ func (h *ExerciseHandler) ModifyExercise(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "Cannot modify a global exercise", http.StatusForbidden)
 		return
 	case err != nil:
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		httpx.InternalError(w, err)
 		return
 	}
 

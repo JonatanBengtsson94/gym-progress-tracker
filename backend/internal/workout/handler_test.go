@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 	"time"
 
@@ -88,6 +89,64 @@ func TestWorkoutHandler_GetWorkout_Success(t *testing.T) {
 	}
 	if got.Sets[0].ExerciseId != 1 || got.Sets[0].ExerciseName != "Bench Press" || got.Sets[0].Reps != 8 || got.Sets[0].WeightGrams != 60000 {
 		t.Errorf("GetWorkout() set = %+v", got.Sets[0])
+	}
+}
+
+func TestWorkoutHandler_GetWorkout_ResponseContainsOnlyExpectedFields(t *testing.T) {
+	serviceWorkout := workout.Workout{
+		WorkoutId:   1,
+		CompletedAt: time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
+		Template:    template.Template{TemplateId: 1, TemplateName: "Push Day"},
+		Sets: []set.Set{
+			{Exercise: exercise.Exercise{ExerciseId: 1, ExerciseName: "Bench Press"}, Reps: 8, WeightGrams: 60000},
+		},
+	}
+
+	service := &mockWorkoutService{
+		getWorkoutFunc: func(ctx context.Context, userId uint32, workoutId uint32) (workout.Workout, error) {
+			return serviceWorkout, nil
+		},
+	}
+
+	handler := workout.NewWorkoutHandler(service)
+
+	req := newGetWorkoutRequest(1, "1", true)
+	rec := httptest.NewRecorder()
+
+	handler.GetWorkout(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	var got map[string]any
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("Failed to decode response body: %v", err)
+	}
+
+	completedAtJSON, err := json.Marshal(serviceWorkout.CompletedAt)
+	if err != nil {
+		t.Fatalf("Failed to marshal CompletedAt: %v", err)
+	}
+	var wantCompletedAt string
+	if err := json.Unmarshal(completedAtJSON, &wantCompletedAt); err != nil {
+		t.Fatalf("Failed to unmarshal CompletedAt: %v", err)
+	}
+
+	want := map[string]any{
+		"workout_id":    float64(1),
+		"template_name": "Push Day",
+		"completed_at":  wantCompletedAt,
+		"sets": []any{
+			map[string]any{
+				"exercise_id":   float64(1),
+				"exercise_name": "Bench Press",
+				"reps":          float64(8),
+				"weight_grams":  float64(60000),
+			},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("GetWorkout() response fields = %v, want exactly %v", got, want)
 	}
 }
 

@@ -220,6 +220,19 @@ func TestExerciseRepository_CreateExercise_DuplicatesGlobalExercise_CaseInsensit
 	}
 }
 
+func TestExerciseRepository_CreateExercise_UserNotFound(t *testing.T) {
+	ctx := t.Context()
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
+	if err != nil {
+		t.Fatalf("NewExerciseRepository returned error: %v", err)
+	}
+
+	_, err = repo.CreateExercise(ctx, exercise.Exercise{ExerciseName: "Ghost Exercise", UserId: 999999})
+	if err == nil {
+		t.Fatal("expected an error for a nonexistent user_id, got nil")
+	}
+}
+
 func TestExerciseRepository_ModifyExercise(t *testing.T) {
 	ctx := t.Context()
 	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)

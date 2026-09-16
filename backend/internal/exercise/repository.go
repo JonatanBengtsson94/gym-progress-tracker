@@ -6,15 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/database"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-// uniqueViolationCode is the Postgres error code for a unique constraint
-// violation (23505), returned e.g. when a user already has an exercise
-// with the same name (see uq_exercises_user_name).
-const uniqueViolationCode = "23505"
 
 type PostgresExerciseRepository struct {
 	db              *pgxpool.Pool
@@ -72,8 +67,7 @@ func (r *PostgresExerciseRepository) CreateExercise(ctx context.Context, exercis
 	`
 	err := r.db.QueryRow(ctx, query, exercise.UserId, exercise.ExerciseName).Scan(&exercise.ExerciseId)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
+		if database.IsUniqueViolation(err) {
 			return Exercise{}, ErrExerciseAlreadyExists
 		}
 		return Exercise{}, fmt.Errorf("Create exercise failed: %w", err)
@@ -102,8 +96,7 @@ func (r *PostgresExerciseRepository) ModifyExercise(ctx context.Context, exercis
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Exercise{}, ErrExerciseNotFound
 		}
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == uniqueViolationCode {
+		if database.IsUniqueViolation(err) {
 			return Exercise{}, ErrExerciseAlreadyExists
 		}
 		return Exercise{}, fmt.Errorf("Modify exercise failed: %w", err)

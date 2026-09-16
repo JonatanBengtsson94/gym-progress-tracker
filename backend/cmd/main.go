@@ -12,6 +12,7 @@ import (
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/database"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/server"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/template"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/workout"
 )
@@ -42,6 +43,10 @@ func main() {
 	exerciseService := exercise.NewExerciseService(exerciseRepo)
 	exerciseHandler := exercise.NewExerciseHandler(exerciseService)
 
+	templateRepo := template.NewPostgresTemplateRepository(pool)
+	templateService := template.NewTemplateService(templateRepo)
+	templateHandler := template.NewTemplateHandler(templateService)
+
 	workoutRepo := workout.NewPostgresWorkoutRepository(pool)
 	workoutService := workout.NewWorkoutService(workoutRepo)
 	workoutHandler := workout.NewWorkoutHandler(workoutService)
@@ -52,7 +57,7 @@ func main() {
 	authHandler := auth.NewAuthHandler(authService)
 	authMiddleware := auth.NewAuthMiddleware(authService)
 
-	router := server.NewRouter(exerciseHandler, workoutHandler, authHandler, authMiddleware)
+	router := server.NewRouter(exerciseHandler, workoutHandler, templateHandler, authHandler, authMiddleware)
 
 	slog.Info("Listening on port 8080")
 	if err := http.ListenAndServe(":8080", router); err != nil {

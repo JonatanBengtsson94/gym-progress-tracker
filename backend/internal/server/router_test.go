@@ -16,6 +16,7 @@ import (
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/server"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/template"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/testutil"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/workout"
@@ -58,13 +59,17 @@ func newTestRouter(t *testing.T) http.Handler {
 	workoutService := workout.NewWorkoutService(workoutRepo)
 	workoutHandler := workout.NewWorkoutHandler(workoutService)
 
+	templateRepo := template.NewPostgresTemplateRepository(testPool)
+	templateService := template.NewTemplateService(templateRepo)
+	templateHandler := template.NewTemplateHandler(templateService)
+
 	userRepo := user.NewPostgresUserRepository(testPool)
 	sessionRepo := auth.NewInMemorySessionRepository(time.Hour)
 	authService := auth.NewAuthService(userRepo, sessionRepo)
 	authHandler := auth.NewAuthHandler(authService)
 	authMiddleware := auth.NewAuthMiddleware(authService)
 
-	return server.NewRouter(exerciseHandler, workoutHandler, authHandler, authMiddleware)
+	return server.NewRouter(exerciseHandler, workoutHandler, templateHandler, authHandler, authMiddleware)
 }
 
 func TestIntegration_LoginAndAccessProtectedRoute(t *testing.T) {
@@ -502,5 +507,71 @@ func TestIntegration_ModifyExercise_NameRequired(t *testing.T) {
 
 	if rec.Result().StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_CreateTemplate(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_name":"Pull Day"}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", res.StatusCode)
+	}
+
+	var created template.TemplateResponse
+	if err := json.NewDecoder(res.Body).Decode(&created); err != nil {
+		t.Fatalf("failed to decode create response: %v", err)
+	}
+	if created.TemplateName != "Pull Day" || created.TemplateId == 0 {
+		t.Errorf("unexpected create response: %+v", created)
+	}
+}
+
+func TestIntegration_CreateTemplate_NoToken(t *testing.T) {
+	router := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_name":"Pull Day"}`))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_CreateTemplate_NameRequired(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_name":"   "}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_CreateTemplate_DuplicateName(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	// "Push Day" is already seeded for alice.
+	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_name":"Push Day"}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", rec.Result().StatusCode)
 	}
 }

@@ -21,7 +21,10 @@ CREATE TABLE templates (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_templates_user_id 
+CREATE UNIQUE INDEX uq_templates_user_name
+  ON templates(user_id, lower(template_name));
+
+CREATE INDEX idx_templates_user_id
   ON templates(user_id);
 
 -- WORKOUTS

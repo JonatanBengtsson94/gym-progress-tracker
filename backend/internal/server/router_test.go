@@ -64,12 +64,14 @@ func newTestRouter(t *testing.T) http.Handler {
 	templateHandler := template.NewTemplateHandler(templateService)
 
 	userRepo := user.NewPostgresUserRepository(testPool)
+	userService := user.NewUserService(userRepo)
+	userHandler := user.NewUserHandler(userService)
 	sessionRepo := auth.NewInMemorySessionRepository(time.Hour)
 	authService := auth.NewAuthService(userRepo, sessionRepo)
 	authHandler := auth.NewAuthHandler(authService)
 	authMiddleware := auth.NewAuthMiddleware(authService)
 
-	return server.NewRouter(exerciseHandler, workoutHandler, templateHandler, authHandler, authMiddleware)
+	return server.NewRouter(userHandler, exerciseHandler, workoutHandler, templateHandler, authHandler, authMiddleware)
 }
 
 func TestIntegration_LoginAndAccessProtectedRoute(t *testing.T) {
@@ -164,6 +166,72 @@ func mustLogin(t *testing.T, router http.Handler, username, password string) str
 	}
 
 	return loginResponse.SessionId
+}
+
+func TestIntegration_LoginAndGetOwnUser(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	req := httptest.NewRequest(http.MethodGet, "/users/me", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.StatusCode)
+	}
+
+	var got user.UserResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("failed to decode user response: %v", err)
+	}
+
+	want := user.UserResponse{UserId: 1, UserName: "alice", FirstName: "Alice", LastName: "Anderson"}
+	if got != want {
+		t.Errorf("GET /users/me = %+v, want %+v", got, want)
+	}
+}
+
+func TestIntegration_GetOwnUser_ScopedToSession(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "bob", "secret")
+
+	req := httptest.NewRequest(http.MethodGet, "/users/me", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", res.StatusCode)
+	}
+
+	var got user.UserResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("failed to decode user response: %v", err)
+	}
+
+	want := user.UserResponse{UserId: 2, UserName: "bob", FirstName: "Bob", LastName: "Brown"}
+	if got != want {
+		t.Errorf("GET /users/me with bob's session = %+v, want %+v", got, want)
+	}
+}
+
+func TestIntegration_GetOwnUser_NoToken(t *testing.T) {
+	router := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/users/me", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rec.Result().StatusCode)
+	}
 }
 
 func TestIntegration_CreateExerciseAndSeeItInList(t *testing.T) {

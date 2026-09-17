@@ -7,10 +7,12 @@ import (
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/httpx"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/template"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/workout"
 )
 
 func NewRouter(
+	userHandler *user.UserHandler,
 	exerciseHandler *exercise.ExerciseHandler,
 	workoutHandler *workout.WorkoutHandler,
 	templateHandler *template.TemplateHandler,
@@ -18,6 +20,7 @@ func NewRouter(
 	authMiddleware *auth.AuthMiddleware,
 ) http.Handler {
 	mux := http.NewServeMux()
+	mux.Handle("GET /users/me", authMiddleware.RequireAuth(http.HandlerFunc(userHandler.GetUserFromSession)))
 	mux.Handle("GET /exercises", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.GetExercises)))
 	mux.Handle("POST /exercises", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.CreateExercise)))
 	mux.Handle("PATCH /exercises", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.ModifyExercise)))

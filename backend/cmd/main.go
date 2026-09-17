@@ -52,12 +52,15 @@ func main() {
 	workoutHandler := workout.NewWorkoutHandler(workoutService)
 
 	userRepo := user.NewPostgresUserRepository(pool)
+	userService := user.NewUserService(userRepo)
+	userHandler := user.NewUserHandler(userService)
+
 	sessionRepo := auth.NewInMemorySessionRepository(cfg.Session.SessionDuration)
 	authService := auth.NewAuthService(userRepo, sessionRepo)
 	authHandler := auth.NewAuthHandler(authService)
 	authMiddleware := auth.NewAuthMiddleware(authService)
 
-	router := server.NewRouter(exerciseHandler, workoutHandler, templateHandler, authHandler, authMiddleware)
+	router := server.NewRouter(userHandler, exerciseHandler, workoutHandler, templateHandler, authHandler, authMiddleware)
 
 	slog.Info("Listening on port 8080")
 	if err := http.ListenAndServe(":8080", router); err != nil {

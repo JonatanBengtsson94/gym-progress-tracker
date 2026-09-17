@@ -63,3 +63,34 @@ func TestUserRepository_GetUser_NotFound(t *testing.T) {
 		t.Fatalf("Expected ErrUserNotFound, got %v", err)
 	}
 }
+
+func TestUserRepository_GetUserByUserId_Success(t *testing.T) {
+	ctx := t.Context()
+	repo := user.NewPostgresUserRepository(testPool)
+
+	got, err := repo.GetUserByUserId(ctx, 1)
+	if err != nil {
+		t.Fatalf("GetUserByUserId returned error: %v", err)
+	}
+
+	want := user.User{
+		UserId:    1,
+		UserName:  "Test User",
+		FirstName: "Test",
+		LastName:  "User",
+	}
+
+	if got != want {
+		t.Errorf("GetUserByUserId() = %+v, want %+v", got, want)
+	}
+}
+
+func TestUserRepository_GetUserByUserId_NotFound(t *testing.T) {
+	ctx := t.Context()
+	repo := user.NewPostgresUserRepository(testPool)
+
+	_, err := repo.GetUserByUserId(ctx, 999)
+	if !errors.Is(err, user.ErrUserNotFound) {
+		t.Fatalf("Expected ErrUserNotFound, got %v", err)
+	}
+}

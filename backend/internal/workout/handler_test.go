@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/identity"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/set"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/template"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/workout"
@@ -35,7 +35,7 @@ func newGetWorkoutRequest(userId uint32, workoutId string, authenticated bool) *
 	req := httptest.NewRequest(http.MethodGet, "/workouts/"+workoutId, nil)
 	req.SetPathValue("workoutId", workoutId)
 	if authenticated {
-		req = req.WithContext(auth.ContextWithUserId(req.Context(), userId))
+		req = req.WithContext(identity.ContextWithUserId(req.Context(), userId))
 	}
 	return req
 }
@@ -284,7 +284,7 @@ func TestWorkoutHandler_GetWorkout_NotFound(t *testing.T) {
 func newCreateWorkoutRequest(userId uint32, body string, authenticated bool) *http.Request {
 	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(body))
 	if authenticated {
-		req = req.WithContext(auth.ContextWithUserId(req.Context(), userId))
+		req = req.WithContext(identity.ContextWithUserId(req.Context(), userId))
 	}
 	return req
 }

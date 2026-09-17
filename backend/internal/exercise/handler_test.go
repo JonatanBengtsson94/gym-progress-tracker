@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/identity"
 )
 
 type mockExerciseService struct {
@@ -51,7 +51,7 @@ func TestExerciseHandler_GetExercises_Success(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/exercises", nil)
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.GetExercises(rec, req)
@@ -89,7 +89,7 @@ func TestExerciseHandler_GetExercises_ResponseContainsOnlyExpectedFields(t *test
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/exercises", nil)
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.GetExercises(rec, req)
@@ -145,7 +145,7 @@ func TestExerciseHandler_GetExercises_ServiceError(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodGet, "/exercises", nil)
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.GetExercises(rec, req)
@@ -172,7 +172,7 @@ func TestExerciseHandler_CreateExercise_Success(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_name":"Lunge"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.CreateExercise(rec, req)
@@ -211,7 +211,7 @@ func TestExerciseHandler_CreateExercise_ResponseContainsOnlyExpectedFields(t *te
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_name":"Lunge"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.CreateExercise(rec, req)
@@ -264,7 +264,7 @@ func TestExerciseHandler_CreateExercise_MalformedBody(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`not-json`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.CreateExercise(rec, req)
@@ -284,7 +284,7 @@ func TestExerciseHandler_CreateExercise_NameRequired(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_name":"   "}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.CreateExercise(rec, req)
@@ -304,7 +304,7 @@ func TestExerciseHandler_CreateExercise_AlreadyExists(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_name":"Lunge"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.CreateExercise(rec, req)
@@ -324,7 +324,7 @@ func TestExerciseHandler_CreateExercise_ServiceError(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_name":"Lunge"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.CreateExercise(rec, req)
@@ -348,7 +348,7 @@ func TestExerciseHandler_ModifyExercise_Success(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"Romanian Deadlift"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -387,7 +387,7 @@ func TestExerciseHandler_ModifyExercise_ResponseContainsOnlyExpectedFields(t *te
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"Romanian Deadlift"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -440,7 +440,7 @@ func TestExerciseHandler_ModifyExercise_MalformedBody(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`not-json`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -460,7 +460,7 @@ func TestExerciseHandler_ModifyExercise_NameRequired(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"   "}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -480,7 +480,7 @@ func TestExerciseHandler_ModifyExercise_AlreadyExists(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"Lunge"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -500,7 +500,7 @@ func TestExerciseHandler_ModifyExercise_GlobalExercise(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"Bench Press Variant"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -520,7 +520,7 @@ func TestExerciseHandler_ModifyExercise_NotFound(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":999,"exercise_name":"Lunge"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -540,7 +540,7 @@ func TestExerciseHandler_ModifyExercise_ServiceError(t *testing.T) {
 	handler := exercise.NewExerciseHandler(service)
 
 	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"Lunge"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)

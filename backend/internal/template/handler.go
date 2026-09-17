@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/httpx"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/identity"
 )
 
 type TemplateService interface {
@@ -31,7 +31,7 @@ type TemplateResponse struct {
 }
 
 func (h *TemplateHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserId(w, r)
+	userId, ok := identity.RequireUserId(w, r)
 	if !ok {
 		return
 	}

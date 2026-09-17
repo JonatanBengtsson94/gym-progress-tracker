@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/identity"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/template"
 )
 
@@ -36,7 +36,7 @@ func TestTemplateHandler_CreateTemplate_Success(t *testing.T) {
 	handler := template.NewTemplateHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_name":"Pull Day"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.CreateTemplate(rec, req)
@@ -75,7 +75,7 @@ func TestTemplateHandler_CreateTemplate_ResponseContainsOnlyExpectedFields(t *te
 	handler := template.NewTemplateHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_name":"Pull Day"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.CreateTemplate(rec, req)
@@ -128,7 +128,7 @@ func TestTemplateHandler_CreateTemplate_MalformedBody(t *testing.T) {
 	handler := template.NewTemplateHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`not-json`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.CreateTemplate(rec, req)
@@ -148,7 +148,7 @@ func TestTemplateHandler_CreateTemplate_NameRequired(t *testing.T) {
 	handler := template.NewTemplateHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_name":"   "}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.CreateTemplate(rec, req)
@@ -168,7 +168,7 @@ func TestTemplateHandler_CreateTemplate_AlreadyExists(t *testing.T) {
 	handler := template.NewTemplateHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_name":"Pull Day"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.CreateTemplate(rec, req)
@@ -188,7 +188,7 @@ func TestTemplateHandler_CreateTemplate_ServiceError(t *testing.T) {
 	handler := template.NewTemplateHandler(service)
 
 	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_name":"Pull Day"}`))
-	req = req.WithContext(auth.ContextWithUserId(req.Context(), 1))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
 	handler.CreateTemplate(rec, req)

@@ -34,3 +34,22 @@ func (r *PostgresUserRepository) GetUserByUsername(ctx context.Context, username
 
 	return user, nil
 }
+
+func (r *PostgresUserRepository) GetUserByUserId(ctx context.Context, userId uint32) (User, error) {
+	var user User
+	user.UserId = userId
+	query := `
+		SELECT username, first_name, last_name
+		FROM users
+		WHERE user_id = $1
+	`
+	err := r.db.QueryRow(ctx, query, userId).Scan(&user.UserName, &user.FirstName, &user.LastName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return user, ErrUserNotFound
+	}
+	if err != nil {
+		return user, fmt.Errorf("GetUserByUserId failed: %w", err)
+	}
+
+	return user, nil
+}

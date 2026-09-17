@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/httpx"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/identity"
 )
 
 type ExerciseService interface {
@@ -38,7 +38,7 @@ type ExerciseResponse struct {
 }
 
 func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserId(w, r)
+	userId, ok := identity.RequireUserId(w, r)
 	if !ok {
 		return
 	}
@@ -58,7 +58,7 @@ func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ExerciseHandler) CreateExercise(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserId(w, r)
+	userId, ok := identity.RequireUserId(w, r)
 	if !ok {
 		return
 	}
@@ -87,7 +87,7 @@ func (h *ExerciseHandler) CreateExercise(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *ExerciseHandler) ModifyExercise(w http.ResponseWriter, r *http.Request) {
-	userId, ok := auth.RequireUserId(w, r)
+	userId, ok := identity.RequireUserId(w, r)
 	if !ok {
 		return
 	}

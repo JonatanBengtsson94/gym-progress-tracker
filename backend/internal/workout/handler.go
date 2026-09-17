@@ -8,11 +8,15 @@ import (
 	"time"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/httpx"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/set"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/template"
 )
 
 type WorkoutService interface {
 	GetWorkout(context.Context, uint32, uint32) (Workout, error)
+	CreateWorkout(context.Context, uint32, Workout) (Workout, error)
 }
 
 type WorkoutHandler struct {
@@ -23,18 +27,55 @@ func NewWorkoutHandler(service WorkoutService) *WorkoutHandler {
 	return &WorkoutHandler{service: service}
 }
 
-type workoutSet struct {
-	ExerciseId   uint32 `json:"exercise_id"`
-	ExerciseName string `json:"exercise_name"`
-	Reps         uint8  `json:"reps"`
-	WeightGrams  uint32 `json:"weight_grams"`
+type workoutResponseSet struct {
+	Reps        uint8  `json:"reps"`
+	WeightGrams uint32 `json:"weight_grams"`
+}
+
+type workoutResponseExercise struct {
+	ExerciseId   uint32               `json:"exercise_id"`
+	ExerciseName string               `json:"exercise_name"`
+	Sets         []workoutResponseSet `json:"sets"`
 }
 
 type WorkoutResponse struct {
-	WorkoutId    uint32       `json:"workout_id"`
-	TemplateName string       `json:"template_name"`
-	CompletedAt  time.Time    `json:"completed_at"`
-	Sets         []workoutSet `json:"sets"`
+	WorkoutId    uint32                    `json:"workout_id"`
+	TemplateId   uint32                    `json:"template_id"`
+	TemplateName string                    `json:"template_name"`
+	CompletedAt  time.Time                 `json:"completed_at"`
+	Exercises    []workoutResponseExercise `json:"exercises"`
+}
+
+// toWorkoutResponse groups the workout's flat set list by exercise. Exercises
+// keep the order they first appear in, so repeating an exercise later in the
+// workout adds to its existing group rather than starting a second one.
+func toWorkoutResponse(workout Workout) WorkoutResponse {
+	exercises := make([]workoutResponseExercise, 0, len(workout.Sets))
+	indexByExerciseId := make(map[uint32]int, len(workout.Sets))
+
+	for _, s := range workout.Sets {
+		i, ok := indexByExerciseId[s.Exercise.ExerciseId]
+		if !ok {
+			i = len(exercises)
+			indexByExerciseId[s.Exercise.ExerciseId] = i
+			exercises = append(exercises, workoutResponseExercise{
+				ExerciseId:   s.Exercise.ExerciseId,
+				ExerciseName: s.Exercise.ExerciseName,
+			})
+		}
+		exercises[i].Sets = append(exercises[i].Sets, workoutResponseSet{
+			Reps:        s.Reps,
+			WeightGrams: s.WeightGrams,
+		})
+	}
+
+	return WorkoutResponse{
+		WorkoutId:    workout.WorkoutId,
+		TemplateId:   workout.Template.TemplateId,
+		TemplateName: workout.Template.TemplateName,
+		CompletedAt:  workout.CompletedAt,
+		Exercises:    exercises,
+	}
 }
 
 func (h *WorkoutHandler) GetWorkout(w http.ResponseWriter, r *http.Request) {
@@ -59,20 +100,79 @@ func (h *WorkoutHandler) GetWorkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sets := make([]workoutSet, len(workout.Sets))
-	for i, s := range workout.Sets {
-		sets[i] = workoutSet{
-			ExerciseId:   s.Exercise.ExerciseId,
-			ExerciseName: s.Exercise.ExerciseName,
-			Reps:         s.Reps,
-			WeightGrams:  s.WeightGrams,
+	httpx.WriteJSON(w, http.StatusOK, toWorkoutResponse(workout))
+}
+
+type createWorkoutRequestSet struct {
+	Reps        uint8  `json:"reps"`
+	WeightGrams uint32 `json:"weight_grams"`
+}
+
+type createWorkoutRequestExercise struct {
+	ExerciseId uint32                    `json:"exercise_id"`
+	Sets       []createWorkoutRequestSet `json:"sets"`
+}
+
+type createWorkoutRequest struct {
+	TemplateId   uint32                         `json:"template_id"`
+	TemplateName string                         `json:"template_name"`
+	CompletedAt  time.Time                      `json:"completed_at"`
+	Exercises    []createWorkoutRequestExercise `json:"exercises"`
+}
+
+func (h *WorkoutHandler) CreateWorkout(w http.ResponseWriter, r *http.Request) {
+	userId, ok := auth.RequireUserId(w, r)
+	if !ok {
+		return
+	}
+
+	var req createWorkoutRequest
+	if !httpx.DecodeJSONBody(w, r, &req) {
+		return
+	}
+
+	var sets []set.Set
+	for _, e := range req.Exercises {
+		for _, s := range e.Sets {
+			sets = append(sets, set.Set{
+				Exercise:    exercise.Exercise{ExerciseId: e.ExerciseId},
+				Reps:        s.Reps,
+				WeightGrams: s.WeightGrams,
+			})
 		}
 	}
 
-	httpx.WriteJSON(w, http.StatusOK, WorkoutResponse{
-		WorkoutId:    workout.WorkoutId,
-		TemplateName: workout.Template.TemplateName,
-		CompletedAt:  workout.CompletedAt,
-		Sets:         sets,
+	created, err := h.service.CreateWorkout(r.Context(), userId, Workout{
+		CompletedAt: req.CompletedAt,
+		Template:    template.Template{TemplateId: req.TemplateId, TemplateName: req.TemplateName},
+		Sets:        sets,
 	})
+	switch {
+	case errors.Is(err, ErrSetsRequired):
+		http.Error(w, "exercises must contain at least one set", http.StatusBadRequest)
+		return
+	case errors.Is(err, ErrRepsRequired):
+		http.Error(w, "reps must be greater than zero", http.StatusBadRequest)
+		return
+	case errors.Is(err, ErrWeightGramsOutOfRange):
+		http.Error(w, "weight_grams is out of range", http.StatusBadRequest)
+		return
+	case errors.Is(err, template.ErrTemplateNameRequired):
+		http.Error(w, "template_name is required when template_id is omitted", http.StatusBadRequest)
+		return
+	case errors.Is(err, ErrExerciseNotFound):
+		http.Error(w, "Unknown exercise_id in sets", http.StatusBadRequest)
+		return
+	case errors.Is(err, ErrTemplateNotFound):
+		http.Error(w, "Template not found", http.StatusNotFound)
+		return
+	case errors.Is(err, template.ErrTemplateAlreadyExists):
+		http.Error(w, "Template already exists", http.StatusConflict)
+		return
+	case err != nil:
+		httpx.InternalError(w, err)
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusCreated, toWorkoutResponse(created))
 }

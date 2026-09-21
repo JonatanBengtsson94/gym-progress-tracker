@@ -63,12 +63,11 @@ CREATE TABLE sets (
   set_id SERIAL PRIMARY KEY,
   exercise_id INTEGER NOT NULL REFERENCES exercises(exercise_id),
   workout_id INTEGER NOT NULL REFERENCES workouts(workout_id),
-  reps INTEGER NOT NULL,
-  weight_grams INTEGER NOT NULL
+  reps INTEGER NOT NULL CONSTRAINT sets_reps_positive CHECK (reps > 0),
+  weight_grams INTEGER NOT NULL CONSTRAINT sets_weight_grams_non_negative CHECK (weight_grams >= 0)
 );
 
 CREATE INDEX idx_sets_workout_id 
   ON sets(workout_id);
 CREATE INDEX idx_sets_exercise_id 
   ON sets(exercise_id);
-

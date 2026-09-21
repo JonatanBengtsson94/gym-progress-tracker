@@ -304,3 +304,194 @@ func TestWorkoutRepository_GetWorkout_UserSeesOwnWorkout(t *testing.T) {
 		t.Errorf("expected exercise %q, got %q", "Deadlift", got.Sets[0].Exercise.ExerciseName)
 	}
 }
+
+// createModifiableWorkout stores a fresh two-set workout for user 1 under
+// template 1, so modify tests never touch the shared seeded workouts.
+func createModifiableWorkout(t *testing.T, repo *workout.PostgresWorkoutRepository) workout.Workout {
+	t.Helper()
+
+	created, err := repo.CreateWorkout(t.Context(), 1, workout.Workout{
+		CompletedAt: time.Date(2024, 3, 1, 18, 0, 0, 0, time.UTC),
+		Template:    template.Template{TemplateId: 1},
+		Sets: []set.Set{
+			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 8, WeightGrams: 60000},
+			{Exercise: exercise.Exercise{ExerciseId: 2}, Reps: 5, WeightGrams: 100000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorkout returned error: %v", err)
+	}
+	return created
+}
+
+func TestWorkoutRepository_ModifyWorkout(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+	created := createModifiableWorkout(t, repo)
+
+	completedAt := time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC)
+	modified, err := repo.ModifyWorkout(ctx, 1, workout.Workout{
+		WorkoutId:   created.WorkoutId,
+		CompletedAt: completedAt,
+		Sets: []set.Set{
+			{Exercise: exercise.Exercise{ExerciseId: 3}, Reps: 10, WeightGrams: 40000},
+			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 6, WeightGrams: 70000},
+			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 4, WeightGrams: 75000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ModifyWorkout returned error: %v", err)
+	}
+
+	if modified.WorkoutId != created.WorkoutId {
+		t.Errorf("expected WorkoutId %d, got %d", created.WorkoutId, modified.WorkoutId)
+	}
+	if modified.Template.TemplateId != 1 || modified.Template.TemplateName != "Push Day" {
+		t.Errorf("expected the template to be returned unchanged, got %+v", modified.Template)
+	}
+	if len(modified.Sets) != 3 || modified.Sets[1].Exercise.ExerciseName != "Bench Press" {
+		t.Errorf("expected 3 sets with resolved exercise names, got %+v", modified.Sets)
+	}
+
+	got, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, created.WorkoutId)
+	if err != nil {
+		t.Fatalf("GetWorkoutByUserIdAndWorkoutId returned error: %v", err)
+	}
+	if !got.CompletedAt.Equal(completedAt) {
+		t.Errorf("expected CompletedAt %v, got %v", completedAt, got.CompletedAt)
+	}
+	if got.Template.TemplateId != 1 {
+		t.Errorf("expected the template to be unchanged, got %+v", got.Template)
+	}
+	if len(got.Sets) != 3 {
+		t.Fatalf("expected the old sets to be replaced by 3 new ones, got %d: %+v", len(got.Sets), got.Sets)
+	}
+	wantReps := []uint8{10, 6, 4}
+	for i, s := range got.Sets {
+		if s.Reps != wantReps[i] {
+			t.Errorf("set %d: expected Reps %d, got %d (sets must keep their submitted order)", i, wantReps[i], s.Reps)
+		}
+	}
+}
+
+func TestWorkoutRepository_ModifyWorkout_IsIdempotent(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+	created := createModifiableWorkout(t, repo)
+
+	toModify := workout.Workout{
+		WorkoutId:   created.WorkoutId,
+		CompletedAt: time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC),
+		Sets: []set.Set{
+			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 6, WeightGrams: 70000},
+		},
+	}
+
+	for range 2 {
+		if _, err := repo.ModifyWorkout(ctx, 1, toModify); err != nil {
+			t.Fatalf("ModifyWorkout returned error: %v", err)
+		}
+	}
+
+	got, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, created.WorkoutId)
+	if err != nil {
+		t.Fatalf("GetWorkoutByUserIdAndWorkoutId returned error: %v", err)
+	}
+	if len(got.Sets) != 1 {
+		t.Errorf("expected repeating the same modify to leave 1 set, got %d: %+v", len(got.Sets), got.Sets)
+	}
+}
+
+func TestWorkoutRepository_ModifyWorkout_NotFound(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	// The last id is beyond what the int4 column can hold.
+	for _, workoutId := range []uint32{999999, math.MaxInt32 + 1} {
+		_, err := repo.ModifyWorkout(ctx, 1, workout.Workout{
+			WorkoutId:   workoutId,
+			CompletedAt: time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC),
+			Sets: []set.Set{
+				{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 6, WeightGrams: 70000},
+			},
+		})
+		if !errors.Is(err, workout.ErrWorkoutNotFound) {
+			t.Errorf("workout %d: expected ErrWorkoutNotFound, got %v", workoutId, err)
+		}
+	}
+}
+
+func TestWorkoutRepository_ModifyWorkout_WrongUser(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+	created := createModifiableWorkout(t, repo)
+
+	// The workout belongs to user 1, so it should look not found to user 2.
+	_, err := repo.ModifyWorkout(ctx, 2, workout.Workout{
+		WorkoutId:   created.WorkoutId,
+		CompletedAt: time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC),
+		Sets: []set.Set{
+			{Exercise: exercise.Exercise{ExerciseId: 3}, Reps: 1, WeightGrams: 1000},
+		},
+	})
+	if !errors.Is(err, workout.ErrWorkoutNotFound) {
+		t.Fatalf("Expected ErrWorkoutNotFound, got %v", err)
+	}
+
+	got, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, created.WorkoutId)
+	if err != nil {
+		t.Fatalf("GetWorkoutByUserIdAndWorkoutId returned error: %v", err)
+	}
+	if len(got.Sets) != 2 || !got.CompletedAt.Equal(created.CompletedAt) {
+		t.Errorf("expected the workout to be untouched by another user, got %+v", got)
+	}
+}
+
+func TestWorkoutRepository_ModifyWorkout_RollsBackOnInvalidSets(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	tests := []struct {
+		name    string
+		set     set.Set
+		wantErr error
+	}{
+		// Exercise 100 is a custom exercise owned by user 2.
+		{"other user's exercise", set.Set{Exercise: exercise.Exercise{ExerciseId: 100}, Reps: 8, WeightGrams: 60000}, workout.ErrExerciseNotFound},
+		{"unknown exercise", set.Set{Exercise: exercise.Exercise{ExerciseId: 999999}, Reps: 8, WeightGrams: 60000}, workout.ErrExerciseNotFound},
+		{"weight out of range", set.Set{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 8, WeightGrams: math.MaxInt32 + 1}, workout.ErrWeightGramsOutOfRange},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			created := createModifiableWorkout(t, repo)
+
+			_, err := repo.ModifyWorkout(ctx, 1, workout.Workout{
+				WorkoutId:   created.WorkoutId,
+				CompletedAt: time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC),
+				Sets:        []set.Set{tt.set},
+			})
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Expected %v, got %v", tt.wantErr, err)
+			}
+
+			got, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, created.WorkoutId)
+			if err != nil {
+				t.Fatalf("GetWorkoutByUserIdAndWorkoutId returned error: %v", err)
+			}
+			if len(got.Sets) != 2 || !got.CompletedAt.Equal(created.CompletedAt) {
+				t.Errorf("expected the failed modify to be rolled back, got %+v", got)
+			}
+		})
+	}
+}
+
+func TestWorkoutRepository_GetWorkout_IdOutOfRange(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	_, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, math.MaxInt32+1)
+	if !errors.Is(err, workout.ErrWorkoutNotFound) {
+		t.Fatalf("Expected ErrWorkoutNotFound, got %v", err)
+	}
+}

@@ -686,6 +686,263 @@ func TestIntegration_CreateWorkout_DuplicateTemplateName(t *testing.T) {
 	}
 }
 
+func mustCreateWorkout(t *testing.T, router http.Handler, token, body string) workout.WorkoutResponse {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("create workout failed: expected status 201, got %d", res.StatusCode)
+	}
+
+	var created workout.WorkoutResponse
+	if err := json.NewDecoder(res.Body).Decode(&created); err != nil {
+		t.Fatalf("failed to decode create response: %v", err)
+	}
+
+	return created
+}
+
+func modifyWorkout(router http.Handler, token string, workoutId any, body string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/workouts/%v", workoutId), strings.NewReader(body))
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func mustGetWorkout(t *testing.T, router http.Handler, token string, workoutId uint32) workout.WorkoutResponse {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/workouts/%d", workoutId), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("get workout failed: expected status 200, got %d", res.StatusCode)
+	}
+
+	var got workout.WorkoutResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("failed to decode workout response: %v", err)
+	}
+
+	return got
+}
+
+const createPushWorkoutBody = `{
+	"template_id": 1,
+	"completed_at": "2024-03-01T18:00:00Z",
+	"exercises": [{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}, {"reps": 6, "weight_grams": 65000}]}]
+}`
+
+func TestIntegration_ModifyWorkoutAndGetItBack(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	created := mustCreateWorkout(t, router, token, createPushWorkoutBody)
+
+	rec := modifyWorkout(router, token, created.WorkoutId, `{
+		"completed_at": "2024-03-02T19:30:00Z",
+		"exercises": [
+			{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}, {"reps": 6, "weight_grams": 65000}, {"reps": 4, "weight_grams": 70000}]},
+			{"exercise_id": 2, "sets": [{"reps": 5, "weight_grams": 100000}]}
+		]
+	}`)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected modify status 200, got %d", res.StatusCode)
+	}
+
+	var modified workout.WorkoutResponse
+	if err := json.NewDecoder(res.Body).Decode(&modified); err != nil {
+		t.Fatalf("failed to decode modify response: %v", err)
+	}
+	if modified.WorkoutId != created.WorkoutId || modified.TemplateId != 1 || modified.TemplateName != "Push Day" {
+		t.Errorf("unexpected modify response: %+v", modified)
+	}
+
+	got := mustGetWorkout(t, router, token, created.WorkoutId)
+	if !got.CompletedAt.Equal(time.Date(2024, 3, 2, 19, 30, 0, 0, time.UTC)) {
+		t.Errorf("expected CompletedAt to be updated, got %v", got.CompletedAt)
+	}
+	if got.TemplateId != 1 || got.TemplateName != "Push Day" {
+		t.Errorf("expected the template to be unchanged, got %+v", got)
+	}
+	if len(got.Exercises) != 2 || len(got.Exercises[0].Sets) != 3 || len(got.Exercises[1].Sets) != 1 {
+		t.Errorf("expected the sets to be replaced by the submitted ones, got %+v", got.Exercises)
+	}
+}
+
+func TestIntegration_ModifyWorkout_KeepsCompletedAtWhenOmitted(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	created := mustCreateWorkout(t, router, token, createPushWorkoutBody)
+
+	rec := modifyWorkout(router, token, created.WorkoutId,
+		`{"exercises": [{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}]}]}`)
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Result().StatusCode)
+	}
+
+	got := mustGetWorkout(t, router, token, created.WorkoutId)
+	if !got.CompletedAt.Equal(time.Date(2024, 3, 1, 18, 0, 0, 0, time.UTC)) {
+		t.Errorf("expected the original CompletedAt to be kept, got %v", got.CompletedAt)
+	}
+	if len(got.Exercises) != 1 || len(got.Exercises[0].Sets) != 1 {
+		t.Errorf("expected the sets to be replaced, got %+v", got.Exercises)
+	}
+}
+
+func TestIntegration_ModifyWorkout_IsIdempotent(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	created := mustCreateWorkout(t, router, token, createPushWorkoutBody)
+
+	body := `{
+		"completed_at": "2024-03-02T19:30:00Z",
+		"exercises": [{"exercise_id": 1, "sets": [{"reps": 5, "weight_grams": 80000}]}]
+	}`
+
+	first := modifyWorkout(router, token, created.WorkoutId, body)
+	second := modifyWorkout(router, token, created.WorkoutId, body)
+
+	if first.Result().StatusCode != http.StatusOK || second.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected both requests to return 200, got %d and %d", first.Result().StatusCode, second.Result().StatusCode)
+	}
+	if first.Body.String() != second.Body.String() {
+		t.Errorf("expected identical responses, got %q and %q", first.Body.String(), second.Body.String())
+	}
+}
+
+func TestIntegration_ModifyWorkout_IgnoresTemplateFields(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	created := mustCreateWorkout(t, router, token, createPushWorkoutBody)
+
+	// Sending back a GET response's fields, with a different template, must not swap it.
+	rec := modifyWorkout(router, token, created.WorkoutId, `{
+		"workout_id": 999,
+		"template_id": 12345,
+		"template_name": "Sneaky Day",
+		"exercises": [{"exercise_id": 1, "exercise_name": "Bench Press", "sets": [{"reps": 8, "weight_grams": 60000}]}]
+	}`)
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Result().StatusCode)
+	}
+
+	got := mustGetWorkout(t, router, token, created.WorkoutId)
+	if got.WorkoutId != created.WorkoutId || got.TemplateId != 1 || got.TemplateName != "Push Day" {
+		t.Errorf("expected workout and template to be unchanged, got %+v", got)
+	}
+}
+
+func TestIntegration_ModifyWorkout_NoToken(t *testing.T) {
+	router := newTestRouter(t)
+
+	rec := modifyWorkout(router, "", 1, `{"exercises":[{"exercise_id":1,"sets":[{"reps":6,"weight_grams":70000}]}]}`)
+
+	if rec.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_ModifyWorkout_NotFound(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	// The last id is beyond what the int4 column can hold.
+	for _, workoutId := range []uint32{999999, 3000000000} {
+		rec := modifyWorkout(router, token, workoutId, `{"exercises":[{"exercise_id":1,"sets":[{"reps":6,"weight_grams":70000}]}]}`)
+
+		if rec.Result().StatusCode != http.StatusNotFound {
+			t.Errorf("workout %d: expected status 404, got %d", workoutId, rec.Result().StatusCode)
+		}
+	}
+}
+
+func TestIntegration_ModifyWorkout_WrongUser(t *testing.T) {
+	router := newTestRouter(t)
+	aliceToken := mustLogin(t, router, "alice", "secret")
+	bobToken := mustLogin(t, router, "bob", "secret")
+
+	created := mustCreateWorkout(t, router, aliceToken, createPushWorkoutBody)
+
+	rec := modifyWorkout(router, bobToken, created.WorkoutId,
+		`{"exercises":[{"exercise_id":1,"sets":[{"reps":1,"weight_grams":1000}]}]}`)
+	if rec.Result().StatusCode != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rec.Result().StatusCode)
+	}
+
+	got := mustGetWorkout(t, router, aliceToken, created.WorkoutId)
+	if len(got.Exercises) != 1 || len(got.Exercises[0].Sets) != 2 {
+		t.Errorf("expected alice's workout to be untouched, got %+v", got.Exercises)
+	}
+}
+
+func TestIntegration_ModifyWorkout_InvalidWorkoutId(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	rec := modifyWorkout(router, token, "abc", `{"exercises":[{"exercise_id":1,"sets":[{"reps":6,"weight_grams":70000}]}]}`)
+
+	if rec.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_ModifyWorkout_RejectsInvalidSets(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	created := mustCreateWorkout(t, router, token, createPushWorkoutBody)
+
+	tests := []struct {
+		name       string
+		body       string
+		wantStatus int
+	}{
+		{"no sets", `{"exercises":[]}`, http.StatusBadRequest},
+		{"zero reps", `{"exercises":[{"exercise_id":1,"sets":[{"reps":0,"weight_grams":60000}]}]}`, http.StatusBadRequest},
+		{"negative reps", `{"exercises":[{"exercise_id":1,"sets":[{"reps":-5,"weight_grams":60000}]}]}`, http.StatusBadRequest},
+		{"weight above column range", `{"exercises":[{"exercise_id":1,"sets":[{"reps":8,"weight_grams":3000000000}]}]}`, http.StatusBadRequest},
+		{"unknown exercise", `{"exercises":[{"exercise_id":999999,"sets":[{"reps":8,"weight_grams":60000}]}]}`, http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := modifyWorkout(router, token, created.WorkoutId, tt.body)
+
+			if rec.Result().StatusCode != tt.wantStatus {
+				t.Fatalf("expected status %d, got %d", tt.wantStatus, rec.Result().StatusCode)
+			}
+		})
+	}
+
+	got := mustGetWorkout(t, router, token, created.WorkoutId)
+	if len(got.Exercises) != 1 || len(got.Exercises[0].Sets) != 2 {
+		t.Errorf("expected rejected modifies to leave the workout untouched, got %+v", got.Exercises)
+	}
+}
+
 func TestIntegration_GetWorkout_NoToken(t *testing.T) {
 	router := newTestRouter(t)
 

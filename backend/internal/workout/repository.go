@@ -28,6 +28,10 @@ func NewPostgresWorkoutRepository(db *pgxpool.Pool) *PostgresWorkoutRepository {
 }
 
 func (r *PostgresWorkoutRepository) GetWorkoutByUserIdAndWorkoutId(ctx context.Context, userId uint32, workoutId uint32) (Workout, error) {
+	if workoutId > maxInt4 {
+		return Workout{}, ErrWorkoutNotFound
+	}
+
 	query := `SELECT w.completed_at, t.template_id, t.template_name, s.reps, s.weight_grams, e.exercise_id, e.exercise_name
 		FROM workouts AS w
 		JOIN templates AS t ON w.template_id = t.template_id
@@ -88,6 +92,52 @@ func (r *PostgresWorkoutRepository) CreateWorkout(ctx context.Context, userId ui
 	`
 	if err := tx.QueryRow(ctx, query, workout.Template.TemplateId, workout.CompletedAt).Scan(&workout.WorkoutId); err != nil {
 		return Workout{}, fmt.Errorf("Create workout failed: %w", err)
+	}
+
+	workout.Sets, err = insertSets(ctx, tx, userId, workout.WorkoutId, workout.Sets)
+	if err != nil {
+		return Workout{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Workout{}, fmt.Errorf("Commit transaction failed: %w", err)
+	}
+
+	return workout, nil
+}
+
+// ModifyWorkout replaces the completion time and all sets of an existing
+// workout in one transaction, so a failure part-way leaves the old sets in
+// place. The workout's template is left as it is. Workouts belonging to other
+// users are reported as ErrWorkoutNotFound.
+func (r *PostgresWorkoutRepository) ModifyWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, error) {
+	if workout.WorkoutId > maxInt4 {
+		return Workout{}, ErrWorkoutNotFound
+	}
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return Workout{}, fmt.Errorf("Begin transaction failed: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	query := `
+		UPDATE workouts AS w
+		SET completed_at = $1, updated_at = CURRENT_TIMESTAMP
+		FROM templates AS t
+		WHERE w.workout_id = $2 AND w.template_id = t.template_id AND t.user_id = $3
+		RETURNING t.template_id, t.template_name
+	`
+	err = tx.QueryRow(ctx, query, workout.CompletedAt, workout.WorkoutId, userId).Scan(&workout.Template.TemplateId, &workout.Template.TemplateName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Workout{}, ErrWorkoutNotFound
+		}
+		return Workout{}, fmt.Errorf("Modify workout failed: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM sets WHERE workout_id = $1`, workout.WorkoutId); err != nil {
+		return Workout{}, fmt.Errorf("Delete sets failed: %w", err)
 	}
 
 	workout.Sets, err = insertSets(ctx, tx, userId, workout.WorkoutId, workout.Sets)

@@ -21,6 +21,7 @@ import (
 type mockWorkoutService struct {
 	getWorkoutFunc    func(ctx context.Context, userId uint32, workoutId uint32) (workout.Workout, error)
 	createWorkoutFunc func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error)
+	modifyWorkoutFunc func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error)
 }
 
 func (m *mockWorkoutService) GetWorkout(ctx context.Context, userId uint32, workoutId uint32) (workout.Workout, error) {
@@ -29,6 +30,10 @@ func (m *mockWorkoutService) GetWorkout(ctx context.Context, userId uint32, work
 
 func (m *mockWorkoutService) CreateWorkout(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
 	return m.createWorkoutFunc(ctx, userId, w)
+}
+
+func (m *mockWorkoutService) ModifyWorkout(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
+	return m.modifyWorkoutFunc(ctx, userId, w)
 }
 
 func newGetWorkoutRequest(userId uint32, workoutId string, authenticated bool) *http.Request {
@@ -500,5 +505,215 @@ func TestWorkoutHandler_GetWorkout_ServiceError(t *testing.T) {
 
 	if rec.Result().StatusCode != http.StatusInternalServerError {
 		t.Fatalf("Expected status 500, got %d", rec.Result().StatusCode)
+	}
+}
+
+func newModifyWorkoutRequest(userId uint32, workoutId string, body string, authenticated bool) *http.Request {
+	req := httptest.NewRequest(http.MethodPut, "/workouts/"+workoutId, strings.NewReader(body))
+	req.SetPathValue("workoutId", workoutId)
+	if authenticated {
+		req = req.WithContext(identity.ContextWithUserId(req.Context(), userId))
+	}
+	return req
+}
+
+func TestWorkoutHandler_ModifyWorkout_Success(t *testing.T) {
+	completedAt := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	modified := workout.Workout{
+		WorkoutId:   7,
+		CompletedAt: completedAt,
+		Template:    template.Template{TemplateId: 1, TemplateName: "Push Day"},
+		Sets: []set.Set{
+			{Exercise: exercise.Exercise{ExerciseId: 1, ExerciseName: "Bench Press"}, Reps: 8, WeightGrams: 60000},
+			{Exercise: exercise.Exercise{ExerciseId: 1, ExerciseName: "Bench Press"}, Reps: 6, WeightGrams: 65000},
+		},
+	}
+
+	var gotUserId uint32
+	var gotWorkout workout.Workout
+	service := &mockWorkoutService{
+		modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
+			gotUserId = userId
+			gotWorkout = w
+			return modified, nil
+		},
+	}
+
+	handler := workout.NewWorkoutHandler(service)
+
+	req := newModifyWorkoutRequest(1, "7", `{
+		"completed_at": "2024-01-15T10:00:00Z",
+		"exercises": [
+			{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}, {"reps": 6, "weight_grams": 65000}]}
+		]
+	}`, true)
+	rec := httptest.NewRecorder()
+
+	handler.ModifyWorkout(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", res.StatusCode)
+	}
+	if ct := res.Header.Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Expected Content-Type application/json, got %q", ct)
+	}
+	if gotUserId != 1 {
+		t.Errorf("expected service to receive userId 1, got %d", gotUserId)
+	}
+	if gotWorkout.WorkoutId != 7 {
+		t.Errorf("expected service to receive workoutId 7 from the path, got %d", gotWorkout.WorkoutId)
+	}
+	if !gotWorkout.CompletedAt.Equal(completedAt) {
+		t.Errorf("expected service to receive CompletedAt %v, got %v", completedAt, gotWorkout.CompletedAt)
+	}
+	if len(gotWorkout.Sets) != 2 || gotWorkout.Sets[0].Reps != 8 || gotWorkout.Sets[1].WeightGrams != 65000 {
+		t.Errorf("expected the two sets to reach the service in order, got %+v", gotWorkout.Sets)
+	}
+
+	var got workout.WorkoutResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("Failed to decode response body: %v", err)
+	}
+	if got.WorkoutId != 7 || got.TemplateId != 1 || got.TemplateName != "Push Day" {
+		t.Errorf("ModifyWorkout() = %+v", got)
+	}
+	if len(got.Exercises) != 1 || len(got.Exercises[0].Sets) != 2 {
+		t.Errorf("ModifyWorkout() exercises = %+v", got.Exercises)
+	}
+}
+
+func TestWorkoutHandler_ModifyWorkout_IgnoresTemplateAndIdFields(t *testing.T) {
+	var gotWorkout workout.Workout
+	service := &mockWorkoutService{
+		modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
+			gotWorkout = w
+			return w, nil
+		},
+	}
+
+	handler := workout.NewWorkoutHandler(service)
+
+	// A client round-tripping a GET response sends these fields back.
+	req := newModifyWorkoutRequest(1, "7", `{
+		"workout_id": 9,
+		"template_id": 5,
+		"template_name": "Other Day",
+		"exercises": [{"exercise_id": 1, "exercise_name": "Bench Press", "sets": [{"reps": 8, "weight_grams": 60000}]}]
+	}`, true)
+	rec := httptest.NewRecorder()
+
+	handler.ModifyWorkout(rec, req)
+
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", rec.Result().StatusCode)
+	}
+	if gotWorkout.WorkoutId != 7 {
+		t.Errorf("expected the path id 7 to win over the body id, got %d", gotWorkout.WorkoutId)
+	}
+	if gotWorkout.Template != (template.Template{}) {
+		t.Errorf("expected template fields in the body to be ignored, got %+v", gotWorkout.Template)
+	}
+}
+
+func TestWorkoutHandler_ModifyWorkout_Unauthorized(t *testing.T) {
+	service := &mockWorkoutService{
+		modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
+			t.Fatal("ModifyWorkout should not be called without an authenticated user")
+			return workout.Workout{}, nil
+		},
+	}
+
+	handler := workout.NewWorkoutHandler(service)
+
+	req := newModifyWorkoutRequest(0, "1", `{"exercises":[]}`, false)
+	rec := httptest.NewRecorder()
+
+	handler.ModifyWorkout(rec, req)
+
+	if rec.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Expected status 401, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestWorkoutHandler_ModifyWorkout_InvalidWorkoutId(t *testing.T) {
+	for _, workoutId := range []string{"abc", "-1", "4294967296"} {
+		t.Run(workoutId, func(t *testing.T) {
+			service := &mockWorkoutService{
+				modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
+					t.Fatal("ModifyWorkout should not be called for an invalid workout id")
+					return workout.Workout{}, nil
+				},
+			}
+
+			handler := workout.NewWorkoutHandler(service)
+
+			req := newModifyWorkoutRequest(1, workoutId, `{"exercises":[]}`, true)
+			rec := httptest.NewRecorder()
+
+			handler.ModifyWorkout(rec, req)
+
+			if rec.Result().StatusCode != http.StatusBadRequest {
+				t.Fatalf("Expected status 400, got %d", rec.Result().StatusCode)
+			}
+		})
+	}
+}
+
+func TestWorkoutHandler_ModifyWorkout_InvalidBody(t *testing.T) {
+	service := &mockWorkoutService{
+		modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
+			t.Fatal("ModifyWorkout should not be called for a malformed body")
+			return workout.Workout{}, nil
+		},
+	}
+
+	handler := workout.NewWorkoutHandler(service)
+
+	req := newModifyWorkoutRequest(1, "1", `not json`, true)
+	rec := httptest.NewRecorder()
+
+	handler.ModifyWorkout(rec, req)
+
+	if rec.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("Expected status 400, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestWorkoutHandler_ModifyWorkout_ServiceErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		serviceErr error
+		wantStatus int
+	}{
+		{"workout not found", workout.ErrWorkoutNotFound, http.StatusNotFound},
+		{"no sets", workout.ErrSetsRequired, http.StatusBadRequest},
+		{"zero reps", workout.ErrRepsRequired, http.StatusBadRequest},
+		{"weight out of range", workout.ErrWeightGramsOutOfRange, http.StatusBadRequest},
+		{"unknown exercise", workout.ErrExerciseNotFound, http.StatusBadRequest},
+		{"unexpected error", errors.New("db exploded"), http.StatusInternalServerError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := &mockWorkoutService{
+				modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
+					return workout.Workout{}, tt.serviceErr
+				},
+			}
+
+			handler := workout.NewWorkoutHandler(service)
+
+			req := newModifyWorkoutRequest(1, "1", `{"exercises":[{"exercise_id":1,"sets":[{"reps":8,"weight_grams":60000}]}]}`, true)
+			rec := httptest.NewRecorder()
+
+			handler.ModifyWorkout(rec, req)
+
+			if rec.Result().StatusCode != tt.wantStatus {
+				t.Fatalf("Expected status %d, got %d", tt.wantStatus, rec.Result().StatusCode)
+			}
+		})
 	}
 }

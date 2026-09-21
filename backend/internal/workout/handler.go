@@ -17,6 +17,7 @@ import (
 type WorkoutService interface {
 	GetWorkout(context.Context, uint32, uint32) (Workout, error)
 	CreateWorkout(context.Context, uint32, Workout) (Workout, error)
+	ModifyWorkout(context.Context, uint32, Workout) (Workout, error)
 }
 
 type WorkoutHandler struct {
@@ -103,21 +104,62 @@ func (h *WorkoutHandler) GetWorkout(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, toWorkoutResponse(workout))
 }
 
-type createWorkoutRequestSet struct {
+type workoutRequestSet struct {
 	Reps        uint8  `json:"reps"`
 	WeightGrams uint32 `json:"weight_grams"`
 }
 
-type createWorkoutRequestExercise struct {
-	ExerciseId uint32                    `json:"exercise_id"`
-	Sets       []createWorkoutRequestSet `json:"sets"`
+type workoutRequestExercise struct {
+	ExerciseId uint32              `json:"exercise_id"`
+	Sets       []workoutRequestSet `json:"sets"`
 }
 
 type createWorkoutRequest struct {
-	TemplateId   uint32                         `json:"template_id"`
-	TemplateName string                         `json:"template_name"`
-	CompletedAt  time.Time                      `json:"completed_at"`
-	Exercises    []createWorkoutRequestExercise `json:"exercises"`
+	TemplateId   uint32                   `json:"template_id"`
+	TemplateName string                   `json:"template_name"`
+	CompletedAt  time.Time                `json:"completed_at"`
+	Exercises    []workoutRequestExercise `json:"exercises"`
+}
+
+// toSets flattens the exercise groups of a request into a flat list of sets,
+// keeping the order they were sent in.
+func toSets(exercises []workoutRequestExercise) []set.Set {
+	var sets []set.Set
+	for _, e := range exercises {
+		for _, s := range e.Sets {
+			sets = append(sets, set.Set{
+				Exercise:    exercise.Exercise{ExerciseId: e.ExerciseId},
+				Reps:        s.Reps,
+				WeightGrams: s.WeightGrams,
+			})
+		}
+	}
+	return sets
+}
+
+// writeWorkoutError maps an error from the workout service to an HTTP
+// response, falling back to a logged 500 for anything unexpected.
+func writeWorkoutError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrWorkoutNotFound):
+		http.Error(w, "Workout not found", http.StatusNotFound)
+	case errors.Is(err, ErrSetsRequired):
+		http.Error(w, "exercises must contain at least one set", http.StatusBadRequest)
+	case errors.Is(err, ErrRepsRequired):
+		http.Error(w, "reps must be greater than zero", http.StatusBadRequest)
+	case errors.Is(err, ErrWeightGramsOutOfRange):
+		http.Error(w, "weight_grams is out of range", http.StatusBadRequest)
+	case errors.Is(err, template.ErrTemplateNameRequired):
+		http.Error(w, "template_name is required when template_id is omitted", http.StatusBadRequest)
+	case errors.Is(err, ErrExerciseNotFound):
+		http.Error(w, "Unknown exercise_id in sets", http.StatusBadRequest)
+	case errors.Is(err, ErrTemplateNotFound):
+		http.Error(w, "Template not found", http.StatusNotFound)
+	case errors.Is(err, template.ErrTemplateAlreadyExists):
+		http.Error(w, "Template already exists", http.StatusConflict)
+	default:
+		httpx.InternalError(w, err)
+	}
 }
 
 func (h *WorkoutHandler) CreateWorkout(w http.ResponseWriter, r *http.Request) {
@@ -131,48 +173,53 @@ func (h *WorkoutHandler) CreateWorkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var sets []set.Set
-	for _, e := range req.Exercises {
-		for _, s := range e.Sets {
-			sets = append(sets, set.Set{
-				Exercise:    exercise.Exercise{ExerciseId: e.ExerciseId},
-				Reps:        s.Reps,
-				WeightGrams: s.WeightGrams,
-			})
-		}
-	}
-
 	created, err := h.service.CreateWorkout(r.Context(), userId, Workout{
 		CompletedAt: req.CompletedAt,
 		Template:    template.Template{TemplateId: req.TemplateId, TemplateName: req.TemplateName},
-		Sets:        sets,
+		Sets:        toSets(req.Exercises),
 	})
-	switch {
-	case errors.Is(err, ErrSetsRequired):
-		http.Error(w, "exercises must contain at least one set", http.StatusBadRequest)
-		return
-	case errors.Is(err, ErrRepsRequired):
-		http.Error(w, "reps must be greater than zero", http.StatusBadRequest)
-		return
-	case errors.Is(err, ErrWeightGramsOutOfRange):
-		http.Error(w, "weight_grams is out of range", http.StatusBadRequest)
-		return
-	case errors.Is(err, template.ErrTemplateNameRequired):
-		http.Error(w, "template_name is required when template_id is omitted", http.StatusBadRequest)
-		return
-	case errors.Is(err, ErrExerciseNotFound):
-		http.Error(w, "Unknown exercise_id in sets", http.StatusBadRequest)
-		return
-	case errors.Is(err, ErrTemplateNotFound):
-		http.Error(w, "Template not found", http.StatusNotFound)
-		return
-	case errors.Is(err, template.ErrTemplateAlreadyExists):
-		http.Error(w, "Template already exists", http.StatusConflict)
-		return
-	case err != nil:
-		httpx.InternalError(w, err)
+	if err != nil {
+		writeWorkoutError(w, err)
 		return
 	}
 
 	httpx.WriteJSON(w, http.StatusCreated, toWorkoutResponse(created))
+}
+
+// modifyWorkoutRequest deliberately has no template fields: a workout keeps
+// the template it was logged under, so any template_id or template_name a
+// client sends back (for example from a GET response) is ignored.
+type modifyWorkoutRequest struct {
+	CompletedAt time.Time                `json:"completed_at"`
+	Exercises   []workoutRequestExercise `json:"exercises"`
+}
+
+func (h *WorkoutHandler) ModifyWorkout(w http.ResponseWriter, r *http.Request) {
+	userId, ok := identity.RequireUserId(w, r)
+	if !ok {
+		return
+	}
+
+	workoutId, err := strconv.ParseUint(r.PathValue("workoutId"), 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid workout_id", http.StatusBadRequest)
+		return
+	}
+
+	var req modifyWorkoutRequest
+	if !httpx.DecodeJSONBody(w, r, &req) {
+		return
+	}
+
+	modified, err := h.service.ModifyWorkout(r.Context(), userId, Workout{
+		WorkoutId:   uint32(workoutId),
+		CompletedAt: req.CompletedAt,
+		Sets:        toSets(req.Exercises),
+	})
+	if err != nil {
+		writeWorkoutError(w, err)
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, toWorkoutResponse(modified))
 }

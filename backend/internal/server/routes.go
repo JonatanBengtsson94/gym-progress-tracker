@@ -23,7 +23,7 @@ func NewRouter(
 	mux.Handle("GET /users/me", authMiddleware.RequireAuth(http.HandlerFunc(userHandler.GetUserFromSession)))
 	mux.Handle("GET /exercises", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.GetExercises)))
 	mux.Handle("POST /exercises", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.CreateExercise)))
-	mux.Handle("PATCH /exercises", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.ModifyExercise)))
+	mux.Handle("PUT /exercises/{exerciseId}", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.ModifyExercise)))
 	mux.Handle("GET /workouts/{workoutId}", authMiddleware.RequireAuth(http.HandlerFunc(workoutHandler.GetWorkout)))
 	mux.Handle("POST /workouts", authMiddleware.RequireAuth(http.HandlerFunc(workoutHandler.CreateWorkout)))
 	mux.Handle("POST /templates", authMiddleware.RequireAuth(http.HandlerFunc(templateHandler.CreateTemplate)))

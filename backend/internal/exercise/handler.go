@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/httpx"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/identity"
@@ -29,7 +30,6 @@ type createExerciseRequest struct {
 
 type modifyExerciseRequest struct {
 	ExerciseName string `json:"exercise_name"`
-	ExerciseId   uint32 `json:"exercise_id"`
 }
 
 type ExerciseResponse struct {
@@ -92,12 +92,18 @@ func (h *ExerciseHandler) ModifyExercise(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	exerciseId, err := strconv.ParseUint(r.PathValue("exerciseId"), 10, 32)
+	if err != nil {
+		http.Error(w, "Invalid exercise_id", http.StatusBadRequest)
+		return
+	}
+
 	var req modifyExerciseRequest
 	if !httpx.DecodeJSONBody(w, r, &req) {
 		return
 	}
 
-	exercise := Exercise{ExerciseName: req.ExerciseName, ExerciseId: req.ExerciseId, UserId: userId}
+	exercise := Exercise{ExerciseName: req.ExerciseName, ExerciseId: uint32(exerciseId), UserId: userId}
 
 	modifiedExercise, err := h.service.ModifyExercise(r.Context(), exercise)
 	switch {

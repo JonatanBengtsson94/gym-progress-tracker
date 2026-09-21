@@ -354,8 +354,7 @@ func TestIntegration_ModifyExerciseAndSeeUpdatedInList(t *testing.T) {
 
 	created := mustCreateExercise(t, router, token, "Row")
 
-	modifyReq := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(
-		fmt.Sprintf(`{"exercise_id":%d,"exercise_name":"Bent Over Row"}`, created.ExerciseId)))
+	modifyReq := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/exercises/%d", created.ExerciseId), strings.NewReader(`{"exercise_name":"Bent Over Row"}`))
 	modifyReq.Header.Set("Authorization", "Bearer "+token)
 	modifyRec := httptest.NewRecorder()
 	router.ServeHTTP(modifyRec, modifyReq)
@@ -400,7 +399,7 @@ func TestIntegration_ModifyExerciseAndSeeUpdatedInList(t *testing.T) {
 func TestIntegration_ModifyExercise_NoToken(t *testing.T) {
 	router := newTestRouter(t)
 
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"Lunge"}`))
+	req := httptest.NewRequest(http.MethodPut, "/exercises/1", strings.NewReader(`{"exercise_name":"Lunge"}`))
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -434,8 +433,7 @@ func TestIntegration_ModifyExercise_GlobalExercise(t *testing.T) {
 		t.Fatal("expected seeded global exercise \"Bench Press\" to be found")
 	}
 
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(
-		fmt.Sprintf(`{"exercise_id":%d,"exercise_name":"Bench Press Variant"}`, benchPressId)))
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/exercises/%d", benchPressId), strings.NewReader(`{"exercise_name":"Bench Press Variant"}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -449,7 +447,7 @@ func TestIntegration_ModifyExercise_NotFound(t *testing.T) {
 	router := newTestRouter(t)
 	token := mustLogin(t, router, "alice", "secret")
 
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":999999,"exercise_name":"Lunge"}`))
+	req := httptest.NewRequest(http.MethodPut, "/exercises/999999", strings.NewReader(`{"exercise_name":"Lunge"}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -466,8 +464,7 @@ func TestIntegration_ModifyExercise_DuplicateName(t *testing.T) {
 	created := mustCreateExercise(t, router, token, "Cable Fly")
 
 	// "Custom Test Exercise" is already seeded for alice (user 1).
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(
-		fmt.Sprintf(`{"exercise_id":%d,"exercise_name":"Custom Test Exercise"}`, created.ExerciseId)))
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/exercises/%d", created.ExerciseId), strings.NewReader(`{"exercise_name":"Custom Test Exercise"}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -750,8 +747,21 @@ func TestIntegration_ModifyExercise_NameRequired(t *testing.T) {
 
 	created := mustCreateExercise(t, router, token, "Face Pull")
 
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(
-		fmt.Sprintf(`{"exercise_id":%d,"exercise_name":"   "}`, created.ExerciseId)))
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/exercises/%d", created.ExerciseId), strings.NewReader(`{"exercise_name":"   "}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestIntegration_ModifyExercise_InvalidExerciseId(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	req := httptest.NewRequest(http.MethodPut, "/exercises/abc", strings.NewReader(`{"exercise_name":"Lunge"}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)

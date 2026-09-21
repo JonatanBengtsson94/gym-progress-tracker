@@ -334,6 +334,15 @@ func TestExerciseHandler_CreateExercise_ServiceError(t *testing.T) {
 	}
 }
 
+func newModifyExerciseRequest(userId uint32, exerciseId string, body string, authenticated bool) *http.Request {
+	req := httptest.NewRequest(http.MethodPut, "/exercises/"+exerciseId, strings.NewReader(body))
+	req.SetPathValue("exerciseId", exerciseId)
+	if authenticated {
+		req = req.WithContext(identity.ContextWithUserId(req.Context(), userId))
+	}
+	return req
+}
+
 func TestExerciseHandler_ModifyExercise_Success(t *testing.T) {
 	modified := exercise.Exercise{ExerciseId: 1, ExerciseName: "Romanian Deadlift", UserId: 1}
 
@@ -347,8 +356,7 @@ func TestExerciseHandler_ModifyExercise_Success(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"Romanian Deadlift"}`))
-	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"Romanian Deadlift"}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -386,8 +394,7 @@ func TestExerciseHandler_ModifyExercise_ResponseContainsOnlyExpectedFields(t *te
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"Romanian Deadlift"}`))
-	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"Romanian Deadlift"}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -419,7 +426,7 @@ func TestExerciseHandler_ModifyExercise_Unauthorized(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"Lunge"}`))
+	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"Lunge"}`, false)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -439,8 +446,7 @@ func TestExerciseHandler_ModifyExercise_MalformedBody(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`not-json`))
-	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+	req := newModifyExerciseRequest(1, "1", `not-json`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -459,8 +465,7 @@ func TestExerciseHandler_ModifyExercise_NameRequired(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"   "}`))
-	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"   "}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -479,8 +484,7 @@ func TestExerciseHandler_ModifyExercise_AlreadyExists(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"Lunge"}`))
-	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"Lunge"}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -499,8 +503,7 @@ func TestExerciseHandler_ModifyExercise_GlobalExercise(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"Bench Press Variant"}`))
-	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"Bench Press Variant"}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -519,8 +522,7 @@ func TestExerciseHandler_ModifyExercise_NotFound(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":999,"exercise_name":"Lunge"}`))
-	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+	req := newModifyExerciseRequest(1, "999", `{"exercise_name":"Lunge"}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -539,13 +541,60 @@ func TestExerciseHandler_ModifyExercise_ServiceError(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := httptest.NewRequest(http.MethodPatch, "/exercises", strings.NewReader(`{"exercise_id":1,"exercise_name":"Lunge"}`))
-	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"Lunge"}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
 
 	if rec.Result().StatusCode != http.StatusInternalServerError {
 		t.Fatalf("Expected status 500, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestExerciseHandler_ModifyExercise_InvalidExerciseId(t *testing.T) {
+	for _, exerciseId := range []string{"abc", "-1", "4294967296"} {
+		t.Run(exerciseId, func(t *testing.T) {
+			service := &mockExerciseService{
+				modifyExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
+					t.Fatal("ModifyExercise should not be called for an invalid exercise id")
+					return exercise.Exercise{}, nil
+				},
+			}
+
+			handler := exercise.NewExerciseHandler(service)
+
+			req := newModifyExerciseRequest(1, exerciseId, `{"exercise_name":"Lunge"}`, true)
+			rec := httptest.NewRecorder()
+
+			handler.ModifyExercise(rec, req)
+
+			if rec.Result().StatusCode != http.StatusBadRequest {
+				t.Fatalf("Expected status 400, got %d", rec.Result().StatusCode)
+			}
+		})
+	}
+}
+
+func TestExerciseHandler_ModifyExercise_PathIdWinsOverBodyId(t *testing.T) {
+	var got exercise.Exercise
+	service := &mockExerciseService{
+		modifyExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
+			got = ex
+			return ex, nil
+		},
+	}
+
+	handler := exercise.NewExerciseHandler(service)
+
+	req := newModifyExerciseRequest(1, "7", `{"exercise_id":9,"exercise_name":"Lunge"}`, true)
+	rec := httptest.NewRecorder()
+
+	handler.ModifyExercise(rec, req)
+
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", rec.Result().StatusCode)
+	}
+	if got.ExerciseId != 7 {
+		t.Errorf("expected service to receive exercise id 7 from the path, got %d", got.ExerciseId)
 	}
 }

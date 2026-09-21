@@ -13,12 +13,17 @@ import (
 
 type mockWorkoutRepository struct {
 	getWorkoutFunc    func(ctx context.Context, userId uint32, workoutId uint32) (workout.Workout, error)
+	getWorkoutsFunc   func(ctx context.Context, userId uint32) ([]workout.Workout, error)
 	createWorkoutFunc func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error)
 	modifyWorkoutFunc func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error)
 }
 
 func (m *mockWorkoutRepository) GetWorkoutByUserIdAndWorkoutId(ctx context.Context, userId uint32, workoutId uint32) (workout.Workout, error) {
 	return m.getWorkoutFunc(ctx, userId, workoutId)
+}
+
+func (m *mockWorkoutRepository) GetWorkoutsByUserId(ctx context.Context, userId uint32) ([]workout.Workout, error) {
+	return m.getWorkoutsFunc(ctx, userId)
 }
 
 func (m *mockWorkoutRepository) CreateWorkout(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
@@ -435,6 +440,54 @@ func TestWorkoutService_ModifyWorkout_RepositoryError(t *testing.T) {
 	toModify.WorkoutId = 42
 
 	_, err := service.ModifyWorkout(ctx, 1, toModify)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Expected %v, got %v", wantErr, err)
+	}
+}
+
+func TestWorkoutService_GetWorkouts(t *testing.T) {
+	ctx := t.Context()
+	const wantUserId = 1
+	expected := []workout.Workout{
+		{WorkoutId: 2, CompletedAt: time.Date(2024, 1, 16, 10, 0, 0, 0, time.UTC), Template: template.Template{TemplateId: 1, TemplateName: "Push Day"}},
+		{WorkoutId: 1, CompletedAt: time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC), Template: template.Template{TemplateId: 1, TemplateName: "Push Day"}},
+	}
+
+	var gotUserId uint32
+	repo := &mockWorkoutRepository{
+		getWorkoutsFunc: func(ctx context.Context, userId uint32) ([]workout.Workout, error) {
+			gotUserId = userId
+			return expected, nil
+		},
+	}
+
+	service := workout.NewWorkoutService(repo)
+
+	got, err := service.GetWorkouts(ctx, wantUserId)
+	if err != nil {
+		t.Fatalf("GetWorkouts returned error: %v", err)
+	}
+
+	if gotUserId != wantUserId {
+		t.Errorf("expected repo to receive userId %d, got %d", wantUserId, gotUserId)
+	}
+	if len(got) != len(expected) || got[0].WorkoutId != 2 || got[1].WorkoutId != 1 {
+		t.Errorf("GetWorkouts() = %+v, want %+v (in the repository's order)", got, expected)
+	}
+}
+
+func TestWorkoutService_GetWorkouts_RepositoryError(t *testing.T) {
+	ctx := t.Context()
+	wantErr := errors.New("db exploded")
+	repo := &mockWorkoutRepository{
+		getWorkoutsFunc: func(ctx context.Context, userId uint32) ([]workout.Workout, error) {
+			return nil, wantErr
+		},
+	}
+
+	service := workout.NewWorkoutService(repo)
+
+	_, err := service.GetWorkouts(ctx, 1)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Expected %v, got %v", wantErr, err)
 	}

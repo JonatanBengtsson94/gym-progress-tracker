@@ -16,6 +16,7 @@ import (
 
 type WorkoutService interface {
 	GetWorkout(context.Context, uint32, uint32) (Workout, error)
+	GetWorkouts(context.Context, uint32) ([]Workout, error)
 	CreateWorkout(context.Context, uint32, Workout) (Workout, error)
 	ModifyWorkout(context.Context, uint32, Workout) (Workout, error)
 }
@@ -28,15 +29,15 @@ func NewWorkoutHandler(service WorkoutService) *WorkoutHandler {
 	return &WorkoutHandler{service: service}
 }
 
-type workoutResponseSet struct {
+type workoutSet struct {
 	Reps        uint8  `json:"reps"`
 	WeightGrams uint32 `json:"weight_grams"`
 }
 
 type workoutResponseExercise struct {
-	ExerciseId   uint32               `json:"exercise_id"`
-	ExerciseName string               `json:"exercise_name"`
-	Sets         []workoutResponseSet `json:"sets"`
+	ExerciseId   uint32       `json:"exercise_id"`
+	ExerciseName string       `json:"exercise_name"`
+	Sets         []workoutSet `json:"sets"`
 }
 
 type WorkoutResponse struct {
@@ -64,7 +65,7 @@ func toWorkoutResponse(workout Workout) WorkoutResponse {
 				ExerciseName: s.Exercise.ExerciseName,
 			})
 		}
-		exercises[i].Sets = append(exercises[i].Sets, workoutResponseSet{
+		exercises[i].Sets = append(exercises[i].Sets, workoutSet{
 			Reps:        s.Reps,
 			WeightGrams: s.WeightGrams,
 		})
@@ -104,14 +105,44 @@ func (h *WorkoutHandler) GetWorkout(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, toWorkoutResponse(workout))
 }
 
-type workoutRequestSet struct {
-	Reps        uint8  `json:"reps"`
-	WeightGrams uint32 `json:"weight_grams"`
+type workoutSummary struct {
+	WorkoutId    uint32    `json:"workout_id"`
+	TemplateId   uint32    `json:"template_id"`
+	TemplateName string    `json:"template_name"`
+	CompletedAt  time.Time `json:"completed_at"`
+}
+
+type WorkoutsResponse struct {
+	Workouts []workoutSummary `json:"workouts"`
+}
+
+func (h *WorkoutHandler) GetWorkouts(w http.ResponseWriter, r *http.Request) {
+	userId, ok := identity.RequireUserId(w, r)
+	if !ok {
+		return
+	}
+
+	workouts, err := h.service.GetWorkouts(r.Context(), userId)
+	if err != nil {
+		httpx.InternalError(w, err)
+		return
+	}
+
+	workoutsResponse := make([]workoutSummary, len(workouts))
+	for i, wo := range workouts {
+		workoutsResponse[i] = workoutSummary{
+			WorkoutId:    wo.WorkoutId,
+			TemplateId:   wo.Template.TemplateId,
+			TemplateName: wo.Template.TemplateName,
+			CompletedAt:  wo.CompletedAt}
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, WorkoutsResponse{Workouts: workoutsResponse})
 }
 
 type workoutRequestExercise struct {
-	ExerciseId uint32              `json:"exercise_id"`
-	Sets       []workoutRequestSet `json:"sets"`
+	ExerciseId uint32       `json:"exercise_id"`
+	Sets       []workoutSet `json:"sets"`
 }
 
 type createWorkoutRequest struct {

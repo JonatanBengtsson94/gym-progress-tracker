@@ -14,7 +14,7 @@ INSERT INTO workouts(workout_id, template_id, completed_at) VALUES (2, 2, '2024-
 INSERT INTO sets(set_id, exercise_id, workout_id, reps, weight_grams) VALUES (3, 3, 2, 5, 120000);
 
 -- Workout 3: belongs to user 1, has no sets (should be treated as not found).
-INSERT INTO workouts(workout_id, template_id, completed_at) VALUES (3, 1, NULL);
+INSERT INTO workouts(workout_id, template_id, completed_at) VALUES (3, 1, '2024-01-17 09:00:00');
 
 -- A custom exercise owned by user 2, so user 1 must not be able to log sets for it.
 INSERT INTO exercises(exercise_id, user_id, exercise_name) VALUES (100, 2, 'Second User Curl');

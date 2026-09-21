@@ -105,10 +105,11 @@ func TestIntegration_LoginAndAccessProtectedRoute(t *testing.T) {
 		t.Fatalf("expected exercises status 200, got %d", exercisesRes.StatusCode)
 	}
 
-	var exercises []exercise.ExerciseResponse
-	if err := json.NewDecoder(exercisesRes.Body).Decode(&exercises); err != nil {
+	var exercisesBody exercise.ExercisesResponse
+	if err := json.NewDecoder(exercisesRes.Body).Decode(&exercisesBody); err != nil {
 		t.Fatalf("failed to decode exercises response: %v", err)
 	}
+	exercises := exercisesBody.Exercises
 
 	found := false
 	for _, e := range exercises {
@@ -266,10 +267,11 @@ func TestIntegration_CreateExerciseAndSeeItInList(t *testing.T) {
 	exercisesRes := exercisesRec.Result()
 	defer exercisesRes.Body.Close()
 
-	var exercises []exercise.ExerciseResponse
-	if err := json.NewDecoder(exercisesRes.Body).Decode(&exercises); err != nil {
+	var exercisesBody exercise.ExercisesResponse
+	if err := json.NewDecoder(exercisesRes.Body).Decode(&exercisesBody); err != nil {
 		t.Fatalf("failed to decode exercises response: %v", err)
 	}
+	exercises := exercisesBody.Exercises
 
 	found := false
 	for _, e := range exercises {
@@ -379,10 +381,11 @@ func TestIntegration_ModifyExerciseAndSeeUpdatedInList(t *testing.T) {
 	exercisesRec := httptest.NewRecorder()
 	router.ServeHTTP(exercisesRec, exercisesReq)
 
-	var exercises []exercise.ExerciseResponse
-	if err := json.NewDecoder(exercisesRec.Result().Body).Decode(&exercises); err != nil {
+	var exercisesBody exercise.ExercisesResponse
+	if err := json.NewDecoder(exercisesRec.Result().Body).Decode(&exercisesBody); err != nil {
 		t.Fatalf("failed to decode exercises response: %v", err)
 	}
+	exercises := exercisesBody.Exercises
 
 	found := false
 	for _, e := range exercises {
@@ -417,10 +420,11 @@ func TestIntegration_ModifyExercise_GlobalExercise(t *testing.T) {
 	exercisesRec := httptest.NewRecorder()
 	router.ServeHTTP(exercisesRec, exercisesReq)
 
-	var exercises []exercise.ExerciseResponse
-	if err := json.NewDecoder(exercisesRec.Result().Body).Decode(&exercises); err != nil {
+	var exercisesBody exercise.ExercisesResponse
+	if err := json.NewDecoder(exercisesRec.Result().Body).Decode(&exercisesBody); err != nil {
 		t.Fatalf("failed to decode exercises response: %v", err)
 	}
+	exercises := exercisesBody.Exercises
 
 	var benchPressId uint32
 	for _, e := range exercises {
@@ -940,6 +944,172 @@ func TestIntegration_ModifyWorkout_RejectsInvalidSets(t *testing.T) {
 	got := mustGetWorkout(t, router, token, created.WorkoutId)
 	if len(got.Exercises) != 1 || len(got.Exercises[0].Sets) != 2 {
 		t.Errorf("expected rejected modifies to leave the workout untouched, got %+v", got.Exercises)
+	}
+}
+
+func createWorkoutBodyAt(completedAt string) string {
+	return fmt.Sprintf(`{
+		"template_id": 1,
+		"completed_at": %q,
+		"exercises": [{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}]}]
+	}`, completedAt)
+}
+
+func mustListWorkouts(t *testing.T, router http.Handler, token string) workout.WorkoutsResponse {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, "/workouts", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("list workouts failed: expected status 200, got %d", res.StatusCode)
+	}
+
+	var got workout.WorkoutsResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("failed to decode workouts response: %v", err)
+	}
+
+	return got
+}
+
+func indexOfWorkout(list workout.WorkoutsResponse, workoutId uint32) int {
+	for i, w := range list.Workouts {
+		if w.WorkoutId == workoutId {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestIntegration_GetWorkouts(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	list := mustListWorkouts(t, router, token)
+
+	// Workout 1 is seeded for alice.
+	i := indexOfWorkout(list, 1)
+	if i == -1 {
+		t.Fatalf("expected the seeded workout 1 to be listed, got %+v", list.Workouts)
+	}
+	got := list.Workouts[i]
+	if got.TemplateId != 1 || got.TemplateName != "Push Day" {
+		t.Errorf("unexpected template for workout 1: %+v", got)
+	}
+	if want := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC); !got.CompletedAt.Equal(want) {
+		t.Errorf("expected CompletedAt %v, got %v", want, got.CompletedAt)
+	}
+}
+
+func TestIntegration_GetWorkouts_ResponseContainsOnlyExpectedFields(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	req := httptest.NewRequest(http.MethodGet, "/workouts", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	var raw map[string][]map[string]any
+	if err := json.NewDecoder(rec.Result().Body).Decode(&raw); err != nil {
+		t.Fatalf("failed to decode workouts response: %v", err)
+	}
+
+	if len(raw["workouts"]) == 0 {
+		t.Fatal("expected at least the seeded workout to be listed")
+	}
+	for _, item := range raw["workouts"] {
+		if len(item) != 4 {
+			t.Errorf("expected exactly workout_id, template_id, template_name and completed_at, got %v", item)
+		}
+		if _, ok := item["exercises"]; ok {
+			t.Errorf("expected the list to omit exercises, got %v", item)
+		}
+	}
+}
+
+func TestIntegration_GetWorkouts_NewestFirst(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	older := mustCreateWorkout(t, router, token, createWorkoutBodyAt("2032-05-01T10:00:00Z"))
+	newer := mustCreateWorkout(t, router, token, createWorkoutBodyAt("2032-05-02T10:00:00Z"))
+
+	list := mustListWorkouts(t, router, token)
+
+	olderAt, newerAt := indexOfWorkout(list, older.WorkoutId), indexOfWorkout(list, newer.WorkoutId)
+	if olderAt == -1 || newerAt == -1 {
+		t.Fatalf("expected both new workouts to be listed, got %+v", list.Workouts)
+	}
+	if newerAt > olderAt {
+		t.Errorf("expected the newer workout before the older one, got positions %d and %d", newerAt, olderAt)
+	}
+}
+
+func TestIntegration_GetWorkouts_ReflectsModifiedCompletedAt(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	first := mustCreateWorkout(t, router, token, createWorkoutBodyAt("2033-05-01T10:00:00Z"))
+	second := mustCreateWorkout(t, router, token, createWorkoutBodyAt("2033-05-02T10:00:00Z"))
+
+	// Moving the first workout past the second must reorder the list, and
+	// editing must not otherwise change where a workout appears.
+	rec := modifyWorkout(router, token, first.WorkoutId, `{
+		"completed_at": "2033-05-03T10:00:00Z",
+		"exercises": [{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}]}]
+	}`)
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected modify status 200, got %d", rec.Result().StatusCode)
+	}
+
+	list := mustListWorkouts(t, router, token)
+
+	firstAt, secondAt := indexOfWorkout(list, first.WorkoutId), indexOfWorkout(list, second.WorkoutId)
+	if firstAt == -1 || secondAt == -1 {
+		t.Fatalf("expected both workouts to be listed, got %+v", list.Workouts)
+	}
+	if firstAt > secondAt {
+		t.Errorf("expected the modified workout to move before the other one, got positions %d and %d", firstAt, secondAt)
+	}
+}
+
+func TestIntegration_GetWorkouts_OnlyOwnWorkouts(t *testing.T) {
+	router := newTestRouter(t)
+	aliceToken := mustLogin(t, router, "alice", "secret")
+	bobToken := mustLogin(t, router, "bob", "secret")
+
+	created := mustCreateWorkout(t, router, aliceToken, createWorkoutBodyAt("2034-05-01T10:00:00Z"))
+
+	if indexOfWorkout(mustListWorkouts(t, router, aliceToken), created.WorkoutId) == -1 {
+		t.Error("expected alice to see her own workout")
+	}
+
+	bobList := mustListWorkouts(t, router, bobToken)
+	if indexOfWorkout(bobList, created.WorkoutId) != -1 || indexOfWorkout(bobList, 1) != -1 {
+		t.Errorf("expected bob not to see alice's workouts, got %+v", bobList.Workouts)
+	}
+	// Bob has no workouts, which must be an empty array rather than null.
+	if bobList.Workouts == nil {
+		t.Error("expected an empty list to be an empty array, got null")
+	}
+}
+
+func TestIntegration_GetWorkouts_NoToken(t *testing.T) {
+	router := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/workouts", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rec.Result().StatusCode)
 	}
 }
 

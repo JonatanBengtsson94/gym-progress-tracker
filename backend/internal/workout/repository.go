@@ -69,6 +69,40 @@ func (r *PostgresWorkoutRepository) GetWorkoutByUserIdAndWorkoutId(ctx context.C
 	return workout, nil
 }
 
+func (r *PostgresWorkoutRepository) GetWorkoutsByUserId(ctx context.Context, userId uint32) ([]Workout, error) {
+	query := `SELECT w.workout_id, w.completed_at, t.template_id, t.template_name
+		FROM workouts AS w
+		JOIN templates AS t ON w.template_id = t.template_id
+		WHERE t.user_id = $1
+		ORDER BY w.completed_at DESC, w.workout_id DESC`
+
+	rows, err := r.db.Query(ctx, query, userId)
+	if err != nil {
+		return nil, fmt.Errorf("Get workouts failed: %w", err)
+	}
+	defer rows.Close()
+
+	workouts := make([]Workout, 0)
+	for rows.Next() {
+		var workout Workout
+		if err := rows.Scan(
+			&workout.WorkoutId,
+			&workout.CompletedAt,
+			&workout.Template.TemplateId,
+			&workout.Template.TemplateName,
+		); err != nil {
+			return nil, fmt.Errorf("Scan workouts failed: %w", err)
+		}
+		workouts = append(workouts, workout)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("Rows iteration failed: %w", err)
+	}
+
+	return workouts, nil
+}
+
 func (r *PostgresWorkoutRepository) CreateWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -259,9 +293,4 @@ func exerciseNames(ctx context.Context, tx pgx.Tx, userId uint32, exerciseIds []
 	}
 
 	return names, nil
-}
-
-func (r *PostgresWorkoutRepository) GetWorkoutsByUserId(ctx context.Context, userId uint32) ([]Workout, error) {
-	// TODO:
-	return []Workout{}, nil
 }

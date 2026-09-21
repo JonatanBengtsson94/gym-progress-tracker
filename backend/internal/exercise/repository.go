@@ -47,7 +47,7 @@ func (r *PostgresExerciseRepository) GetExercisesByUserId(ctx context.Context, u
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("Rows interation failed: %w", err)
+		return nil, fmt.Errorf("Rows iteration failed: %w", err)
 	}
 
 	allExercises := append(exercises, r.globalExercises...)

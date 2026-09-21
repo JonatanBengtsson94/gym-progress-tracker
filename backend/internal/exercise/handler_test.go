@@ -67,13 +67,13 @@ func TestExerciseHandler_GetExercises_Success(t *testing.T) {
 		t.Errorf("Expected Content-Type application/json, got %q", ct)
 	}
 
-	var got []exercise.ExerciseResponse
+	var got exercise.ExercisesResponse
 	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
 		t.Fatalf("Failed to decode response body: %v", err)
 	}
 
-	if !reflect.DeepEqual(got, expected) {
-		t.Errorf("GetExercises() got = %v, want %v", got, expected)
+	if !reflect.DeepEqual(got.Exercises, expected) {
+		t.Errorf("GetExercises() got = %v, want %v", got.Exercises, expected)
 	}
 }
 
@@ -97,21 +97,58 @@ func TestExerciseHandler_GetExercises_ResponseContainsOnlyExpectedFields(t *test
 	res := rec.Result()
 	defer res.Body.Close()
 
-	var got []map[string]any
+	var got map[string][]map[string]any
 	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
 		t.Fatalf("Failed to decode response body: %v", err)
 	}
 
 	if len(got) != 1 {
-		t.Fatalf("Expected 1 exercise, got %d", len(got))
+		t.Fatalf("Expected the envelope to contain only \"exercises\", got %v", got)
+	}
+	exercises := got["exercises"]
+	if len(exercises) != 1 {
+		t.Fatalf("Expected 1 exercise, got %d", len(exercises))
 	}
 
 	want := map[string]any{
 		"exercise_id":   float64(1),
 		"exercise_name": "Test Exercise 1",
 	}
-	if !reflect.DeepEqual(got[0], want) {
-		t.Errorf("GetExercises() response fields = %v, want exactly %v", got[0], want)
+	if !reflect.DeepEqual(exercises[0], want) {
+		t.Errorf("GetExercises() response fields = %v, want exactly %v", exercises[0], want)
+	}
+}
+
+func TestExerciseHandler_GetExercises_EmptyListIsEmptyArray(t *testing.T) {
+	for name, serviceResult := range map[string][]exercise.Exercise{
+		"nil":   nil,
+		"empty": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			service := &mockExerciseService{
+				getExercisesFunc: func(ctx context.Context, userId uint32) ([]exercise.Exercise, error) {
+					return serviceResult, nil
+				},
+			}
+
+			handler := exercise.NewExerciseHandler(service)
+
+			req := httptest.NewRequest(http.MethodGet, "/exercises", nil)
+			req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+			rec := httptest.NewRecorder()
+
+			handler.GetExercises(rec, req)
+
+			var got map[string]any
+			if err := json.NewDecoder(rec.Result().Body).Decode(&got); err != nil {
+				t.Fatalf("Failed to decode response body: %v", err)
+			}
+
+			exercises, ok := got["exercises"].([]any)
+			if !ok || len(exercises) != 0 {
+				t.Errorf("Expected \"exercises\" to be an empty array, got %#v", got["exercises"])
+			}
+		})
 	}
 }
 

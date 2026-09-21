@@ -37,6 +37,10 @@ type ExerciseResponse struct {
 	ExerciseName string `json:"exercise_name"`
 }
 
+type ExercisesResponse struct {
+	Exercises []ExerciseResponse `json:"exercises"`
+}
+
 func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
 	userId, ok := identity.RequireUserId(w, r)
 	if !ok {
@@ -49,12 +53,12 @@ func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := make([]ExerciseResponse, len(exercises))
+	exercisesResponse := make([]ExerciseResponse, len(exercises))
 	for i, e := range exercises {
-		response[i] = ExerciseResponse{ExerciseId: e.ExerciseId, ExerciseName: e.ExerciseName}
+		exercisesResponse[i] = ExerciseResponse{ExerciseId: e.ExerciseId, ExerciseName: e.ExerciseName}
 	}
 
-	httpx.WriteJSON(w, http.StatusOK, response)
+	httpx.WriteJSON(w, http.StatusOK, ExercisesResponse{Exercises: exercisesResponse})
 }
 
 func (h *ExerciseHandler) CreateExercise(w http.ResponseWriter, r *http.Request) {

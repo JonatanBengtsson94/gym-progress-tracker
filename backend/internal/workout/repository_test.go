@@ -495,3 +495,145 @@ func TestWorkoutRepository_GetWorkout_IdOutOfRange(t *testing.T) {
 		t.Fatalf("Expected ErrWorkoutNotFound, got %v", err)
 	}
 }
+
+// createWorkoutCompletedAt stores a one-set workout for user 1 under template 1.
+func createWorkoutCompletedAt(t *testing.T, repo *workout.PostgresWorkoutRepository, completedAt time.Time) workout.Workout {
+	t.Helper()
+
+	created, err := repo.CreateWorkout(t.Context(), 1, workout.Workout{
+		CompletedAt: completedAt,
+		Template:    template.Template{TemplateId: 1},
+		Sets: []set.Set{
+			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 8, WeightGrams: 60000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorkout returned error: %v", err)
+	}
+	return created
+}
+
+func workoutIndex(workouts []workout.Workout, workoutId uint32) int {
+	for i, w := range workouts {
+		if w.WorkoutId == workoutId {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestWorkoutRepository_GetWorkouts(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	// User 2 only owns seeded workout 2, so the whole list can be asserted.
+	got, err := repo.GetWorkoutsByUserId(ctx, 2)
+	if err != nil {
+		t.Fatalf("GetWorkoutsByUserId returned error: %v", err)
+	}
+
+	if len(got) != 1 {
+		t.Fatalf("expected 1 workout, got %d: %+v", len(got), got)
+	}
+	w := got[0]
+	if w.WorkoutId != 2 {
+		t.Errorf("expected WorkoutId 2, got %d", w.WorkoutId)
+	}
+	if w.Template.TemplateId != 2 || w.Template.TemplateName != "Pull Day" {
+		t.Errorf("expected template {2 Pull Day}, got %+v", w.Template)
+	}
+	if want := time.Date(2024, 1, 16, 11, 0, 0, 0, time.UTC); !w.CompletedAt.Equal(want) {
+		t.Errorf("expected CompletedAt %v, got %v", want, w.CompletedAt)
+	}
+	if len(w.Sets) != 0 {
+		t.Errorf("expected the list to carry no sets, got %+v", w.Sets)
+	}
+}
+
+func TestWorkoutRepository_GetWorkouts_OnlyOwnWorkouts(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	got, err := repo.GetWorkoutsByUserId(ctx, 1)
+	if err != nil {
+		t.Fatalf("GetWorkoutsByUserId returned error: %v", err)
+	}
+
+	i := workoutIndex(got, 1)
+	if i == -1 {
+		t.Fatalf("expected user 1's seeded workout 1 to be listed, got %+v", got)
+	}
+	if got[i].Template.TemplateName != "Push Day" {
+		t.Errorf("expected TemplateName %q, got %q", "Push Day", got[i].Template.TemplateName)
+	}
+	// Workout 2 belongs to user 2.
+	if workoutIndex(got, 2) != -1 {
+		t.Errorf("expected user 2's workout to be hidden from user 1, got %+v", got)
+	}
+}
+
+func TestWorkoutRepository_GetWorkouts_NewestFirst(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	older := createWorkoutCompletedAt(t, repo, time.Date(2030, 1, 1, 10, 0, 0, 0, time.UTC))
+	newer := createWorkoutCompletedAt(t, repo, time.Date(2030, 1, 2, 10, 0, 0, 0, time.UTC))
+
+	got, err := repo.GetWorkoutsByUserId(ctx, 1)
+	if err != nil {
+		t.Fatalf("GetWorkoutsByUserId returned error: %v", err)
+	}
+
+	olderAt, newerAt := workoutIndex(got, older.WorkoutId), workoutIndex(got, newer.WorkoutId)
+	if olderAt == -1 || newerAt == -1 {
+		t.Fatalf("expected both new workouts to be listed, got %+v", got)
+	}
+	if newerAt > olderAt {
+		t.Errorf("expected the newer workout before the older one, got positions %d and %d", newerAt, olderAt)
+	}
+
+	// The whole list must be ordered, not just the workouts created here.
+	for i := 1; i < len(got); i++ {
+		if got[i].CompletedAt.After(got[i-1].CompletedAt) {
+			t.Errorf("workout %d (%v) is listed after older workout %d (%v)",
+				got[i].WorkoutId, got[i].CompletedAt, got[i-1].WorkoutId, got[i-1].CompletedAt)
+		}
+	}
+}
+
+func TestWorkoutRepository_GetWorkouts_TiesBrokenByNewestId(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	completedAt := time.Date(2031, 1, 1, 10, 0, 0, 0, time.UTC)
+	first := createWorkoutCompletedAt(t, repo, completedAt)
+	second := createWorkoutCompletedAt(t, repo, completedAt)
+
+	got, err := repo.GetWorkoutsByUserId(ctx, 1)
+	if err != nil {
+		t.Fatalf("GetWorkoutsByUserId returned error: %v", err)
+	}
+
+	firstAt, secondAt := workoutIndex(got, first.WorkoutId), workoutIndex(got, second.WorkoutId)
+	if firstAt == -1 || secondAt == -1 {
+		t.Fatalf("expected both new workouts to be listed, got %+v", got)
+	}
+	if secondAt > firstAt {
+		t.Errorf("expected the later-created workout first when times are equal, got positions %d and %d", secondAt, firstAt)
+	}
+}
+
+func TestWorkoutRepository_GetWorkouts_NoWorkouts(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	got, err := repo.GetWorkoutsByUserId(ctx, 999)
+	if err != nil {
+		t.Fatalf("GetWorkoutsByUserId returned error: %v", err)
+	}
+
+	// A nil slice would serialize as null further up, so it must be non-nil.
+	if got == nil || len(got) != 0 {
+		t.Errorf("expected an empty, non-nil slice, got %#v", got)
+	}
+}

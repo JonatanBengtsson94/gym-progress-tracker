@@ -12,6 +12,7 @@ import (
 type WorkoutRepository interface {
 	GetWorkoutByUserIdAndWorkoutId(context.Context, uint32, uint32) (Workout, error)
 	GetWorkoutsByUserId(context.Context, uint32) ([]Workout, error)
+	GetWorkoutsByUserIdAndTemplateId(context.Context, uint32, uint32) ([]Workout, error)
 	CreateWorkout(context.Context, uint32, Workout) (Workout, error)
 	ModifyWorkout(context.Context, uint32, Workout) (Workout, error)
 }
@@ -30,6 +31,10 @@ func (s *WorkoutServiceImpl) GetWorkout(ctx context.Context, userId uint32, work
 
 func (s *WorkoutServiceImpl) GetWorkouts(ctx context.Context, userId uint32) ([]Workout, error) {
 	return s.repo.GetWorkoutsByUserId(ctx, userId)
+}
+
+func (s *WorkoutServiceImpl) GetWorkoutsByTemplate(ctx context.Context, userId uint32, templateId uint32) ([]Workout, error) {
+	return s.repo.GetWorkoutsByUserIdAndTemplateId(ctx, userId, templateId)
 }
 
 func (s *WorkoutServiceImpl) CreateWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, error) {

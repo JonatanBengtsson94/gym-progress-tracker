@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1261,5 +1262,142 @@ func TestIntegration_CreateTemplate_DuplicateName(t *testing.T) {
 
 	if rec.Result().StatusCode != http.StatusConflict {
 		t.Fatalf("expected status 409, got %d", rec.Result().StatusCode)
+	}
+}
+
+func listWorkoutsByTemplate(router http.Handler, token string, templateId any) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/workouts?template_id=%v", templateId), nil)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func mustListWorkoutsByTemplate(t *testing.T, router http.Handler, token string, templateId uint32) workout.WorkoutsResponse {
+	t.Helper()
+
+	rec := listWorkoutsByTemplate(router, token, templateId)
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("list workouts by template failed: expected status 200, got %d", res.StatusCode)
+	}
+
+	var got workout.WorkoutsResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("failed to decode workouts response: %v", err)
+	}
+
+	return got
+}
+
+func TestIntegration_GetWorkoutsByTemplate(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	older := mustCreateWorkout(t, router, token, createWorkoutBodyAt("2037-05-01T10:00:00Z"))
+	newer := mustCreateWorkout(t, router, token, createWorkoutBodyAt("2037-05-02T10:00:00Z"))
+	other := mustCreateWorkout(t, router, token, `{
+		"template_name": "Integration By Template",
+		"completed_at": "2037-05-03T10:00:00Z",
+		"exercises": [{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}]}]
+	}`)
+
+	list := mustListWorkoutsByTemplate(t, router, token, 1)
+
+	olderAt, newerAt := indexOfWorkout(list, older.WorkoutId), indexOfWorkout(list, newer.WorkoutId)
+	if olderAt == -1 || newerAt == -1 || indexOfWorkout(list, 1) == -1 {
+		t.Fatalf("expected template 1's workouts to be listed, got %+v", list.Workouts)
+	}
+	if newerAt > olderAt {
+		t.Errorf("expected the newer workout before the older one, got positions %d and %d", newerAt, olderAt)
+	}
+	if indexOfWorkout(list, other.WorkoutId) != -1 {
+		t.Errorf("expected the workout under another template to be excluded, got %+v", list.Workouts)
+	}
+	for _, w := range list.Workouts {
+		if w.TemplateId != 1 || w.TemplateName != "Push Day" {
+			t.Errorf("expected only template {1 Push Day}, got %+v", w)
+		}
+	}
+
+	otherList := mustListWorkoutsByTemplate(t, router, token, other.TemplateId)
+	if len(otherList.Workouts) != 1 || otherList.Workouts[0].WorkoutId != other.WorkoutId {
+		t.Errorf("expected only workout %d under the new template, got %+v", other.WorkoutId, otherList.Workouts)
+	}
+}
+
+func TestIntegration_GetWorkoutsByTemplate_ResponseContainsOnlyExpectedFields(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	rec := listWorkoutsByTemplate(router, token, 1)
+
+	var raw map[string][]map[string]any
+	if err := json.NewDecoder(rec.Result().Body).Decode(&raw); err != nil {
+		t.Fatalf("failed to decode workouts response: %v", err)
+	}
+
+	if len(raw["workouts"]) == 0 {
+		t.Fatal("expected at least the seeded workout to be listed")
+	}
+	for _, item := range raw["workouts"] {
+		if len(item) != 4 {
+			t.Errorf("expected exactly workout_id, template_id, template_name and completed_at, got %v", item)
+		}
+	}
+}
+
+func TestIntegration_GetWorkoutsByTemplate_EmptyTemplate(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_name": "Never Used"}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Result().StatusCode != http.StatusCreated {
+		t.Fatalf("create template failed: expected status 201, got %d", rec.Result().StatusCode)
+	}
+	var created template.TemplateResponse
+	if err := json.NewDecoder(rec.Result().Body).Decode(&created); err != nil {
+		t.Fatalf("failed to decode template response: %v", err)
+	}
+
+	list := mustListWorkoutsByTemplate(t, router, token, created.TemplateId)
+	if list.Workouts == nil || len(list.Workouts) != 0 {
+		t.Errorf("expected an empty array, got %#v", list.Workouts)
+	}
+}
+
+func TestIntegration_GetWorkoutsByTemplate_Errors(t *testing.T) {
+	router := newTestRouter(t)
+	aliceToken := mustLogin(t, router, "alice", "secret")
+	bobToken := mustLogin(t, router, "bob", "secret")
+
+	tests := []struct {
+		name       string
+		token      string
+		templateId any
+		wantStatus int
+	}{
+		{"no token", "", 1, http.StatusUnauthorized},
+		{"other user's template", bobToken, 1, http.StatusNotFound},
+		{"unknown template", aliceToken, 999999, http.StatusNotFound},
+		{"id out of range", aliceToken, uint64(math.MaxUint32), http.StatusNotFound},
+		{"invalid id", aliceToken, "abc", http.StatusBadRequest},
+		{"empty id", aliceToken, "", http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := listWorkoutsByTemplate(router, tt.token, tt.templateId)
+			if rec.Result().StatusCode != tt.wantStatus {
+				t.Fatalf("expected status %d, got %d", tt.wantStatus, rec.Result().StatusCode)
+			}
+		})
 	}
 }

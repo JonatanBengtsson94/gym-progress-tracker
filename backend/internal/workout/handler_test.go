@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -21,6 +23,7 @@ import (
 type mockWorkoutService struct {
 	getWorkoutFunc    func(ctx context.Context, userId uint32, workoutId uint32) (workout.Workout, error)
 	getWorkoutsFunc   func(ctx context.Context, userId uint32) ([]workout.Workout, error)
+	getByTemplateFunc func(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error)
 	createWorkoutFunc func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error)
 	modifyWorkoutFunc func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error)
 }
@@ -31,6 +34,10 @@ func (m *mockWorkoutService) GetWorkout(ctx context.Context, userId uint32, work
 
 func (m *mockWorkoutService) GetWorkouts(ctx context.Context, userId uint32) ([]workout.Workout, error) {
 	return m.getWorkoutsFunc(ctx, userId)
+}
+
+func (m *mockWorkoutService) GetWorkoutsByTemplate(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error) {
+	return m.getByTemplateFunc(ctx, userId, templateId)
 }
 
 func (m *mockWorkoutService) CreateWorkout(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
@@ -900,5 +907,247 @@ func TestWorkoutHandler_GetWorkouts_ServiceError(t *testing.T) {
 
 	if rec.Result().StatusCode != http.StatusInternalServerError {
 		t.Fatalf("Expected status 500, got %d", rec.Result().StatusCode)
+	}
+}
+
+func newGetWorkoutsByTemplateRequest(userId uint32, templateId string, authenticated bool) *http.Request {
+	req := httptest.NewRequest(http.MethodGet, "/workouts?template_id="+url.QueryEscape(templateId), nil)
+	if authenticated {
+		req = req.WithContext(identity.ContextWithUserId(req.Context(), userId))
+	}
+	return req
+}
+
+func TestWorkoutHandler_GetWorkouts_ByTemplate_Success(t *testing.T) {
+	newest := time.Date(2024, 1, 16, 10, 0, 0, 0, time.UTC)
+	oldest := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
+	serviceWorkouts := []workout.Workout{
+		{WorkoutId: 2, CompletedAt: newest, Template: template.Template{TemplateId: 3, TemplateName: "Push Day"}},
+		{WorkoutId: 1, CompletedAt: oldest, Template: template.Template{TemplateId: 3, TemplateName: "Push Day"}},
+	}
+
+	var gotUserId, gotTemplateId uint32
+	service := &mockWorkoutService{
+		getByTemplateFunc: func(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error) {
+			gotUserId, gotTemplateId = userId, templateId
+			return serviceWorkouts, nil
+		},
+		getWorkoutsFunc: func(ctx context.Context, userId uint32) ([]workout.Workout, error) {
+			t.Fatal("GetWorkouts should not be called when filtering by template")
+			return nil, nil
+		},
+	}
+
+	handler := workout.NewWorkoutHandler(service)
+
+	req := newGetWorkoutsByTemplateRequest(1, "3", true)
+	rec := httptest.NewRecorder()
+
+	handler.GetWorkouts(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", res.StatusCode)
+	}
+	if ct := res.Header.Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Expected Content-Type application/json, got %q", ct)
+	}
+	if gotUserId != 1 || gotTemplateId != 3 {
+		t.Errorf("expected service to receive userId 1 and templateId 3, got %d and %d", gotUserId, gotTemplateId)
+	}
+
+	var got workout.WorkoutsResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("Failed to decode response body: %v", err)
+	}
+
+	if len(got.Workouts) != 2 {
+		t.Fatalf("expected 2 workouts, got %d: %+v", len(got.Workouts), got.Workouts)
+	}
+	first, second := got.Workouts[0], got.Workouts[1]
+	if first.WorkoutId != 2 || first.TemplateId != 3 || first.TemplateName != "Push Day" || !first.CompletedAt.Equal(newest) {
+		t.Errorf("unexpected first workout: %+v", first)
+	}
+	if second.WorkoutId != 1 || second.TemplateId != 3 || second.TemplateName != "Push Day" || !second.CompletedAt.Equal(oldest) {
+		t.Errorf("unexpected second workout: %+v", second)
+	}
+}
+
+func TestWorkoutHandler_GetWorkouts_ByTemplate_ResponseContainsOnlyExpectedFields(t *testing.T) {
+	service := &mockWorkoutService{
+		getByTemplateFunc: func(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error) {
+			return []workout.Workout{{
+				WorkoutId:   1,
+				CompletedAt: time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
+				Template:    template.Template{TemplateId: 3, TemplateName: "Push Day", UserId: 99},
+				Sets: []set.Set{
+					{Exercise: exercise.Exercise{ExerciseId: 1, ExerciseName: "Bench Press"}, Reps: 8, WeightGrams: 60000},
+				},
+			}}, nil
+		},
+	}
+
+	handler := workout.NewWorkoutHandler(service)
+
+	req := newGetWorkoutsByTemplateRequest(1, "3", true)
+	rec := httptest.NewRecorder()
+
+	handler.GetWorkouts(rec, req)
+
+	var got map[string][]map[string]any
+	if err := json.NewDecoder(rec.Result().Body).Decode(&got); err != nil {
+		t.Fatalf("Failed to decode response body: %v", err)
+	}
+
+	if len(got) != 1 || len(got["workouts"]) != 1 {
+		t.Fatalf("Expected an envelope with exactly one workout, got %v", got)
+	}
+
+	want := map[string]any{
+		"workout_id":    float64(1),
+		"template_id":   float64(3),
+		"template_name": "Push Day",
+		"completed_at":  "2024-01-15T10:00:00Z",
+	}
+	if !reflect.DeepEqual(got["workouts"][0], want) {
+		t.Errorf("GetWorkouts() response fields = %v, want exactly %v", got["workouts"][0], want)
+	}
+}
+
+func TestWorkoutHandler_GetWorkouts_ByTemplate_EmptyListIsEmptyArray(t *testing.T) {
+	for name, serviceResult := range map[string][]workout.Workout{
+		"nil":   nil,
+		"empty": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			service := &mockWorkoutService{
+				getByTemplateFunc: func(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error) {
+					return serviceResult, nil
+				},
+			}
+
+			handler := workout.NewWorkoutHandler(service)
+
+			req := newGetWorkoutsByTemplateRequest(1, "3", true)
+			rec := httptest.NewRecorder()
+
+			handler.GetWorkouts(rec, req)
+
+			if rec.Result().StatusCode != http.StatusOK {
+				t.Fatalf("Expected status 200, got %d", rec.Result().StatusCode)
+			}
+
+			var got map[string]any
+			if err := json.NewDecoder(rec.Result().Body).Decode(&got); err != nil {
+				t.Fatalf("Failed to decode response body: %v", err)
+			}
+
+			workouts, ok := got["workouts"].([]any)
+			if !ok || len(workouts) != 0 {
+				t.Errorf("Expected \"workouts\" to be an empty array, got %#v", got["workouts"])
+			}
+		})
+	}
+}
+
+func TestWorkoutHandler_GetWorkouts_ByTemplate_Unauthorized(t *testing.T) {
+	service := &mockWorkoutService{
+		getByTemplateFunc: func(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error) {
+			t.Fatal("GetWorkoutsByTemplate should not be called without an authenticated user")
+			return nil, nil
+		},
+	}
+
+	handler := workout.NewWorkoutHandler(service)
+
+	req := newGetWorkoutsByTemplateRequest(0, "3", false)
+	rec := httptest.NewRecorder()
+
+	handler.GetWorkouts(rec, req)
+
+	if rec.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("Expected status 401, got %d", rec.Result().StatusCode)
+	}
+}
+
+func TestWorkoutHandler_GetWorkouts_ByTemplate_InvalidTemplateId(t *testing.T) {
+	for _, templateId := range []string{"abc", "-1", "4294967296", ""} {
+		t.Run(templateId, func(t *testing.T) {
+			service := &mockWorkoutService{
+				getByTemplateFunc: func(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error) {
+					t.Fatal("GetWorkoutsByTemplate should not be called with an invalid template id")
+					return nil, nil
+				},
+			}
+
+			handler := workout.NewWorkoutHandler(service)
+
+			req := newGetWorkoutsByTemplateRequest(1, templateId, true)
+			rec := httptest.NewRecorder()
+
+			handler.GetWorkouts(rec, req)
+
+			if rec.Result().StatusCode != http.StatusBadRequest {
+				t.Fatalf("Expected status 400, got %d", rec.Result().StatusCode)
+			}
+		})
+	}
+}
+
+func TestWorkoutHandler_GetWorkouts_ByTemplate_ServiceErrors(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+	}{
+		{"template not found", workout.ErrTemplateNotFound, http.StatusNotFound},
+		{"wrapped template not found", fmt.Errorf("lookup: %w", workout.ErrTemplateNotFound), http.StatusNotFound},
+		{"unexpected", errors.New("db exploded"), http.StatusInternalServerError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			service := &mockWorkoutService{
+				getByTemplateFunc: func(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error) {
+					return nil, tt.err
+				},
+			}
+
+			handler := workout.NewWorkoutHandler(service)
+
+			req := newGetWorkoutsByTemplateRequest(1, "3", true)
+			rec := httptest.NewRecorder()
+
+			handler.GetWorkouts(rec, req)
+
+			if rec.Result().StatusCode != tt.wantStatus {
+				t.Fatalf("Expected status %d, got %d", tt.wantStatus, rec.Result().StatusCode)
+			}
+		})
+	}
+}
+
+func TestWorkoutHandler_GetWorkouts_WithoutTemplateIdIsUnfiltered(t *testing.T) {
+	service := &mockWorkoutService{
+		getWorkoutsFunc: func(ctx context.Context, userId uint32) ([]workout.Workout, error) {
+			return nil, nil
+		},
+		getByTemplateFunc: func(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error) {
+			t.Fatal("GetWorkoutsByTemplate should not be called without a template_id")
+			return nil, nil
+		},
+	}
+
+	handler := workout.NewWorkoutHandler(service)
+
+	req := newGetWorkoutsRequest(1, true)
+	rec := httptest.NewRecorder()
+
+	handler.GetWorkouts(rec, req)
+
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", rec.Result().StatusCode)
 	}
 }

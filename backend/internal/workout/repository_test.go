@@ -637,3 +637,151 @@ func TestWorkoutRepository_GetWorkouts_NoWorkouts(t *testing.T) {
 		t.Errorf("expected an empty, non-nil slice, got %#v", got)
 	}
 }
+
+func TestWorkoutRepository_GetWorkoutsByTemplate(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	// User 2 only has seeded workout 2 under template 2, so the whole list can be asserted.
+	got, err := repo.GetWorkoutsByUserIdAndTemplateId(ctx, 2, 2)
+	if err != nil {
+		t.Fatalf("GetWorkoutsByUserIdAndTemplateId returned error: %v", err)
+	}
+
+	if len(got) != 1 {
+		t.Fatalf("expected 1 workout, got %d: %+v", len(got), got)
+	}
+	w := got[0]
+	if w.WorkoutId != 2 {
+		t.Errorf("expected WorkoutId 2, got %d", w.WorkoutId)
+	}
+	if w.Template.TemplateId != 2 || w.Template.TemplateName != "Pull Day" {
+		t.Errorf("expected template {2 Pull Day}, got %+v", w.Template)
+	}
+	if want := time.Date(2024, 1, 16, 11, 0, 0, 0, time.UTC); !w.CompletedAt.Equal(want) {
+		t.Errorf("expected CompletedAt %v, got %v", want, w.CompletedAt)
+	}
+	if len(w.Sets) != 0 {
+		t.Errorf("expected the list to carry no sets, got %+v", w.Sets)
+	}
+}
+
+func TestWorkoutRepository_GetWorkoutsByTemplate_OnlyThatTemplate(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	// A workout under a second template of user 1 must not show up under template 1.
+	other, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		CompletedAt: time.Date(2035, 1, 1, 10, 0, 0, 0, time.UTC),
+		Template:    template.Template{TemplateName: "Leg Day By Template Test"},
+		Sets: []set.Set{
+			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 8, WeightGrams: 60000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorkout returned error: %v", err)
+	}
+	own := createWorkoutCompletedAt(t, repo, time.Date(2035, 1, 2, 10, 0, 0, 0, time.UTC))
+
+	got, err := repo.GetWorkoutsByUserIdAndTemplateId(ctx, 1, 1)
+	if err != nil {
+		t.Fatalf("GetWorkoutsByUserIdAndTemplateId returned error: %v", err)
+	}
+
+	if workoutIndex(got, own.WorkoutId) == -1 || workoutIndex(got, 1) == -1 {
+		t.Errorf("expected template 1's workouts to be listed, got %+v", got)
+	}
+	if workoutIndex(got, other.WorkoutId) != -1 {
+		t.Errorf("expected the workout under another template to be excluded, got %+v", got)
+	}
+	for _, w := range got {
+		if w.Template.TemplateId != 1 || w.Template.TemplateName != "Push Day" {
+			t.Errorf("expected only template {1 Push Day}, got %+v", w)
+		}
+	}
+
+	otherList, err := repo.GetWorkoutsByUserIdAndTemplateId(ctx, 1, other.Template.TemplateId)
+	if err != nil {
+		t.Fatalf("GetWorkoutsByUserIdAndTemplateId returned error: %v", err)
+	}
+	if len(otherList) != 1 || otherList[0].WorkoutId != other.WorkoutId {
+		t.Errorf("expected only workout %d under the new template, got %+v", other.WorkoutId, otherList)
+	}
+}
+
+func TestWorkoutRepository_GetWorkoutsByTemplate_NewestFirst(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	completedAt := time.Date(2036, 1, 1, 10, 0, 0, 0, time.UTC)
+	older := createWorkoutCompletedAt(t, repo, completedAt.Add(-time.Hour))
+	first := createWorkoutCompletedAt(t, repo, completedAt)
+	second := createWorkoutCompletedAt(t, repo, completedAt)
+
+	got, err := repo.GetWorkoutsByUserIdAndTemplateId(ctx, 1, 1)
+	if err != nil {
+		t.Fatalf("GetWorkoutsByUserIdAndTemplateId returned error: %v", err)
+	}
+
+	olderAt, firstAt, secondAt := workoutIndex(got, older.WorkoutId), workoutIndex(got, first.WorkoutId), workoutIndex(got, second.WorkoutId)
+	if olderAt == -1 || firstAt == -1 || secondAt == -1 {
+		t.Fatalf("expected all new workouts to be listed, got %+v", got)
+	}
+	// Equal times are broken by the newest id, like the unfiltered list.
+	if !(secondAt < firstAt && firstAt < olderAt) {
+		t.Errorf("expected order second, first, older; got positions %d, %d, %d", secondAt, firstAt, olderAt)
+	}
+
+	for i := 1; i < len(got); i++ {
+		if got[i].CompletedAt.After(got[i-1].CompletedAt) {
+			t.Errorf("workout %d (%v) is listed after older workout %d (%v)",
+				got[i].WorkoutId, got[i].CompletedAt, got[i-1].WorkoutId, got[i-1].CompletedAt)
+		}
+	}
+}
+
+func TestWorkoutRepository_GetWorkoutsByTemplate_NoWorkouts(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	var templateId uint32
+	if err := testPool.QueryRow(ctx,
+		`INSERT INTO templates (user_id, template_name) VALUES (1, 'Unused Template') RETURNING template_id`,
+	).Scan(&templateId); err != nil {
+		t.Fatalf("failed to insert template: %v", err)
+	}
+
+	got, err := repo.GetWorkoutsByUserIdAndTemplateId(ctx, 1, templateId)
+	if err != nil {
+		t.Fatalf("GetWorkoutsByUserIdAndTemplateId returned error: %v", err)
+	}
+
+	// A nil slice would serialize as null further up, so it must be non-nil.
+	if got == nil || len(got) != 0 {
+		t.Errorf("expected an empty, non-nil slice, got %#v", got)
+	}
+}
+
+func TestWorkoutRepository_GetWorkoutsByTemplate_TemplateNotFound(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	tests := []struct {
+		name       string
+		userId     uint32
+		templateId uint32
+	}{
+		{"unknown template", 1, 9999},
+		{"other user's template", 1, 2},
+		{"id out of range", 1, math.MaxUint32},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := repo.GetWorkoutsByUserIdAndTemplateId(ctx, tt.userId, tt.templateId)
+			if !errors.Is(err, workout.ErrTemplateNotFound) {
+				t.Fatalf("Expected ErrTemplateNotFound, got %v", err)
+			}
+		})
+	}
+}

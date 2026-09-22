@@ -17,6 +17,7 @@ import (
 type WorkoutService interface {
 	GetWorkout(context.Context, uint32, uint32) (Workout, error)
 	GetWorkouts(context.Context, uint32) ([]Workout, error)
+	GetWorkoutsByTemplate(context.Context, uint32, uint32) ([]Workout, error)
 	CreateWorkout(context.Context, uint32, Workout) (Workout, error)
 	ModifyWorkout(context.Context, uint32, Workout) (Workout, error)
 }
@@ -116,28 +117,51 @@ type WorkoutsResponse struct {
 	Workouts []workoutSummary `json:"workouts"`
 }
 
+func toWorkoutsResponse(workouts []Workout) WorkoutsResponse {
+	summaries := make([]workoutSummary, len(workouts))
+	for i, wo := range workouts {
+		summaries[i] = workoutSummary{
+			WorkoutId:    wo.WorkoutId,
+			TemplateId:   wo.Template.TemplateId,
+			TemplateName: wo.Template.TemplateName,
+			CompletedAt:  wo.CompletedAt}
+	}
+	return WorkoutsResponse{Workouts: summaries}
+}
+
+// GetWorkouts lists the user's workouts, newest first. An optional
+// template_id query parameter narrows the list to one of the user's
+// templates; an unknown or foreign template is a 404 rather than an empty
+// list, so clients can tell it apart from a template with no workouts yet.
 func (h *WorkoutHandler) GetWorkouts(w http.ResponseWriter, r *http.Request) {
 	userId, ok := identity.RequireUserId(w, r)
 	if !ok {
 		return
 	}
 
-	workouts, err := h.service.GetWorkouts(r.Context(), userId)
-	if err != nil {
+	var workouts []Workout
+	var err error
+	if query := r.URL.Query(); query.Has("template_id") {
+		templateId, parseErr := strconv.ParseUint(query.Get("template_id"), 10, 32)
+		if parseErr != nil {
+			http.Error(w, "Invalid template_id", http.StatusBadRequest)
+			return
+		}
+		workouts, err = h.service.GetWorkoutsByTemplate(r.Context(), userId, uint32(templateId))
+	} else {
+		workouts, err = h.service.GetWorkouts(r.Context(), userId)
+	}
+
+	switch {
+	case errors.Is(err, ErrTemplateNotFound):
+		http.Error(w, "Template not found", http.StatusNotFound)
+		return
+	case err != nil:
 		httpx.InternalError(w, err)
 		return
 	}
 
-	workoutsResponse := make([]workoutSummary, len(workouts))
-	for i, wo := range workouts {
-		workoutsResponse[i] = workoutSummary{
-			WorkoutId:    wo.WorkoutId,
-			TemplateId:   wo.Template.TemplateId,
-			TemplateName: wo.Template.TemplateName,
-			CompletedAt:  wo.CompletedAt}
-	}
-
-	httpx.WriteJSON(w, http.StatusOK, WorkoutsResponse{Workouts: workoutsResponse})
+	httpx.WriteJSON(w, http.StatusOK, toWorkoutsResponse(workouts))
 }
 
 type workoutRequestExercise struct {

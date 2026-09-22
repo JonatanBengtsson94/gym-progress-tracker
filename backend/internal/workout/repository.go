@@ -76,7 +76,32 @@ func (r *PostgresWorkoutRepository) GetWorkoutsByUserId(ctx context.Context, use
 		WHERE t.user_id = $1
 		ORDER BY w.completed_at DESC, w.workout_id DESC`
 
-	rows, err := r.db.Query(ctx, query, userId)
+	return r.listWorkouts(ctx, query, userId)
+}
+
+// GetWorkoutsByUserIdAndTemplateId lists the workouts logged under one of the
+// user's templates, newest first. A template that doesn't exist or belongs to
+// another user is reported as ErrTemplateNotFound, so it can be told apart
+// from a template that simply has no workouts yet.
+func (r *PostgresWorkoutRepository) GetWorkoutsByUserIdAndTemplateId(ctx context.Context, userId uint32, templateId uint32) ([]Workout, error) {
+	if _, err := findTemplate(ctx, r.db, userId, templateId); err != nil {
+		return nil, err
+	}
+
+	query := `SELECT w.workout_id, w.completed_at, t.template_id, t.template_name
+		FROM workouts AS w
+		JOIN templates AS t ON w.template_id = t.template_id
+		WHERE t.template_id = $1 AND t.user_id = $2
+		ORDER BY w.completed_at DESC, w.workout_id DESC`
+
+	return r.listWorkouts(ctx, query, templateId, userId)
+}
+
+// listWorkouts runs a query selecting workout_id, completed_at, template_id
+// and template_name, returning the rows as workouts without sets. The result
+// is never nil, so an empty list serializes as an empty array.
+func (r *PostgresWorkoutRepository) listWorkouts(ctx context.Context, query string, args ...any) ([]Workout, error) {
+	rows, err := r.db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("Get workouts failed: %w", err)
 	}
@@ -203,7 +228,13 @@ func createTemplate(ctx context.Context, tx pgx.Tx, userId uint32, templateName 
 	return created, nil
 }
 
-func findTemplate(ctx context.Context, tx pgx.Tx, userId uint32, templateId uint32) (template.Template, error) {
+// queryRower is satisfied by both the pool and a transaction, so lookups can
+// run either standalone or as part of a larger write.
+type queryRower interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func findTemplate(ctx context.Context, db queryRower, userId uint32, templateId uint32) (template.Template, error) {
 	query := `
 		SELECT template_name
 		FROM templates
@@ -214,7 +245,7 @@ func findTemplate(ctx context.Context, tx pgx.Tx, userId uint32, templateId uint
 	}
 
 	found := template.Template{UserId: userId, TemplateId: templateId}
-	if err := tx.QueryRow(ctx, query, templateId, userId).Scan(&found.TemplateName); err != nil {
+	if err := db.QueryRow(ctx, query, templateId, userId).Scan(&found.TemplateName); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return template.Template{}, ErrTemplateNotFound
 		}

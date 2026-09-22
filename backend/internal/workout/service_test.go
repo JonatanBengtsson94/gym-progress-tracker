@@ -14,6 +14,7 @@ import (
 type mockWorkoutRepository struct {
 	getWorkoutFunc    func(ctx context.Context, userId uint32, workoutId uint32) (workout.Workout, error)
 	getWorkoutsFunc   func(ctx context.Context, userId uint32) ([]workout.Workout, error)
+	getByTemplateFunc func(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error)
 	createWorkoutFunc func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error)
 	modifyWorkoutFunc func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error)
 }
@@ -24,6 +25,10 @@ func (m *mockWorkoutRepository) GetWorkoutByUserIdAndWorkoutId(ctx context.Conte
 
 func (m *mockWorkoutRepository) GetWorkoutsByUserId(ctx context.Context, userId uint32) ([]workout.Workout, error) {
 	return m.getWorkoutsFunc(ctx, userId)
+}
+
+func (m *mockWorkoutRepository) GetWorkoutsByUserIdAndTemplateId(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error) {
+	return m.getByTemplateFunc(ctx, userId, templateId)
 }
 
 func (m *mockWorkoutRepository) CreateWorkout(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
@@ -490,5 +495,55 @@ func TestWorkoutService_GetWorkouts_RepositoryError(t *testing.T) {
 	_, err := service.GetWorkouts(ctx, 1)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Expected %v, got %v", wantErr, err)
+	}
+}
+
+func TestWorkoutService_GetWorkoutsByTemplate(t *testing.T) {
+	ctx := t.Context()
+	const wantUserId, wantTemplateId = 1, 3
+	expected := []workout.Workout{
+		{WorkoutId: 2, CompletedAt: time.Date(2024, 1, 16, 10, 0, 0, 0, time.UTC), Template: template.Template{TemplateId: 3, TemplateName: "Push Day"}},
+		{WorkoutId: 1, CompletedAt: time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC), Template: template.Template{TemplateId: 3, TemplateName: "Push Day"}},
+	}
+
+	var gotUserId, gotTemplateId uint32
+	repo := &mockWorkoutRepository{
+		getByTemplateFunc: func(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error) {
+			gotUserId, gotTemplateId = userId, templateId
+			return expected, nil
+		},
+	}
+
+	service := workout.NewWorkoutService(repo)
+
+	got, err := service.GetWorkoutsByTemplate(ctx, wantUserId, wantTemplateId)
+	if err != nil {
+		t.Fatalf("GetWorkoutsByTemplate returned error: %v", err)
+	}
+
+	if gotUserId != wantUserId || gotTemplateId != wantTemplateId {
+		t.Errorf("expected repo to receive userId %d and templateId %d, got %d and %d", wantUserId, wantTemplateId, gotUserId, gotTemplateId)
+	}
+	if len(got) != len(expected) || got[0].WorkoutId != 2 || got[1].WorkoutId != 1 {
+		t.Errorf("GetWorkoutsByTemplate() = %+v, want %+v (in the repository's order)", got, expected)
+	}
+}
+
+func TestWorkoutService_GetWorkoutsByTemplate_RepositoryErrors(t *testing.T) {
+	for _, wantErr := range []error{workout.ErrTemplateNotFound, errors.New("db exploded")} {
+		t.Run(wantErr.Error(), func(t *testing.T) {
+			repo := &mockWorkoutRepository{
+				getByTemplateFunc: func(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error) {
+					return nil, wantErr
+				},
+			}
+
+			service := workout.NewWorkoutService(repo)
+
+			_, err := service.GetWorkoutsByTemplate(t.Context(), 1, 3)
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("Expected %v, got %v", wantErr, err)
+			}
+		})
 	}
 }

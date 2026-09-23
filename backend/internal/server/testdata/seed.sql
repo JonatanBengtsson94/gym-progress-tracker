@@ -1,7 +1,7 @@
-INSERT INTO users(user_id, username, password, first_name, last_name) VALUES (1, 'alice', 'secret', 'Alice', 'Anderson');
+INSERT INTO users(user_id, username, password_hash, first_name, last_name) VALUES (1, 'alice', '$2a$10$UYwagPueizGDPGqug3vY1uM7LMCn3yAA/xZEm.bJRwNAxzBI8i.7O', 'Alice', 'Anderson');
 INSERT INTO exercises(user_id, exercise_name) VALUES (1, 'Custom Test Exercise');
 
-INSERT INTO users(user_id, username, password, first_name, last_name) VALUES (2, 'bob', 'secret', 'Bob', 'Brown');
+INSERT INTO users(user_id, username, password_hash, first_name, last_name) VALUES (2, 'bob', '$2a$10$UYwagPueizGDPGqug3vY1uM7LMCn3yAA/xZEm.bJRwNAxzBI8i.7O', 'Bob', 'Brown');
 
 INSERT INTO templates(template_id, user_id, template_name) VALUES (1, 1, 'Push Day');
 INSERT INTO workouts(workout_id, template_id, completed_at) VALUES (1, 1, '2024-01-15 10:00:00');

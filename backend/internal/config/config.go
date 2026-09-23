@@ -34,33 +34,46 @@ func LoadConfig() (*Config, error) {
 		return nil, fmt.Errorf("SESSION_DURATION is invalid: %w", err)
 	}
 
+	db, err := LoadPostgresConfig()
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
-		DB: PostgresConfig{
-			DBName:   os.Getenv("DB_NAME"),
-			Username: os.Getenv("DB_USER"),
-			Password: os.Getenv("DB_PWD"),
-			Host:     os.Getenv("DB_HOST"),
-			Port:     os.Getenv("DB_PORT"),
-		},
+		DB: db,
 		Session: SessionConfig{
 			SessionDuration: sessionDuration,
 		},
 	}
 
-	if cfg.DB.DBName == "" {
-		return nil, fmt.Errorf("DB_NAME is not set")
+	return cfg, nil
+}
+
+// LoadPostgresConfig loads only the database settings, for tools that need a
+// database connection but not the rest of the server config.
+func LoadPostgresConfig() (PostgresConfig, error) {
+	cfg := PostgresConfig{
+		DBName:   os.Getenv("DB_NAME"),
+		Username: os.Getenv("DB_USER"),
+		Password: os.Getenv("DB_PWD"),
+		Host:     os.Getenv("DB_HOST"),
+		Port:     os.Getenv("DB_PORT"),
 	}
-	if cfg.DB.Username == "" {
-		return nil, fmt.Errorf("DB_USER is not set")
+
+	if cfg.DBName == "" {
+		return PostgresConfig{}, fmt.Errorf("DB_NAME is not set")
 	}
-	if cfg.DB.Password == "" {
-		return nil, fmt.Errorf("DB_PWD is not set")
+	if cfg.Username == "" {
+		return PostgresConfig{}, fmt.Errorf("DB_USER is not set")
 	}
-	if cfg.DB.Host == "" {
-		return nil, fmt.Errorf("DB_HOST is not set")
+	if cfg.Password == "" {
+		return PostgresConfig{}, fmt.Errorf("DB_PWD is not set")
 	}
-	if cfg.DB.Port == "" {
-		return nil, fmt.Errorf("DB_Port is not set")
+	if cfg.Host == "" {
+		return PostgresConfig{}, fmt.Errorf("DB_HOST is not set")
+	}
+	if cfg.Port == "" {
+		return PostgresConfig{}, fmt.Errorf("DB_Port is not set")
 	}
 
 	return cfg, nil

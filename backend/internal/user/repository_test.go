@@ -44,9 +44,9 @@ func TestUserRepository_GetUser_Success(t *testing.T) {
 	}
 
 	want := user.User{
-		UserId:   1,
-		UserName: "Test User",
-		Password: "hashed-password",
+		UserId:       1,
+		UserName:     "Test User",
+		PasswordHash: "hashed-password",
 	}
 
 	if got != want {
@@ -92,5 +92,48 @@ func TestUserRepository_GetUserByUserId_NotFound(t *testing.T) {
 	_, err := repo.GetUserByUserId(ctx, 999)
 	if !errors.Is(err, user.ErrUserNotFound) {
 		t.Fatalf("Expected ErrUserNotFound, got %v", err)
+	}
+}
+
+func TestUserRepository_CreateUser_Success(t *testing.T) {
+	ctx := t.Context()
+	repo := user.NewPostgresUserRepository(testPool)
+
+	created, err := repo.CreateUser(ctx, user.User{
+		UserName:     "New User",
+		PasswordHash: "new-hash",
+		FirstName:    "New",
+		LastName:     "User",
+	})
+	if err != nil {
+		t.Fatalf("CreateUser returned error: %v", err)
+	}
+	if created.UserId == 0 {
+		t.Fatal("expected CreateUser to return the generated user id")
+	}
+
+	got, err := repo.GetUserByUsername(ctx, "New User")
+	if err != nil {
+		t.Fatalf("GetUserByUsername returned error: %v", err)
+	}
+
+	want := user.User{UserId: created.UserId, UserName: "New User", PasswordHash: "new-hash"}
+	if got != want {
+		t.Errorf("GetUserByUsername() = %+v, want %+v", got, want)
+	}
+}
+
+func TestUserRepository_CreateUser_UsernameTaken(t *testing.T) {
+	ctx := t.Context()
+	repo := user.NewPostgresUserRepository(testPool)
+
+	_, err := repo.CreateUser(ctx, user.User{
+		UserName:     "Test User",
+		PasswordHash: "another-hash",
+		FirstName:    "Test",
+		LastName:     "User",
+	})
+	if !errors.Is(err, user.ErrUsernameTaken) {
+		t.Fatalf("Expected ErrUsernameTaken, got %v", err)
 	}
 }

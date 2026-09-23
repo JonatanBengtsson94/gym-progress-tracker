@@ -7,8 +7,18 @@ import (
 	"uuid"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/password"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
 )
+
+func mustHash(t *testing.T, plain string) string {
+	t.Helper()
+	hash, err := password.Hash(plain)
+	if err != nil {
+		t.Fatalf("failed to hash password: %v", err)
+	}
+	return hash
+}
 
 type mockUserRepository struct {
 	getUserFunc func(ctx context.Context, username string) (user.User, error)
@@ -32,7 +42,7 @@ func (m *mockSessionRepository) CreateSession(userId uint32) auth.Session {
 }
 
 func TestAuthService_Login_Success(t *testing.T) {
-	wantUser := user.User{UserId: 1, UserName: "alice", Password: "secret"}
+	wantUser := user.User{UserId: 1, UserName: "alice", PasswordHash: mustHash(t, "secret")}
 	wantSession := auth.Session{UserId: 1, SessionId: uuid.New()}
 
 	var gotUserId uint32
@@ -89,7 +99,7 @@ func TestAuthService_Login_UnknownUser(t *testing.T) {
 func TestAuthService_Login_WrongPassword(t *testing.T) {
 	userRepo := &mockUserRepository{
 		getUserFunc: func(ctx context.Context, username string) (user.User, error) {
-			return user.User{UserId: 1, UserName: "alice", Password: "secret"}, nil
+			return user.User{UserId: 1, UserName: "alice", PasswordHash: mustHash(t, "secret")}, nil
 		},
 	}
 	sessionRepo := &mockSessionRepository{
@@ -102,6 +112,27 @@ func TestAuthService_Login_WrongPassword(t *testing.T) {
 	service := auth.NewAuthService(userRepo, sessionRepo)
 
 	_, err := service.Login(context.Background(), "alice", "wrong-password")
+	if !errors.Is(err, auth.ErrInvalidCredentials) {
+		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
+	}
+}
+
+func TestAuthService_Login_PlainTextStoredPassword(t *testing.T) {
+	userRepo := &mockUserRepository{
+		getUserFunc: func(ctx context.Context, username string) (user.User, error) {
+			return user.User{UserId: 1, UserName: "alice", PasswordHash: "secret"}, nil
+		},
+	}
+	sessionRepo := &mockSessionRepository{
+		createSessionFunc: func(userId uint32) auth.Session {
+			t.Fatal("CreateSession should not be called when the stored password is not a hash")
+			return auth.Session{}
+		},
+	}
+
+	service := auth.NewAuthService(userRepo, sessionRepo)
+
+	_, err := service.Login(context.Background(), "alice", "secret")
 	if !errors.Is(err, auth.ErrInvalidCredentials) {
 		t.Fatalf("expected ErrInvalidCredentials, got %v", err)
 	}

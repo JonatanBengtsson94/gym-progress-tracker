@@ -29,10 +29,13 @@ Then, from the `docker/` directory:
 These credentials are for local development only.
 
 #### Create a user
-There is no registration endpoint yet, so add a user directly (from `docker/`):
+There is intentionally no registration endpoint. Create users with the `createuser` command, which stores only a bcrypt hash of the password (from `docker/`):
 
-    docker compose exec db psql -U gym -d gym -c \
-      "INSERT INTO users (username, password, first_name, last_name) VALUES ('alice', 'secret', 'Alice', 'Anderson');"
+    docker compose exec backend go run ./cmd/createuser -username alice -first-name Alice -last-name Anderson
+
+You will be prompted for the password twice. When stdin is not a terminal, the password is read from the first line of input instead:
+
+    echo 'secret' | docker compose exec -T backend go run ./cmd/createuser -username alice -first-name Alice -last-name Anderson
 
 Then log in and use the returned `session_id`:
 

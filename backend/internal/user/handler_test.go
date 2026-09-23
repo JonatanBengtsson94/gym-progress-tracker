@@ -22,7 +22,7 @@ func (m *mockUserService) GetUser(ctx context.Context, userId uint32) (user.User
 }
 
 func TestUserHandler_GetUserFromSession_Success(t *testing.T) {
-	stored := user.User{UserId: 1, UserName: "Test User", Password: "hashed-password", FirstName: "Test", LastName: "User"}
+	stored := user.User{UserId: 1, UserName: "Test User", PasswordHash: "hashed-password", FirstName: "Test", LastName: "User"}
 
 	var gotUserId uint32
 	service := &mockUserService{
@@ -64,7 +64,7 @@ func TestUserHandler_GetUserFromSession_Success(t *testing.T) {
 }
 
 func TestUserHandler_GetUserFromSession_ResponseContainsOnlyExpectedFields(t *testing.T) {
-	stored := user.User{UserId: 1, UserName: "Test User", Password: "hashed-password", FirstName: "Test", LastName: "User"}
+	stored := user.User{UserId: 1, UserName: "Test User", PasswordHash: "hashed-password", FirstName: "Test", LastName: "User"}
 	service := &mockUserService{
 		getUserFunc: func(ctx context.Context, userId uint32) (user.User, error) {
 			return stored, nil

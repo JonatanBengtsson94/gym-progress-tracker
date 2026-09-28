@@ -1,4 +1,10 @@
-INSERT INTO exercises (exercise_name) VALUES ('Bench Press');
+INSERT INTO exercises (exercise_name) VALUES ('Bench Press (Barbell)');
+INSERT INTO exercises (exercise_name) VALUES ('Bench Press (Dumbbell)');
+INSERT INTO exercises (exercise_name) VALUES ('Incline Bench Press (Barbell)');
+INSERT INTO exercises (exercise_name) VALUES ('Incline Bench Press (Dumbbell)');
+INSERT INTO exercises (exercise_name) VALUES ('Chest Fly (Dumbbell)');
+INSERT INTO exercises (exercise_name) VALUES ('Tricep Pushdown (Rope)');
+INSERT INTO exercises (exercise_name) VALUES ('Tricep Overhead Extension (Rope)');
 INSERT INTO exercises (exercise_name) VALUES ('Squat');
 INSERT INTO exercises (exercise_name) VALUES ('Deadlift');
 INSERT INTO exercises (exercise_name) VALUES ('Overhead Press');

@@ -316,9 +316,9 @@ func TestIntegration_CreateExercise_DuplicatesGlobalExercise(t *testing.T) {
 	router := newTestRouter(t)
 	token := mustLogin(t, router, "alice", "secret")
 
-	// "Bench Press" is a seeded global exercise; alice should not be able
+	// "Bench Press (Barbell)" is a seeded global exercise; alice should not be able
 	// to create a custom exercise with the same name.
-	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_name":"Bench Press"}`))
+	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_name":"Bench Press (Barbell)"}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -429,13 +429,13 @@ func TestIntegration_ModifyExercise_GlobalExercise(t *testing.T) {
 
 	var benchPressId uint32
 	for _, e := range exercises {
-		if e.ExerciseName == "Bench Press" {
+		if e.ExerciseName == "Bench Press (Barbell)" {
 			benchPressId = e.ExerciseId
 			break
 		}
 	}
 	if benchPressId == 0 {
-		t.Fatal("expected seeded global exercise \"Bench Press\" to be found")
+		t.Fatal("expected seeded global exercise \"Bench Press (Barbell)\" to be found")
 	}
 
 	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/exercises/%d", benchPressId), strings.NewReader(`{"exercise_name":"Bench Press Variant"}`))
@@ -503,7 +503,7 @@ func TestIntegration_GetWorkout(t *testing.T) {
 	if got.WorkoutId != 1 || got.TemplateName != "Push Day" {
 		t.Errorf("unexpected workout response: %+v", got)
 	}
-	if len(got.Exercises) != 1 || got.Exercises[0].ExerciseName != "Bench Press" {
+	if len(got.Exercises) != 1 || got.Exercises[0].ExerciseName != "Bench Press (Barbell)" {
 		t.Errorf("expected 1 exercise group for Bench Press, got %+v", got.Exercises)
 	}
 	if len(got.Exercises[0].Sets) != 1 {

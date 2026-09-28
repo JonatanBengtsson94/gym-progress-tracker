@@ -46,12 +46,12 @@ func TestExerciseRepository_GetGlobalExercises(t *testing.T) {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
 
-	if len(exercises) != 7 {
-		t.Errorf("Expected 7 exercises got: %d", len(exercises))
+	if len(exercises) != 13 {
+		t.Errorf("Expected 13 exercises got: %d", len(exercises))
 	}
 
 	expectedNames := []string{
-		"Bench Press",
+		"Bench Press (Barbell)",
 		"Squat",
 	}
 
@@ -81,12 +81,12 @@ func TestExerciseRepository_GetUserExercises(t *testing.T) {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
 
-	if len(exercises) != 8 {
-		t.Errorf("Expected 8 exercises got: %d", len(exercises))
+	if len(exercises) != 14 {
+		t.Errorf("Expected 14 exercises got: %d", len(exercises))
 	}
 
 	expectedNames := []string{
-		"Bench Press",
+		"Bench Press (Barbell)",
 		"Squat",
 		"Custom Test Exercise",
 	}
@@ -200,8 +200,8 @@ func TestExerciseRepository_CreateExercise_DuplicatesGlobalExercise(t *testing.T
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
 
-	// "Bench Press" is a seeded global exercise.
-	_, err = repo.CreateExercise(ctx, exercise.Exercise{ExerciseName: "Bench Press", UserId: 1})
+	// "Bench Press (Barbell)" is a seeded global exercise.
+	_, err = repo.CreateExercise(ctx, exercise.Exercise{ExerciseName: "Bench Press (Barbell)", UserId: 1})
 	if !errors.Is(err, exercise.ErrExerciseAlreadyExists) {
 		t.Fatalf("Expected ErrExerciseAlreadyExists, got %v", err)
 	}
@@ -214,7 +214,7 @@ func TestExerciseRepository_CreateExercise_DuplicatesGlobalExercise_CaseInsensit
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
 
-	_, err = repo.CreateExercise(ctx, exercise.Exercise{ExerciseName: "bench press", UserId: 1})
+	_, err = repo.CreateExercise(ctx, exercise.Exercise{ExerciseName: "bench press (barbell)", UserId: 1})
 	if !errors.Is(err, exercise.ErrExerciseAlreadyExists) {
 		t.Fatalf("Expected ErrExerciseAlreadyExists for a case-insensitive duplicate, got %v", err)
 	}
@@ -283,13 +283,13 @@ func TestExerciseRepository_ModifyExercise_GlobalExercise(t *testing.T) {
 
 	var benchPressId uint32
 	for _, e := range globalExercises {
-		if e.ExerciseName == "Bench Press" {
+		if e.ExerciseName == "Bench Press (Barbell)" {
 			benchPressId = e.ExerciseId
 			break
 		}
 	}
 	if benchPressId == 0 {
-		t.Fatal("expected seeded global exercise \"Bench Press\" to be found")
+		t.Fatal("expected seeded global exercise \"Bench Press (Barbell)\" to be found")
 	}
 
 	_, err = repo.ModifyExercise(ctx, exercise.Exercise{ExerciseId: benchPressId, ExerciseName: "Bench Press Variant", UserId: 1})
@@ -379,8 +379,8 @@ func TestExerciseRepository_ModifyExercise_DuplicatesGlobalExercise(t *testing.T
 		t.Fatalf("CreateExercise returned error: %v", err)
 	}
 
-	// "Bench Press" is a seeded global exercise.
-	_, err = repo.ModifyExercise(ctx, exercise.Exercise{ExerciseId: created.ExerciseId, ExerciseName: "Bench Press", UserId: 1})
+	// "Bench Press (Barbell)" is a seeded global exercise.
+	_, err = repo.ModifyExercise(ctx, exercise.Exercise{ExerciseId: created.ExerciseId, ExerciseName: "Bench Press (Barbell)", UserId: 1})
 	if !errors.Is(err, exercise.ErrExerciseAlreadyExists) {
 		t.Fatalf("Expected ErrExerciseAlreadyExists, got %v", err)
 	}
@@ -398,7 +398,7 @@ func TestExerciseRepository_ModifyExercise_DuplicatesGlobalExercise_CaseInsensit
 		t.Fatalf("CreateExercise returned error: %v", err)
 	}
 
-	_, err = repo.ModifyExercise(ctx, exercise.Exercise{ExerciseId: created.ExerciseId, ExerciseName: "bench press", UserId: 1})
+	_, err = repo.ModifyExercise(ctx, exercise.Exercise{ExerciseId: created.ExerciseId, ExerciseName: "bench press (barbell)", UserId: 1})
 	if !errors.Is(err, exercise.ErrExerciseAlreadyExists) {
 		t.Fatalf("Expected ErrExerciseAlreadyExists for a case-insensitive duplicate, got %v", err)
 	}

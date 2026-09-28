@@ -67,19 +67,19 @@ func TestWorkoutRepository_GetWorkout(t *testing.T) {
 
 	for _, s := range got.Sets {
 		switch s.Exercise.ExerciseName {
-		case "Bench Press":
+		case "Bench Press (Barbell)":
 			if s.Reps != 8 {
 				t.Errorf("expected Bench Press Reps 8, got %d", s.Reps)
 			}
 			if s.WeightGrams != 60000 {
 				t.Errorf("expected Bench Press WeightGrams 60000, got %d", s.WeightGrams)
 			}
-		case "Squat":
+		case "Bench Press (Dumbbell)":
 			if s.Reps != 5 {
-				t.Errorf("expected Squat Reps 5, got %d", s.Reps)
+				t.Errorf("expected Bench Press (Dumbbell) Reps 5, got %d", s.Reps)
 			}
 			if s.WeightGrams != 100000 {
-				t.Errorf("expected Squat WeightGrams 100000, got %d", s.WeightGrams)
+				t.Errorf("expected Bench Press (Dumbbell) WeightGrams 100000, got %d", s.WeightGrams)
 			}
 		default:
 			t.Errorf("unexpected exercise in workout sets: %q", s.Exercise.ExerciseName)
@@ -115,7 +115,7 @@ func TestWorkoutRepository_CreateWorkout_ExistingTemplate(t *testing.T) {
 	if len(created.Sets) != 2 {
 		t.Fatalf("expected 2 sets, got %d: %+v", len(created.Sets), created.Sets)
 	}
-	if created.Sets[0].Exercise.ExerciseName != "Bench Press" {
+	if created.Sets[0].Exercise.ExerciseName != "Bench Press (Barbell)" {
 		t.Errorf("expected exercise names to be resolved, got %q", created.Sets[0].Exercise.ExerciseName)
 	}
 
@@ -314,8 +314,8 @@ func TestWorkoutRepository_GetWorkout_UserSeesOwnWorkout(t *testing.T) {
 	if len(got.Sets) != 1 {
 		t.Fatalf("expected 1 set, got %d: %+v", len(got.Sets), got.Sets)
 	}
-	if got.Sets[0].Exercise.ExerciseName != "Deadlift" {
-		t.Errorf("expected exercise %q, got %q", "Deadlift", got.Sets[0].Exercise.ExerciseName)
+	if got.Sets[0].Exercise.ExerciseName != "Incline Bench Press (Barbell)" {
+		t.Errorf("expected exercise %q, got %q", "Incline Bench Press (Barbell)", got.Sets[0].Exercise.ExerciseName)
 	}
 }
 
@@ -366,7 +366,7 @@ func TestWorkoutRepository_ModifyWorkout(t *testing.T) {
 	if modified.Template.TemplateId != 1 || modified.Template.TemplateName != "Push Day" {
 		t.Errorf("expected the template to be returned unchanged, got %+v", modified.Template)
 	}
-	if len(modified.Sets) != 3 || modified.Sets[1].Exercise.ExerciseName != "Bench Press" {
+	if len(modified.Sets) != 3 || modified.Sets[1].Exercise.ExerciseName != "Bench Press (Barbell)" {
 		t.Errorf("expected 3 sets with resolved exercise names, got %+v", modified.Sets)
 	}
 

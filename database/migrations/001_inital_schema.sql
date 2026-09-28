@@ -33,7 +33,9 @@ CREATE TABLE workouts (
   template_id INTEGER NOT NULL REFERENCES templates(template_id),
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  completed_at TIMESTAMP NOT NULL
+  started_at TIMESTAMP NOT NULL,
+  completed_at TIMESTAMP NOT NULL,
+  CONSTRAINT workouts_started_before_completed CHECK (started_at <= completed_at)
 );
 
 CREATE INDEX idx_workouts_template_id 

@@ -54,6 +54,9 @@ func TestWorkoutRepository_GetWorkout(t *testing.T) {
 	if got.Template.TemplateName != "Push Day" {
 		t.Errorf("expected TemplateName %q, got %q", "Push Day", got.Template.TemplateName)
 	}
+	if got.StartedAt.Format("2006-01-02 15:04:05") != "2024-01-15 09:00:00" {
+		t.Errorf("expected StartedAt %q, got %q", "2024-01-15 09:00:00", got.StartedAt.Format("2006-01-02 15:04:05"))
+	}
 	if got.CompletedAt.Format("2006-01-02 15:04:05") != "2024-01-15 10:00:00" {
 		t.Errorf("expected CompletedAt %q, got %q", "2024-01-15 10:00:00", got.CompletedAt.Format("2006-01-02 15:04:05"))
 	}
@@ -88,8 +91,10 @@ func TestWorkoutRepository_CreateWorkout_ExistingTemplate(t *testing.T) {
 	ctx := t.Context()
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
+	startedAt := time.Date(2024, 2, 1, 8, 15, 0, 0, time.UTC)
 	completedAt := time.Date(2024, 2, 1, 9, 30, 0, 0, time.UTC)
 	created, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		StartedAt:   startedAt,
 		CompletedAt: completedAt,
 		Template:    template.Template{TemplateId: 1},
 		Sets: []set.Set{
@@ -118,6 +123,9 @@ func TestWorkoutRepository_CreateWorkout_ExistingTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetWorkoutByUserIdAndWorkoutId returned error: %v", err)
 	}
+	if !got.StartedAt.Equal(startedAt) {
+		t.Errorf("expected StartedAt %v, got %v", startedAt, got.StartedAt)
+	}
 	if !got.CompletedAt.Equal(completedAt) {
 		t.Errorf("expected CompletedAt %v, got %v", completedAt, got.CompletedAt)
 	}
@@ -131,6 +139,7 @@ func TestWorkoutRepository_CreateWorkout_GeneratesTemplate(t *testing.T) {
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
 	created, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		StartedAt:   time.Date(2024, 2, 2, 8, 30, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 2, 2, 9, 30, 0, 0, time.UTC),
 		Template:    template.Template{TemplateName: "Generated Leg Day"},
 		Sets: []set.Set{
@@ -160,6 +169,7 @@ func TestWorkoutRepository_CreateWorkout_DuplicateTemplateName(t *testing.T) {
 
 	// "Push Day" already exists for user 1.
 	_, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		StartedAt:   time.Date(2024, 2, 3, 8, 30, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 2, 3, 9, 30, 0, 0, time.UTC),
 		Template:    template.Template{TemplateName: "push day"},
 		Sets: []set.Set{
@@ -179,6 +189,7 @@ func TestWorkoutRepository_CreateWorkout_TemplateNotFound(t *testing.T) {
 	// column can hold, so no such template can exist either.
 	for _, templateId := range []uint32{2, 999999, math.MaxInt32 + 1} {
 		_, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+			StartedAt:   time.Date(2024, 2, 4, 8, 30, 0, 0, time.UTC),
 			CompletedAt: time.Date(2024, 2, 4, 9, 30, 0, 0, time.UTC),
 			Template:    template.Template{TemplateId: templateId},
 			Sets: []set.Set{
@@ -199,6 +210,7 @@ func TestWorkoutRepository_CreateWorkout_ExerciseNotFound(t *testing.T) {
 	// beyond what the int4 column can hold.
 	for _, exerciseId := range []uint32{100, 999999, math.MaxInt32 + 1} {
 		_, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+			StartedAt:   time.Date(2024, 2, 5, 8, 30, 0, 0, time.UTC),
 			CompletedAt: time.Date(2024, 2, 5, 9, 30, 0, 0, time.UTC),
 			Template:    template.Template{TemplateId: 1},
 			Sets: []set.Set{
@@ -216,6 +228,7 @@ func TestWorkoutRepository_CreateWorkout_WeightGramsOutOfRange(t *testing.T) {
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
 	_, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		StartedAt:   time.Date(2024, 2, 7, 8, 30, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 2, 7, 9, 30, 0, 0, time.UTC),
 		Template:    template.Template{TemplateId: 1},
 		Sets: []set.Set{
@@ -232,6 +245,7 @@ func TestWorkoutRepository_CreateWorkout_RollsBackGeneratedTemplate(t *testing.T
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
 	_, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		StartedAt:   time.Date(2024, 2, 6, 8, 30, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 2, 6, 9, 30, 0, 0, time.UTC),
 		Template:    template.Template{TemplateName: "Rolled Back Day"},
 		Sets: []set.Set{
@@ -311,6 +325,7 @@ func createModifiableWorkout(t *testing.T, repo *workout.PostgresWorkoutReposito
 	t.Helper()
 
 	created, err := repo.CreateWorkout(t.Context(), 1, workout.Workout{
+		StartedAt:   time.Date(2024, 3, 1, 17, 0, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 3, 1, 18, 0, 0, 0, time.UTC),
 		Template:    template.Template{TemplateId: 1},
 		Sets: []set.Set{
@@ -329,9 +344,11 @@ func TestWorkoutRepository_ModifyWorkout(t *testing.T) {
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 	created := createModifiableWorkout(t, repo)
 
+	startedAt := time.Date(2024, 3, 2, 18, 0, 0, 0, time.UTC)
 	completedAt := time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC)
 	modified, err := repo.ModifyWorkout(ctx, 1, workout.Workout{
 		WorkoutId:   created.WorkoutId,
+		StartedAt:   startedAt,
 		CompletedAt: completedAt,
 		Sets: []set.Set{
 			{Exercise: exercise.Exercise{ExerciseId: 3}, Reps: 10, WeightGrams: 40000},
@@ -357,6 +374,9 @@ func TestWorkoutRepository_ModifyWorkout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetWorkoutByUserIdAndWorkoutId returned error: %v", err)
 	}
+	if !got.StartedAt.Equal(startedAt) {
+		t.Errorf("expected StartedAt %v, got %v", startedAt, got.StartedAt)
+	}
 	if !got.CompletedAt.Equal(completedAt) {
 		t.Errorf("expected CompletedAt %v, got %v", completedAt, got.CompletedAt)
 	}
@@ -381,6 +401,7 @@ func TestWorkoutRepository_ModifyWorkout_IsIdempotent(t *testing.T) {
 
 	toModify := workout.Workout{
 		WorkoutId:   created.WorkoutId,
+		StartedAt:   time.Date(2024, 3, 2, 18, 15, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC),
 		Sets: []set.Set{
 			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 6, WeightGrams: 70000},
@@ -410,6 +431,7 @@ func TestWorkoutRepository_ModifyWorkout_NotFound(t *testing.T) {
 	for _, workoutId := range []uint32{999999, math.MaxInt32 + 1} {
 		_, err := repo.ModifyWorkout(ctx, 1, workout.Workout{
 			WorkoutId:   workoutId,
+			StartedAt:   time.Date(2024, 3, 2, 18, 15, 0, 0, time.UTC),
 			CompletedAt: time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC),
 			Sets: []set.Set{
 				{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 6, WeightGrams: 70000},
@@ -429,6 +451,7 @@ func TestWorkoutRepository_ModifyWorkout_WrongUser(t *testing.T) {
 	// The workout belongs to user 1, so it should look not found to user 2.
 	_, err := repo.ModifyWorkout(ctx, 2, workout.Workout{
 		WorkoutId:   created.WorkoutId,
+		StartedAt:   time.Date(2024, 3, 2, 18, 15, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC),
 		Sets: []set.Set{
 			{Exercise: exercise.Exercise{ExerciseId: 3}, Reps: 1, WeightGrams: 1000},
@@ -468,6 +491,7 @@ func TestWorkoutRepository_ModifyWorkout_RollsBackOnInvalidSets(t *testing.T) {
 
 			_, err := repo.ModifyWorkout(ctx, 1, workout.Workout{
 				WorkoutId:   created.WorkoutId,
+				StartedAt:   time.Date(2024, 3, 2, 18, 15, 0, 0, time.UTC),
 				CompletedAt: time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC),
 				Sets:        []set.Set{tt.set},
 			})
@@ -496,11 +520,13 @@ func TestWorkoutRepository_GetWorkout_IdOutOfRange(t *testing.T) {
 	}
 }
 
-// createWorkoutCompletedAt stores a one-set workout for user 1 under template 1.
+// createWorkoutCompletedAt stores a one-hour, one-set workout for user 1
+// under template 1.
 func createWorkoutCompletedAt(t *testing.T, repo *workout.PostgresWorkoutRepository, completedAt time.Time) workout.Workout {
 	t.Helper()
 
 	created, err := repo.CreateWorkout(t.Context(), 1, workout.Workout{
+		StartedAt:   completedAt.Add(-time.Hour),
 		CompletedAt: completedAt,
 		Template:    template.Template{TemplateId: 1},
 		Sets: []set.Set{
@@ -541,6 +567,9 @@ func TestWorkoutRepository_GetWorkouts(t *testing.T) {
 	}
 	if w.Template.TemplateId != 2 || w.Template.TemplateName != "Pull Day" {
 		t.Errorf("expected template {2 Pull Day}, got %+v", w.Template)
+	}
+	if want := time.Date(2024, 1, 16, 10, 0, 0, 0, time.UTC); !w.StartedAt.Equal(want) {
+		t.Errorf("expected StartedAt %v, got %v", want, w.StartedAt)
 	}
 	if want := time.Date(2024, 1, 16, 11, 0, 0, 0, time.UTC); !w.CompletedAt.Equal(want) {
 		t.Errorf("expected CompletedAt %v, got %v", want, w.CompletedAt)
@@ -658,6 +687,9 @@ func TestWorkoutRepository_GetWorkoutsByTemplate(t *testing.T) {
 	if w.Template.TemplateId != 2 || w.Template.TemplateName != "Pull Day" {
 		t.Errorf("expected template {2 Pull Day}, got %+v", w.Template)
 	}
+	if want := time.Date(2024, 1, 16, 10, 0, 0, 0, time.UTC); !w.StartedAt.Equal(want) {
+		t.Errorf("expected StartedAt %v, got %v", want, w.StartedAt)
+	}
 	if want := time.Date(2024, 1, 16, 11, 0, 0, 0, time.UTC); !w.CompletedAt.Equal(want) {
 		t.Errorf("expected CompletedAt %v, got %v", want, w.CompletedAt)
 	}
@@ -672,6 +704,7 @@ func TestWorkoutRepository_GetWorkoutsByTemplate_OnlyThatTemplate(t *testing.T) 
 
 	// A workout under a second template of user 1 must not show up under template 1.
 	other, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		StartedAt:   time.Date(2035, 1, 1, 9, 0, 0, 0, time.UTC),
 		CompletedAt: time.Date(2035, 1, 1, 10, 0, 0, 0, time.UTC),
 		Template:    template.Template{TemplateName: "Leg Day By Template Test"},
 		Sets: []set.Set{

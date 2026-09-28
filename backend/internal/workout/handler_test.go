@@ -122,6 +122,7 @@ func TestWorkoutHandler_GetWorkout_Success(t *testing.T) {
 func TestWorkoutHandler_GetWorkout_ResponseContainsOnlyExpectedFields(t *testing.T) {
 	serviceWorkout := workout.Workout{
 		WorkoutId:   1,
+		StartedAt:   time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
 		Template:    template.Template{TemplateId: 1, TemplateName: "Push Day"},
 		Sets: []set.Set{
@@ -163,6 +164,7 @@ func TestWorkoutHandler_GetWorkout_ResponseContainsOnlyExpectedFields(t *testing
 		"workout_id":    float64(1),
 		"template_id":   float64(1),
 		"template_name": "Push Day",
+		"started_at":    "2024-01-15T09:00:00Z",
 		"completed_at":  wantCompletedAt,
 		"exercises": []any{
 			map[string]any{
@@ -331,6 +333,7 @@ func TestWorkoutHandler_CreateWorkout_Success(t *testing.T) {
 
 	req := newCreateWorkoutRequest(1, `{
 		"template_id": 1,
+		"started_at": "2024-01-15T09:00:00Z",
 		"completed_at": "2024-01-15T10:00:00Z",
 		"exercises": [
 			{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}]}
@@ -352,6 +355,9 @@ func TestWorkoutHandler_CreateWorkout_Success(t *testing.T) {
 	}
 	if gotWorkout.Template.TemplateId != 1 {
 		t.Errorf("expected service to receive TemplateId 1, got %d", gotWorkout.Template.TemplateId)
+	}
+	if want := time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC); !gotWorkout.StartedAt.Equal(want) {
+		t.Errorf("expected service to receive StartedAt %v, got %v", want, gotWorkout.StartedAt)
 	}
 	if !gotWorkout.CompletedAt.Equal(completedAt) {
 		t.Errorf("expected service to receive CompletedAt %v, got %v", completedAt, gotWorkout.CompletedAt)
@@ -472,6 +478,8 @@ func TestWorkoutHandler_CreateWorkout_ServiceErrors(t *testing.T) {
 		{"no sets", workout.ErrSetsRequired, http.StatusBadRequest},
 		{"zero reps", workout.ErrRepsRequired, http.StatusBadRequest},
 		{"weight out of range", workout.ErrWeightGramsOutOfRange, http.StatusBadRequest},
+		{"started after completed", workout.ErrStartedAfterCompleted, http.StatusBadRequest},
+		{"missing started at", workout.ErrStartedAtRequired, http.StatusBadRequest},
 		{"missing template name", template.ErrTemplateNameRequired, http.StatusBadRequest},
 		{"unknown exercise", workout.ErrExerciseNotFound, http.StatusBadRequest},
 		{"unknown template", workout.ErrTemplateNotFound, http.StatusNotFound},
@@ -554,6 +562,7 @@ func TestWorkoutHandler_ModifyWorkout_Success(t *testing.T) {
 	handler := workout.NewWorkoutHandler(service)
 
 	req := newModifyWorkoutRequest(1, "7", `{
+		"started_at": "2024-01-15T09:00:00Z",
 		"completed_at": "2024-01-15T10:00:00Z",
 		"exercises": [
 			{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}, {"reps": 6, "weight_grams": 65000}]}
@@ -577,6 +586,9 @@ func TestWorkoutHandler_ModifyWorkout_Success(t *testing.T) {
 	}
 	if gotWorkout.WorkoutId != 7 {
 		t.Errorf("expected service to receive workoutId 7 from the path, got %d", gotWorkout.WorkoutId)
+	}
+	if want := time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC); !gotWorkout.StartedAt.Equal(want) {
+		t.Errorf("expected service to receive StartedAt %v, got %v", want, gotWorkout.StartedAt)
 	}
 	if !gotWorkout.CompletedAt.Equal(completedAt) {
 		t.Errorf("expected service to receive CompletedAt %v, got %v", completedAt, gotWorkout.CompletedAt)
@@ -704,6 +716,7 @@ func TestWorkoutHandler_ModifyWorkout_ServiceErrors(t *testing.T) {
 		{"no sets", workout.ErrSetsRequired, http.StatusBadRequest},
 		{"zero reps", workout.ErrRepsRequired, http.StatusBadRequest},
 		{"weight out of range", workout.ErrWeightGramsOutOfRange, http.StatusBadRequest},
+		{"started after completed", workout.ErrStartedAfterCompleted, http.StatusBadRequest},
 		{"unknown exercise", workout.ErrExerciseNotFound, http.StatusBadRequest},
 		{"unexpected error", errors.New("db exploded"), http.StatusInternalServerError},
 	}
@@ -796,6 +809,7 @@ func TestWorkoutHandler_GetWorkouts_ResponseContainsOnlyExpectedFields(t *testin
 		getWorkoutsFunc: func(ctx context.Context, userId uint32) ([]workout.Workout, error) {
 			return []workout.Workout{{
 				WorkoutId:   1,
+				StartedAt:   time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC),
 				CompletedAt: time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
 				Template:    template.Template{TemplateId: 3, TemplateName: "Push Day", UserId: 99},
 				Sets: []set.Set{
@@ -832,6 +846,7 @@ func TestWorkoutHandler_GetWorkouts_ResponseContainsOnlyExpectedFields(t *testin
 		"workout_id":    float64(1),
 		"template_id":   float64(3),
 		"template_name": "Push Day",
+		"started_at":    "2024-01-15T09:00:00Z",
 		"completed_at":  "2024-01-15T10:00:00Z",
 	}
 	if !reflect.DeepEqual(workouts[0], want) {
@@ -980,6 +995,7 @@ func TestWorkoutHandler_GetWorkouts_ByTemplate_ResponseContainsOnlyExpectedField
 		getByTemplateFunc: func(ctx context.Context, userId uint32, templateId uint32) ([]workout.Workout, error) {
 			return []workout.Workout{{
 				WorkoutId:   1,
+				StartedAt:   time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC),
 				CompletedAt: time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
 				Template:    template.Template{TemplateId: 3, TemplateName: "Push Day", UserId: 99},
 				Sets: []set.Set{
@@ -1009,6 +1025,7 @@ func TestWorkoutHandler_GetWorkouts_ByTemplate_ResponseContainsOnlyExpectedField
 		"workout_id":    float64(1),
 		"template_id":   float64(3),
 		"template_name": "Push Day",
+		"started_at":    "2024-01-15T09:00:00Z",
 		"completed_at":  "2024-01-15T10:00:00Z",
 	}
 	if !reflect.DeepEqual(got["workouts"][0], want) {

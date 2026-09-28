@@ -45,6 +45,7 @@ type WorkoutResponse struct {
 	WorkoutId    uint32                    `json:"workout_id"`
 	TemplateId   uint32                    `json:"template_id"`
 	TemplateName string                    `json:"template_name"`
+	StartedAt    time.Time                 `json:"started_at"`
 	CompletedAt  time.Time                 `json:"completed_at"`
 	Exercises    []workoutResponseExercise `json:"exercises"`
 }
@@ -76,6 +77,7 @@ func toWorkoutResponse(workout Workout) WorkoutResponse {
 		WorkoutId:    workout.WorkoutId,
 		TemplateId:   workout.Template.TemplateId,
 		TemplateName: workout.Template.TemplateName,
+		StartedAt:    workout.StartedAt,
 		CompletedAt:  workout.CompletedAt,
 		Exercises:    exercises,
 	}
@@ -110,6 +112,7 @@ type workoutSummary struct {
 	WorkoutId    uint32    `json:"workout_id"`
 	TemplateId   uint32    `json:"template_id"`
 	TemplateName string    `json:"template_name"`
+	StartedAt    time.Time `json:"started_at"`
 	CompletedAt  time.Time `json:"completed_at"`
 }
 
@@ -124,6 +127,7 @@ func toWorkoutsResponse(workouts []Workout) WorkoutsResponse {
 			WorkoutId:    wo.WorkoutId,
 			TemplateId:   wo.Template.TemplateId,
 			TemplateName: wo.Template.TemplateName,
+			StartedAt:    wo.StartedAt,
 			CompletedAt:  wo.CompletedAt}
 	}
 	return WorkoutsResponse{Workouts: summaries}
@@ -172,6 +176,7 @@ type workoutRequestExercise struct {
 type createWorkoutRequest struct {
 	TemplateId   uint32                   `json:"template_id"`
 	TemplateName string                   `json:"template_name"`
+	StartedAt    time.Time                `json:"started_at"`
 	CompletedAt  time.Time                `json:"completed_at"`
 	Exercises    []workoutRequestExercise `json:"exercises"`
 }
@@ -204,6 +209,10 @@ func writeWorkoutError(w http.ResponseWriter, err error) {
 		http.Error(w, "reps must be greater than zero", http.StatusBadRequest)
 	case errors.Is(err, ErrWeightGramsOutOfRange):
 		http.Error(w, "weight_grams is out of range", http.StatusBadRequest)
+	case errors.Is(err, ErrStartedAtRequired):
+		http.Error(w, "started_at is required", http.StatusBadRequest)
+	case errors.Is(err, ErrStartedAfterCompleted):
+		http.Error(w, "started_at must not be after completed_at", http.StatusBadRequest)
 	case errors.Is(err, template.ErrTemplateNameRequired):
 		http.Error(w, "template_name is required when template_id is omitted", http.StatusBadRequest)
 	case errors.Is(err, ErrExerciseNotFound):
@@ -229,6 +238,7 @@ func (h *WorkoutHandler) CreateWorkout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	created, err := h.service.CreateWorkout(r.Context(), userId, Workout{
+		StartedAt:   req.StartedAt,
 		CompletedAt: req.CompletedAt,
 		Template:    template.Template{TemplateId: req.TemplateId, TemplateName: req.TemplateName},
 		Sets:        toSets(req.Exercises),
@@ -245,6 +255,7 @@ func (h *WorkoutHandler) CreateWorkout(w http.ResponseWriter, r *http.Request) {
 // the template it was logged under, so any template_id or template_name a
 // client sends back (for example from a GET response) is ignored.
 type modifyWorkoutRequest struct {
+	StartedAt   time.Time                `json:"started_at"`
 	CompletedAt time.Time                `json:"completed_at"`
 	Exercises   []workoutRequestExercise `json:"exercises"`
 }
@@ -268,6 +279,7 @@ func (h *WorkoutHandler) ModifyWorkout(w http.ResponseWriter, r *http.Request) {
 
 	modified, err := h.service.ModifyWorkout(r.Context(), userId, Workout{
 		WorkoutId:   uint32(workoutId),
+		StartedAt:   req.StartedAt,
 		CompletedAt: req.CompletedAt,
 		Sets:        toSets(req.Exercises),
 	})

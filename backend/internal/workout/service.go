@@ -49,16 +49,23 @@ func (s *WorkoutServiceImpl) CreateWorkout(ctx context.Context, userId uint32, w
 		}
 	}
 
+	if workout.StartedAt.IsZero() {
+		return Workout{}, ErrStartedAtRequired
+	}
 	if workout.CompletedAt.IsZero() {
 		workout.CompletedAt = time.Now().UTC()
+	}
+	if workout.StartedAt.After(workout.CompletedAt) {
+		return Workout{}, ErrStartedAfterCompleted
 	}
 
 	return s.repo.CreateWorkout(ctx, userId, workout)
 }
 
-// ModifyWorkout replaces the completion time and sets of an existing workout.
-// The template cannot be changed, so the workout's current one is kept, and an
-// omitted CompletedAt keeps the current value rather than defaulting to now.
+// ModifyWorkout replaces the start and completion times and sets of an
+// existing workout. The template cannot be changed, so the workout's current
+// one is kept, and an omitted StartedAt or CompletedAt keeps the current value
+// rather than defaulting to now.
 func (s *WorkoutServiceImpl) ModifyWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, error) {
 	if err := validateSets(workout.Sets); err != nil {
 		return Workout{}, err
@@ -70,8 +77,14 @@ func (s *WorkoutServiceImpl) ModifyWorkout(ctx context.Context, userId uint32, w
 	}
 
 	workout.Template = existing.Template
+	if workout.StartedAt.IsZero() {
+		workout.StartedAt = existing.StartedAt
+	}
 	if workout.CompletedAt.IsZero() {
 		workout.CompletedAt = existing.CompletedAt
+	}
+	if workout.StartedAt.After(workout.CompletedAt) {
+		return Workout{}, ErrStartedAfterCompleted
 	}
 
 	return s.repo.ModifyWorkout(ctx, userId, workout)

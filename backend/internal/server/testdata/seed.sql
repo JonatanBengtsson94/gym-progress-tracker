@@ -4,7 +4,7 @@ INSERT INTO exercises(user_id, exercise_name) VALUES (1, 'Custom Test Exercise')
 INSERT INTO users(user_id, username, password_hash, first_name, last_name) VALUES (2, 'bob', '$2a$10$UYwagPueizGDPGqug3vY1uM7LMCn3yAA/xZEm.bJRwNAxzBI8i.7O', 'Bob', 'Brown');
 
 INSERT INTO templates(template_id, user_id, template_name) VALUES (1, 1, 'Push Day');
-INSERT INTO workouts(workout_id, template_id, completed_at) VALUES (1, 1, '2024-01-15 10:00:00');
+INSERT INTO workouts(workout_id, template_id, started_at, completed_at) VALUES (1, 1, '2024-01-15 09:00:00', '2024-01-15 10:00:00');
 INSERT INTO sets(set_id, exercise_id, workout_id, reps, weight_grams) VALUES (1, 1, 1, 8, 60000);
 
 -- Explicit ids above bypass the SERIAL sequences; resync them so the next

@@ -517,6 +517,7 @@ func TestIntegration_CreateWorkoutAndGetItBack(t *testing.T) {
 
 	createReq := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(`{
 		"template_name": "Full Body",
+		"started_at": "2024-03-01T17:00:00Z",
 		"completed_at": "2024-03-01T18:00:00Z",
 		"exercises": [{"exercise_id": 1, "sets": [{"reps": 10, "weight_grams": 50000}]}]
 	}`))
@@ -561,6 +562,9 @@ func TestIntegration_CreateWorkoutAndGetItBack(t *testing.T) {
 	if got.TemplateId != created.TemplateId || got.TemplateName != "Full Body" {
 		t.Errorf("unexpected workout response: %+v", got)
 	}
+	if !got.StartedAt.Equal(time.Date(2024, 3, 1, 17, 0, 0, 0, time.UTC)) || !got.CompletedAt.Equal(time.Date(2024, 3, 1, 18, 0, 0, 0, time.UTC)) {
+		t.Errorf("expected StartedAt 17:00 and CompletedAt 18:00, got %v and %v", got.StartedAt, got.CompletedAt)
+	}
 	if len(got.Exercises) != 1 || got.Exercises[0].ExerciseId != 1 {
 		t.Fatalf("unexpected exercises: %+v", got.Exercises)
 	}
@@ -576,6 +580,7 @@ func TestIntegration_CreateWorkout_ReusesExistingTemplate(t *testing.T) {
 	// Template 1 ("Push Day") is seeded for alice.
 	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(`{
 		"template_id": 1,
+		"started_at": "2024-03-02T17:00:00Z",
 		"completed_at": "2024-03-02T18:00:00Z",
 		"exercises": [{"exercise_id": 1, "sets": [{"reps": 6, "weight_grams": 70000}]}]
 	}`))
@@ -603,7 +608,7 @@ func TestIntegration_CreateWorkout_NoToken(t *testing.T) {
 	router := newTestRouter(t)
 
 	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(
-		`{"template_id":1,"exercises":[{"exercise_id":1,"sets":[{"reps":6,"weight_grams":70000}]}]}`))
+		`{"template_id":1,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":1,"sets":[{"reps":6,"weight_grams":70000}]}]}`))
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
@@ -618,7 +623,7 @@ func TestIntegration_CreateWorkout_OtherUsersTemplate(t *testing.T) {
 	token := mustLogin(t, router, "bob", "secret")
 
 	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(
-		`{"template_id":1,"exercises":[{"exercise_id":1,"sets":[{"reps":6,"weight_grams":70000}]}]}`))
+		`{"template_id":1,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":1,"sets":[{"reps":6,"weight_grams":70000}]}]}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -632,7 +637,7 @@ func TestIntegration_CreateWorkout_NoSets(t *testing.T) {
 	router := newTestRouter(t)
 	token := mustLogin(t, router, "alice", "secret")
 
-	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(`{"template_id":1,"exercises":[]}`))
+	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(`{"template_id":1,"started_at":"2024-03-02T17:00:00Z","exercises":[]}`))
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -650,13 +655,13 @@ func TestIntegration_CreateWorkout_RejectsOutOfRangeValues(t *testing.T) {
 		name string
 		body string
 	}{
-		{"negative reps", `{"template_id":1,"exercises":[{"exercise_id":1,"sets":[{"reps":-5,"weight_grams":60000}]}]}`},
-		{"negative weight", `{"template_id":1,"exercises":[{"exercise_id":1,"sets":[{"reps":8,"weight_grams":-60000}]}]}`},
-		{"negative exercise id", `{"template_id":1,"exercises":[{"exercise_id":-1,"sets":[{"reps":8,"weight_grams":60000}]}]}`},
-		{"negative template id", `{"template_id":-1,"exercises":[{"exercise_id":1,"sets":[{"reps":8,"weight_grams":60000}]}]}`},
-		{"reps above column range", `{"template_id":1,"exercises":[{"exercise_id":1,"sets":[{"reps":300,"weight_grams":60000}]}]}`},
-		{"weight above column range", `{"template_id":1,"exercises":[{"exercise_id":1,"sets":[{"reps":8,"weight_grams":3000000000}]}]}`},
-		{"exercise id above column range", `{"template_id":1,"exercises":[{"exercise_id":3000000000,"sets":[{"reps":8,"weight_grams":60000}]}]}`},
+		{"negative reps", `{"template_id":1,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":1,"sets":[{"reps":-5,"weight_grams":60000}]}]}`},
+		{"negative weight", `{"template_id":1,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":1,"sets":[{"reps":8,"weight_grams":-60000}]}]}`},
+		{"negative exercise id", `{"template_id":1,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":-1,"sets":[{"reps":8,"weight_grams":60000}]}]}`},
+		{"negative template id", `{"template_id":-1,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":1,"sets":[{"reps":8,"weight_grams":60000}]}]}`},
+		{"reps above column range", `{"template_id":1,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":1,"sets":[{"reps":300,"weight_grams":60000}]}]}`},
+		{"weight above column range", `{"template_id":1,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":1,"sets":[{"reps":8,"weight_grams":3000000000}]}]}`},
+		{"exercise id above column range", `{"template_id":1,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":3000000000,"sets":[{"reps":8,"weight_grams":60000}]}]}`},
 	}
 
 	for _, tt := range tests {
@@ -680,6 +685,7 @@ func TestIntegration_CreateWorkout_DuplicateTemplateName(t *testing.T) {
 	// "Push Day" is already seeded for alice.
 	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(`{
 		"template_name": "Push Day",
+		"started_at": "2024-03-02T17:00:00Z",
 		"exercises": [{"exercise_id": 1, "sets": [{"reps": 6, "weight_grams": 70000}]}]
 	}`))
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -749,6 +755,7 @@ func mustGetWorkout(t *testing.T, router http.Handler, token string, workoutId u
 
 const createPushWorkoutBody = `{
 	"template_id": 1,
+	"started_at": "2024-03-01T17:00:00Z",
 	"completed_at": "2024-03-01T18:00:00Z",
 	"exercises": [{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}, {"reps": 6, "weight_grams": 65000}]}]
 }`
@@ -794,7 +801,78 @@ func TestIntegration_ModifyWorkoutAndGetItBack(t *testing.T) {
 	}
 }
 
-func TestIntegration_ModifyWorkout_KeepsCompletedAtWhenOmitted(t *testing.T) {
+func TestIntegration_CreateWorkout_InvalidStartedAt(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"missing started_at", `{"template_id":1,"completed_at":"2024-03-02T18:00:00Z","exercises":[{"exercise_id":1,"sets":[{"reps":6,"weight_grams":70000}]}]}`},
+		{"started_at after completed_at", `{"template_id":1,"started_at":"2024-03-02T19:00:00Z","completed_at":"2024-03-02T18:00:00Z","exercises":[{"exercise_id":1,"sets":[{"reps":6,"weight_grams":70000}]}]}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(tt.body))
+			req.Header.Set("Authorization", "Bearer "+token)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Result().StatusCode != http.StatusBadRequest {
+				t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
+			}
+		})
+	}
+}
+
+func TestIntegration_ModifyWorkout_UpdatesStartedAt(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	created := mustCreateWorkout(t, router, token, createPushWorkoutBody)
+
+	rec := modifyWorkout(router, token, created.WorkoutId, `{
+		"started_at": "2024-03-01T16:30:00Z",
+		"exercises": [{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}]}]
+	}`)
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Result().StatusCode)
+	}
+
+	got := mustGetWorkout(t, router, token, created.WorkoutId)
+	if !got.StartedAt.Equal(time.Date(2024, 3, 1, 16, 30, 0, 0, time.UTC)) {
+		t.Errorf("expected StartedAt to be updated, got %v", got.StartedAt)
+	}
+	if !got.CompletedAt.Equal(time.Date(2024, 3, 1, 18, 0, 0, 0, time.UTC)) {
+		t.Errorf("expected the original CompletedAt to be kept, got %v", got.CompletedAt)
+	}
+}
+
+// Omitting completed_at keeps the stored one, so a started_at that is only
+// invalid against the stored value must still be rejected.
+func TestIntegration_ModifyWorkout_RejectsStartedAtAfterStoredCompletedAt(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	created := mustCreateWorkout(t, router, token, createPushWorkoutBody)
+
+	rec := modifyWorkout(router, token, created.WorkoutId, `{
+		"started_at": "2024-03-01T19:00:00Z",
+		"exercises": [{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}]}]
+	}`)
+	if rec.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
+	}
+
+	got := mustGetWorkout(t, router, token, created.WorkoutId)
+	if !got.StartedAt.Equal(time.Date(2024, 3, 1, 17, 0, 0, 0, time.UTC)) {
+		t.Errorf("expected the rejected modify to leave StartedAt untouched, got %v", got.StartedAt)
+	}
+}
+
+func TestIntegration_ModifyWorkout_KeepsTimesWhenOmitted(t *testing.T) {
 	router := newTestRouter(t)
 	token := mustLogin(t, router, "alice", "secret")
 
@@ -807,6 +885,9 @@ func TestIntegration_ModifyWorkout_KeepsCompletedAtWhenOmitted(t *testing.T) {
 	}
 
 	got := mustGetWorkout(t, router, token, created.WorkoutId)
+	if !got.StartedAt.Equal(time.Date(2024, 3, 1, 17, 0, 0, 0, time.UTC)) {
+		t.Errorf("expected the original StartedAt to be kept, got %v", got.StartedAt)
+	}
 	if !got.CompletedAt.Equal(time.Date(2024, 3, 1, 18, 0, 0, 0, time.UTC)) {
 		t.Errorf("expected the original CompletedAt to be kept, got %v", got.CompletedAt)
 	}
@@ -948,12 +1029,19 @@ func TestIntegration_ModifyWorkout_RejectsInvalidSets(t *testing.T) {
 	}
 }
 
+// createWorkoutBodyAt returns a create body for a one-hour workout under
+// template 1 that completed at completedAt, an RFC 3339 timestamp.
 func createWorkoutBodyAt(completedAt string) string {
+	completed, err := time.Parse(time.RFC3339, completedAt)
+	if err != nil {
+		panic(err)
+	}
 	return fmt.Sprintf(`{
 		"template_id": 1,
+		"started_at": %q,
 		"completed_at": %q,
 		"exercises": [{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}]}]
-	}`, completedAt)
+	}`, completed.Add(-time.Hour).Format(time.RFC3339), completedAt)
 }
 
 func mustListWorkouts(t *testing.T, router http.Handler, token string) workout.WorkoutsResponse {
@@ -1003,6 +1091,9 @@ func TestIntegration_GetWorkouts(t *testing.T) {
 	if got.TemplateId != 1 || got.TemplateName != "Push Day" {
 		t.Errorf("unexpected template for workout 1: %+v", got)
 	}
+	if want := time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC); !got.StartedAt.Equal(want) {
+		t.Errorf("expected StartedAt %v, got %v", want, got.StartedAt)
+	}
 	if want := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC); !got.CompletedAt.Equal(want) {
 		t.Errorf("expected CompletedAt %v, got %v", want, got.CompletedAt)
 	}
@@ -1026,8 +1117,8 @@ func TestIntegration_GetWorkouts_ResponseContainsOnlyExpectedFields(t *testing.T
 		t.Fatal("expected at least the seeded workout to be listed")
 	}
 	for _, item := range raw["workouts"] {
-		if len(item) != 4 {
-			t.Errorf("expected exactly workout_id, template_id, template_name and completed_at, got %v", item)
+		if len(item) != 5 {
+			t.Errorf("expected exactly workout_id, template_id, template_name, started_at and completed_at, got %v", item)
 		}
 		if _, ok := item["exercises"]; ok {
 			t.Errorf("expected the list to omit exercises, got %v", item)
@@ -1302,6 +1393,7 @@ func TestIntegration_GetWorkoutsByTemplate(t *testing.T) {
 	newer := mustCreateWorkout(t, router, token, createWorkoutBodyAt("2037-05-02T10:00:00Z"))
 	other := mustCreateWorkout(t, router, token, `{
 		"template_name": "Integration By Template",
+		"started_at": "2037-05-03T09:00:00Z",
 		"completed_at": "2037-05-03T10:00:00Z",
 		"exercises": [{"exercise_id": 1, "sets": [{"reps": 8, "weight_grams": 60000}]}]
 	}`)
@@ -1345,8 +1437,8 @@ func TestIntegration_GetWorkoutsByTemplate_ResponseContainsOnlyExpectedFields(t 
 		t.Fatal("expected at least the seeded workout to be listed")
 	}
 	for _, item := range raw["workouts"] {
-		if len(item) != 4 {
-			t.Errorf("expected exactly workout_id, template_id, template_name and completed_at, got %v", item)
+		if len(item) != 5 {
+			t.Errorf("expected exactly workout_id, template_id, template_name, started_at and completed_at, got %v", item)
 		}
 	}
 }

@@ -32,7 +32,7 @@ func (r *PostgresWorkoutRepository) GetWorkoutByUserIdAndWorkoutId(ctx context.C
 		return Workout{}, ErrWorkoutNotFound
 	}
 
-	query := `SELECT w.completed_at, t.template_id, t.template_name, s.reps, s.weight_grams, e.exercise_id, e.exercise_name
+	query := `SELECT w.started_at, w.completed_at, t.template_id, t.template_name, s.reps, s.weight_grams, e.exercise_id, e.exercise_name
 		FROM workouts AS w
 		JOIN templates AS t ON w.template_id = t.template_id
 		JOIN sets AS s ON w.workout_id = s.workout_id
@@ -50,6 +50,7 @@ func (r *PostgresWorkoutRepository) GetWorkoutByUserIdAndWorkoutId(ctx context.C
 	for rows.Next() {
 		var set set.Set
 		if err := rows.Scan(
+			&workout.StartedAt,
 			&workout.CompletedAt,
 			&workout.Template.TemplateId,
 			&workout.Template.TemplateName,
@@ -70,7 +71,7 @@ func (r *PostgresWorkoutRepository) GetWorkoutByUserIdAndWorkoutId(ctx context.C
 }
 
 func (r *PostgresWorkoutRepository) GetWorkoutsByUserId(ctx context.Context, userId uint32) ([]Workout, error) {
-	query := `SELECT w.workout_id, w.completed_at, t.template_id, t.template_name
+	query := `SELECT w.workout_id, w.started_at, w.completed_at, t.template_id, t.template_name
 		FROM workouts AS w
 		JOIN templates AS t ON w.template_id = t.template_id
 		WHERE t.user_id = $1
@@ -88,7 +89,7 @@ func (r *PostgresWorkoutRepository) GetWorkoutsByUserIdAndTemplateId(ctx context
 		return nil, err
 	}
 
-	query := `SELECT w.workout_id, w.completed_at, t.template_id, t.template_name
+	query := `SELECT w.workout_id, w.started_at, w.completed_at, t.template_id, t.template_name
 		FROM workouts AS w
 		JOIN templates AS t ON w.template_id = t.template_id
 		WHERE t.template_id = $1 AND t.user_id = $2
@@ -97,8 +98,8 @@ func (r *PostgresWorkoutRepository) GetWorkoutsByUserIdAndTemplateId(ctx context
 	return r.listWorkouts(ctx, query, templateId, userId)
 }
 
-// listWorkouts runs a query selecting workout_id, completed_at, template_id
-// and template_name, returning the rows as workouts without sets. The result
+// listWorkouts runs a query selecting workout_id, started_at, completed_at,
+// template_id and template_name, returning the rows as workouts without sets. The result
 // is never nil, so an empty list serializes as an empty array.
 func (r *PostgresWorkoutRepository) listWorkouts(ctx context.Context, query string, args ...any) ([]Workout, error) {
 	rows, err := r.db.Query(ctx, query, args...)
@@ -112,6 +113,7 @@ func (r *PostgresWorkoutRepository) listWorkouts(ctx context.Context, query stri
 		var workout Workout
 		if err := rows.Scan(
 			&workout.WorkoutId,
+			&workout.StartedAt,
 			&workout.CompletedAt,
 			&workout.Template.TemplateId,
 			&workout.Template.TemplateName,
@@ -145,11 +147,11 @@ func (r *PostgresWorkoutRepository) CreateWorkout(ctx context.Context, userId ui
 	}
 
 	query := `
-		INSERT INTO workouts (template_id, completed_at)
-		VALUES ($1, $2)
+		INSERT INTO workouts (template_id, started_at, completed_at)
+		VALUES ($1, $2, $3)
 		RETURNING workout_id
 	`
-	if err := tx.QueryRow(ctx, query, workout.Template.TemplateId, workout.CompletedAt).Scan(&workout.WorkoutId); err != nil {
+	if err := tx.QueryRow(ctx, query, workout.Template.TemplateId, workout.StartedAt, workout.CompletedAt).Scan(&workout.WorkoutId); err != nil {
 		return Workout{}, fmt.Errorf("Create workout failed: %w", err)
 	}
 
@@ -165,7 +167,7 @@ func (r *PostgresWorkoutRepository) CreateWorkout(ctx context.Context, userId ui
 	return workout, nil
 }
 
-// ModifyWorkout replaces the completion time and all sets of an existing
+// ModifyWorkout replaces the start and completion times and all sets of an existing
 // workout in one transaction, so a failure part-way leaves the old sets in
 // place. The workout's template is left as it is. Workouts belonging to other
 // users are reported as ErrWorkoutNotFound.
@@ -182,12 +184,12 @@ func (r *PostgresWorkoutRepository) ModifyWorkout(ctx context.Context, userId ui
 
 	query := `
 		UPDATE workouts AS w
-		SET completed_at = $1, updated_at = CURRENT_TIMESTAMP
+		SET started_at = $1, completed_at = $2, updated_at = CURRENT_TIMESTAMP
 		FROM templates AS t
-		WHERE w.workout_id = $2 AND w.template_id = t.template_id AND t.user_id = $3
+		WHERE w.workout_id = $3 AND w.template_id = t.template_id AND t.user_id = $4
 		RETURNING t.template_id, t.template_name
 	`
-	err = tx.QueryRow(ctx, query, workout.CompletedAt, workout.WorkoutId, userId).Scan(&workout.Template.TemplateId, &workout.Template.TemplateName)
+	err = tx.QueryRow(ctx, query, workout.StartedAt, workout.CompletedAt, workout.WorkoutId, userId).Scan(&workout.Template.TemplateId, &workout.Template.TemplateName)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return Workout{}, ErrWorkoutNotFound

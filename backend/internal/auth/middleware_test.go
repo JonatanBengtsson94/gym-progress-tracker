@@ -6,8 +6,8 @@ import (
 	"testing"
 	"uuid"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/identity"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/auth"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/identity"
 )
 
 type mockSessionValidator struct {

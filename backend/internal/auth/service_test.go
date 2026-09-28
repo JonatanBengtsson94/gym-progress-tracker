@@ -6,9 +6,9 @@ import (
 	"testing"
 	"uuid"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/password"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/auth"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/password"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/user"
 )
 
 func mustHash(t *testing.T, plain string) string {

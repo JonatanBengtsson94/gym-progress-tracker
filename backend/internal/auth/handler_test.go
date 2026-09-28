@@ -12,7 +12,7 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/auth"
 )
 
 type mockAuthService struct {

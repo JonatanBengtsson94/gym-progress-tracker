@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/password"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/testutil"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/password"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/testutil"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/user"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

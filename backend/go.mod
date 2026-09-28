@@ -1,4 +1,4 @@
-module github.com/JonatanBengtsson94/gym-progress-tracker
+module github.com/JonatanBengtsson94/gym-progress-tracker/backend
 
 go 1.27.0
 

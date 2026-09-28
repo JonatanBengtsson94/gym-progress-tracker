@@ -3,12 +3,12 @@ package server
 import (
 	"net/http"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/auth"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/httpx"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/template"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/workout"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/auth"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/exercise"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/httpx"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/template"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/user"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/workout"
 )
 
 func NewRouter(

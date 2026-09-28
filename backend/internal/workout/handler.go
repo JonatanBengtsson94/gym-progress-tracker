@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/httpx"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/identity"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/set"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/template"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/exercise"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/httpx"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/identity"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/set"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/template"
 )
 
 type WorkoutService interface {

@@ -22,9 +22,9 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/config"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/database"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/config"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/database"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/user"
 )
 
 type userCreator interface {

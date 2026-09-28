@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/httpx"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/httpx"
 )
 
 type AuthService interface {

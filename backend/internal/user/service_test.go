@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/password"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/password"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/user"
 )
 
 type mockUserRepository struct {

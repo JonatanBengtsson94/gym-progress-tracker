@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/identity"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/template"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/identity"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/template"
 )
 
 type mockTemplateService struct {

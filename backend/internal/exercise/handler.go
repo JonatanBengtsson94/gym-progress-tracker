@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/httpx"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/identity"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/httpx"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/identity"
 )
 
 type ExerciseService interface {

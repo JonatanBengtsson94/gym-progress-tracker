@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/identity"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/identity"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/user"
 )
 
 type mockUserService struct {

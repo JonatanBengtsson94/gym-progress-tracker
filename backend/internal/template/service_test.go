@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/template"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/template"
 )
 
 type mockTemplateRepository struct {

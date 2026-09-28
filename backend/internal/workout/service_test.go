@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/set"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/template"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/workout"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/set"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/template"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/workout"
 )
 
 type mockWorkoutRepository struct {

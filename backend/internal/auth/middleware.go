@@ -5,7 +5,7 @@ import (
 	"strings"
 	"uuid"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/identity"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/identity"
 )
 
 type SessionValidator interface {

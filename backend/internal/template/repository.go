@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/database"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/database"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

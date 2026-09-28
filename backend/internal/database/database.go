@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/config"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/config"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

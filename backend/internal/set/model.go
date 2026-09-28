@@ -1,6 +1,6 @@
 package set
 
-import "github.com/JonatanBengtsson94/gym-progress-tracker/internal/exercise"
+import "github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/exercise"
 
 type Set struct {
 	Exercise    exercise.Exercise

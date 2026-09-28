@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/identity"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/identity"
 )
 
 func TestRequireUserId_Present(t *testing.T) {

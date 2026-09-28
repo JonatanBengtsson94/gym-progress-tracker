@@ -6,8 +6,8 @@ import (
 	"sync"
 	"uuid"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/password"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/user"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/password"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/user"
 )
 
 // dummyPasswordHash is compared against when the username does not exist, so

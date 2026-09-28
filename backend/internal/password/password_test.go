@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/internal/password"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/password"
 )
 
 func TestHash_MatchesOriginalPassword(t *testing.T) {

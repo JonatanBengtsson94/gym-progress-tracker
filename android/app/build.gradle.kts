@@ -1,7 +1,18 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+val localProperties = Properties().apply {
+    providers.fileContents(rootProject.layout.projectDirectory.file("local.properties"))
+        .asText.orNull?.let { load(it.reader()) }
+}
+
+// Backend used by debug builds. Override per machine with api.baseUrl in local.properties,
+// e.g. http://192.168.1.10:8080 for a physical device. Defaults to the host as seen from the emulator.
+val devBaseUrl: String = localProperties.getProperty("api.baseUrl") ?: "http://10.0.2.2:8080"
 
 android {
     namespace = "com.jonatanbengtsson.gymprogresstracker"
@@ -20,7 +31,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "BASE_URL", "\"$devBaseUrl\"")
+        }
         release {
+            // TODO: replace with the production backend URL. Must be HTTPS.
+            buildConfigField("String", "BASE_URL", "\"https://api.example.com\"")
             optimization {
                 enable = false
             }
@@ -32,6 +48,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -44,6 +61,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

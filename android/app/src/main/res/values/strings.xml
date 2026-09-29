@@ -3,4 +3,8 @@
     <string name="login_username">Username</string>
     <string name="login_password">Password</string>
     <string name="login_button">Log in</string>
+    <string name="login_error_invalid_credentials">Wrong username or password</string>
+    <string name="login_error_network">Could not reach the server. Check your connection and try again.</string>
+    <string name="login_error_server">Something went wrong. Please try again.</string>
+    <string name="home_placeholder">You\'re logged in!</string>
 </resources>

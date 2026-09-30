@@ -10,3 +10,6 @@
 # GO
 /backend/bin
 /backend/tmp
+
+# Rust
+/rust-backend/target

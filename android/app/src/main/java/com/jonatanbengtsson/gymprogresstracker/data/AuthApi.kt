@@ -16,9 +16,13 @@ sealed interface LoginResult {
     data object ServerError : LoginResult
 }
 
-class AuthApi(private val baseUrl: String) {
+interface AuthApi {
+    suspend fun login(username: String, password: String): LoginResult
+}
 
-    suspend fun login(username: String, password: String): LoginResult = withContext(Dispatchers.IO) {
+class HttpAuthApi(private val baseUrl: String) : AuthApi {
+
+    override suspend fun login(username: String, password: String): LoginResult = withContext(Dispatchers.IO) {
         val body = JSONObject()
             .put("username", username)
             .put("password", password)
@@ -53,7 +57,7 @@ class AuthApi(private val baseUrl: String) {
     }
 
     private companion object {
-        const val TAG = "AuthApi"
+        const val TAG = "HttpAuthApi"
         const val TIMEOUT_MS = 10_000
     }
 }

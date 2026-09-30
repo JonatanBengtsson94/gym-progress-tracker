@@ -50,6 +50,11 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions {
+        // Local unit tests run against a stubbed android.jar; let calls like Log.w return defaults
+        // instead of throwing so the data layer can be tested on the JVM.
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -63,6 +68,10 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockwebserver)
+    // Real org.json implementation; the one in the stubbed android.jar throws in unit tests.
+    testImplementation(libs.org.json)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)

@@ -55,6 +55,9 @@ android {
         // instead of throwing so the data layer can be tested on the JVM.
         unitTests.isReturnDefaultValues = true
     }
+    kotlinOptions {
+        freeCompilerArgs = listOf("-XXLanguage:+PropertyParamAnnotationDefaultTargetMode")
+    }
 }
 
 dependencies {

@@ -87,9 +87,26 @@ class StartWorkoutContentTest {
         setContent(StartWorkoutUiState(templates = listOf(pushDay, legDay)))
 
         composeRule.onNodeWithText("Push Day").assertIsDisplayed()
-        composeRule.onNodeWithText("Bench Press (Barbell) · Overhead Press (Barbell)").assertIsDisplayed()
+        composeRule.onNodeWithText("2 exercises").assertIsDisplayed()
         composeRule.onNodeWithText("Leg Day").assertIsDisplayed()
         composeRule.onNodeWithText(str(R.string.start_workout_never_performed)).assertIsDisplayed()
+    }
+
+    @Test
+    fun expandingATemplateListsItsExercisesWithoutStartingIt() {
+        setContent(StartWorkoutUiState(templates = listOf(pushDay, legDay)))
+
+        composeRule.onNodeWithText("Bench Press (Barbell)").assertDoesNotExist()
+
+        composeRule.onNodeWithText("2 exercises").performClick()
+
+        composeRule.onNodeWithText("Bench Press (Barbell)").assertIsDisplayed()
+        composeRule.onNodeWithText("Overhead Press (Barbell)").assertIsDisplayed()
+        assertEquals(emptyList<WorkoutTemplate>(), startedTemplates)
+
+        composeRule.onNodeWithText("2 exercises").performClick()
+
+        composeRule.onNodeWithText("Bench Press (Barbell)").assertDoesNotExist()
     }
 
     @Test

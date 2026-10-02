@@ -1,27 +1,40 @@
 package com.jonatanbengtsson.gymprogresstracker.ui.start
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -131,45 +144,78 @@ fun StartWorkoutContent(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            else -> items(uiState.templates, key = { it.id }) { template ->
-                TemplateCard(template = template, onClick = { onStartFromTemplate(template) })
+            else -> itemsIndexed(uiState.templates, key = { _, template -> template.id }) { index, template ->
+                Column {
+                    if (index > 0) HorizontalDivider(modifier = Modifier.padding(bottom = 12.dp))
+                    TemplateRow(template = template, onClick = { onStartFromTemplate(template) })
+                }
             }
         }
     }
 }
 
 @Composable
-private fun TemplateCard(template: WorkoutTemplate, onClick: () -> Unit) {
+private fun TemplateRow(template: WorkoutTemplate, onClick: () -> Unit) {
     val dateFormatter = remember {
         DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault())
     }
     val latestWorkout = template.latestWorkout
+    val exercises = latestWorkout?.exercises.orEmpty()
+    var expanded by rememberSaveable { mutableStateOf(false) }
 
-    Card(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(text = template.name, style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = if (latestWorkout == null) {
-                    stringResource(R.string.start_workout_never_performed)
-                } else {
-                    stringResource(
-                        R.string.start_workout_last_performed,
-                        dateFormatter.format(latestWorkout.completedAt)
-                    )
-                },
-                style = MaterialTheme.typography.bodyMedium
-            )
-            if (latestWorkout != null && latestWorkout.exercises.isNotEmpty()) {
-                Text(
-                    text = latestWorkout.exercises.joinToString(" · ") { it.name },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp)
+    ) {
+        Text(text = template.name, style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = if (latestWorkout == null) {
+                stringResource(R.string.start_workout_never_performed)
+            } else {
+                stringResource(
+                    R.string.start_workout_last_performed,
+                    dateFormatter.format(latestWorkout.completedAt)
                 )
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (exercises.isNotEmpty()) {
+            // Expands in place like an HTML <details>, without starting the workout.
+            Row(
+                modifier = Modifier
+                    .toggleable(value = expanded, onValueChange = { expanded = it })
+                    .padding(top = 4.dp, bottom = 4.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val chevronRotation by animateFloatAsState(if (expanded) 90f else 0f)
+                Icon(
+                    painter = painterResource(R.drawable.ic_chevron_right),
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp).rotate(chevronRotation),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = pluralStringResource(
+                        R.plurals.start_workout_exercise_count,
+                        exercises.size,
+                        exercises.size
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            AnimatedVisibility(visible = expanded) {
+                Column(
+                    modifier = Modifier.padding(start = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    exercises.forEach { exercise ->
+                        Text(text = exercise.name, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
             }
         }
     }

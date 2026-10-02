@@ -1,10 +1,14 @@
 package com.jonatanbengtsson.gymprogresstracker.ui.start
 
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasProgressBarRangeInfo
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -20,6 +24,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 @RunWith(AndroidJUnit4::class)
 class StartWorkoutContentTest {
@@ -41,26 +48,49 @@ class StartWorkoutContentTest {
         )
     )
     private val legDay = WorkoutTemplate(id = 2, name = "Leg Day", latestWorkout = null)
+    private val pullDay = WorkoutTemplate(
+        id = 3,
+        name = "Pull Day",
+        latestWorkout = LatestWorkout(
+            workoutId = 8,
+            startedAt = Instant.parse("2024-05-09T09:00:00Z"),
+            completedAt = Instant.parse("2024-05-09T10:00:00Z"),
+            exercises = listOf(WorkoutExercise(3, "Deadlift (Barbell)", listOf(WorkoutSet(5, 100000))))
+        )
+    )
+    private val emptyDay = WorkoutTemplate(
+        id = 4,
+        name = "Empty Day",
+        latestWorkout = LatestWorkout(
+            workoutId = 9,
+            startedAt = Instant.parse("2024-05-10T09:00:00Z"),
+            completedAt = Instant.parse("2024-05-10T10:00:00Z"),
+            exercises = emptyList()
+        )
+    )
 
     private var newWorkoutClicks = 0
     private var retryClicks = 0
     private val startedTemplates = mutableListOf<WorkoutTemplate>()
 
     private fun setContent(uiState: StartWorkoutUiState) {
-        composeRule.setContent {
-            GymProgressTrackerTheme {
-                StartWorkoutContent(
-                    uiState = uiState,
-                    onRetry = { retryClicks++ },
-                    onStartNewWorkout = { newWorkoutClicks++ },
-                    onStartFromTemplate = { startedTemplates += it }
-                )
-            }
+        composeRule.setContent { Content(uiState) }
+    }
+
+    @Composable
+    private fun Content(uiState: StartWorkoutUiState) {
+        GymProgressTrackerTheme {
+            StartWorkoutContent(
+                uiState = uiState,
+                onRetry = { retryClicks++ },
+                onStartNewWorkout = { newWorkoutClicks++ },
+                onStartFromTemplate = { startedTemplates += it }
+            )
         }
     }
 
-    private fun str(@StringRes id: Int) =
-        InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
+    private fun str(@StringRes id: Int, vararg formatArgs: Any) =
+        InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *formatArgs)
 
     @Test
     fun clickingNewWorkoutStartsAnEmptyWorkout() {
@@ -107,6 +137,47 @@ class StartWorkoutContentTest {
         composeRule.onNodeWithText("2 exercises").performClick()
 
         composeRule.onNodeWithText("Bench Press (Barbell)").assertDoesNotExist()
+    }
+
+    @Test
+    fun templatesWithoutExercisesHaveNothingToExpand() {
+        setContent(StartWorkoutUiState(templates = listOf(legDay, emptyDay)))
+
+        composeRule.onNodeWithText("Leg Day").assertIsDisplayed()
+        composeRule.onNodeWithText("Empty Day").assertIsDisplayed()
+        composeRule.onAllNodesWithText("exercise", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun expandingATemplateLeavesTheOthersCollapsed() {
+        setContent(StartWorkoutUiState(templates = listOf(pushDay, pullDay)))
+
+        composeRule.onNodeWithText("2 exercises").performClick()
+
+        composeRule.onNodeWithText("Bench Press (Barbell)").assertIsDisplayed()
+        composeRule.onNodeWithText("Deadlift (Barbell)").assertDoesNotExist()
+    }
+
+    @Test
+    fun expandedTemplateStaysExpandedAfterStateRestore() {
+        val restorationTester = StateRestorationTester(composeRule)
+        restorationTester.setContent { Content(StartWorkoutUiState(templates = listOf(pushDay))) }
+
+        composeRule.onNodeWithText("2 exercises").performClick()
+        restorationTester.emulateSavedInstanceStateRestore()
+
+        composeRule.onNodeWithText("Bench Press (Barbell)").assertIsDisplayed()
+    }
+
+    @Test
+    fun performedTemplateShowsWhenItWasLastPerformed() {
+        setContent(StartWorkoutUiState(templates = listOf(pushDay)))
+
+        // Formatted the same way as the screen so the test passes in any locale and time zone.
+        val date = DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
+            .withZone(ZoneId.systemDefault())
+            .format(pushDay.latestWorkout!!.completedAt)
+        composeRule.onNodeWithText(str(R.string.start_workout_last_performed, date)).assertIsDisplayed()
     }
 
     @Test

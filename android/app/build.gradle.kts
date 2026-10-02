@@ -55,8 +55,11 @@ android {
         // instead of throwing so the data layer can be tested on the JVM.
         unitTests.isReturnDefaultValues = true
     }
-    kotlinOptions {
-        freeCompilerArgs = listOf("-XXLanguage:+PropertyParamAnnotationDefaultTargetMode")
+}
+
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.add("-XXLanguage:+PropertyParamAnnotationDefaultTargetMode")
     }
 }
 
@@ -73,7 +76,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockwebserver)
-    // Real org.json implementation; the one in the stubbed android.jar throws in unit tests.
     testImplementation(libs.org.json)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

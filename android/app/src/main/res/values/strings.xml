@@ -7,7 +7,7 @@
     <string name="login_error_network">Could not reach the server. Check your connection and try again.</string>
     <string name="login_error_server">Something went wrong. Please try again.</string>
     <string name="start_workout_title">Start a workout</string>
-    <string name="start_workout_new">New workout</string>
+    <string name="start_workout_new">Start without a template</string>
     <string name="start_workout_from_template">From a template</string>
     <string name="start_workout_last_performed">Last performed %1$s</string>
     <string name="start_workout_never_performed">Not performed yet</string>

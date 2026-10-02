@@ -70,6 +70,38 @@ func TestExerciseService_GetExercises(t *testing.T) {
 	}
 }
 
+func TestExerciseService_GetExercises_SortsByNameIgnoringCase(t *testing.T) {
+	ctx := t.Context()
+	repo := &mockExerciseRepository{
+		getExerciseFunc: func(ctx context.Context, userId uint32) ([]exercise.Exercise, error) {
+			return []exercise.Exercise{
+				{ExerciseId: 1, ExerciseName: "Squat (Barbell)"},
+				{ExerciseId: 4, ExerciseName: "bench press"},
+				{ExerciseId: 2, ExerciseName: "Deadlift (Barbell)"},
+				{ExerciseId: 3, ExerciseName: "Bench Press"},
+			}, nil
+		},
+	}
+
+	service := exercise.NewExerciseService(repo)
+
+	got, err := service.GetExercises(ctx, 42)
+	if err != nil {
+		t.Fatalf("GetExercises returned error: %v", err)
+	}
+
+	// Names equal apart from case fall back to id so the order is stable.
+	wantIds := []uint32{3, 4, 2, 1}
+	if len(got) != len(wantIds) {
+		t.Fatalf("Expected %d exercises, got %d", len(wantIds), len(got))
+	}
+	for i, ex := range got {
+		if ex.ExerciseId != wantIds[i] {
+			t.Errorf("exercise %d: got id %d (%q), want id %d", i, ex.ExerciseId, ex.ExerciseName, wantIds[i])
+		}
+	}
+}
+
 func TestExerciseService_GetExercises_RepoError(t *testing.T) {
 	ctx := t.Context()
 	wantErr := errors.New("db exploded")

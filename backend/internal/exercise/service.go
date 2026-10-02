@@ -1,7 +1,9 @@
 package exercise
 
 import (
+	"cmp"
 	"context"
+	"slices"
 	"strings"
 )
 
@@ -19,8 +21,19 @@ func NewExerciseService(repo ExerciseRepository) *ExerciseServiceImpl {
 	return &ExerciseServiceImpl{repo: repo}
 }
 
+// GetExercises returns the user's own and the global exercises sorted by name, ignoring case.
 func (s *ExerciseServiceImpl) GetExercises(ctx context.Context, userId uint32) ([]Exercise, error) {
-	return s.repo.GetExercisesByUserId(ctx, userId)
+	exercises, err := s.repo.GetExercisesByUserId(ctx, userId)
+	if err != nil {
+		return nil, err
+	}
+	slices.SortFunc(exercises, func(a, b Exercise) int {
+		return cmp.Or(
+			strings.Compare(strings.ToLower(a.ExerciseName), strings.ToLower(b.ExerciseName)),
+			cmp.Compare(a.ExerciseId, b.ExerciseId),
+		)
+	})
+	return exercises, nil
 }
 
 func (s *ExerciseServiceImpl) CreateExercise(ctx context.Context, exercise Exercise) (Exercise, error) {

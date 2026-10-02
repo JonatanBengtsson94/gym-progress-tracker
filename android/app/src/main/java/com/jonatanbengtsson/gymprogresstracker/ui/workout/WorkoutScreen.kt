@@ -9,13 +9,18 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -24,16 +29,20 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -136,6 +145,12 @@ private fun ExercisePicker(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val matchingExercises = remember(uiState.exercises, query) {
+        uiState.exercises.filter { it.matches(query) }
+    }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
     Column(modifier = modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
@@ -152,10 +167,30 @@ private fun ExercisePicker(
                 style = MaterialTheme.typography.titleLarge
             )
         }
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 8.dp),
+            placeholder = { Text(stringResource(R.string.workout_search_exercises)) },
+            leadingIcon = { Icon(imageVector = Icons.Filled.Search, contentDescription = null) },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { query = "" }) {
+                        Icon(
+                            imageVector = Icons.Filled.Clear,
+                            contentDescription = stringResource(R.string.workout_search_clear)
+                        )
+                    }
+                }
+            },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { keyboardController?.hide() })
+        )
         HorizontalDivider()
 
         LazyColumn(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).imePadding(),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
             when {
@@ -180,7 +215,15 @@ private fun ExercisePicker(
                         }
                     }
                 }
-                else -> items(uiState.exercises, key = { it.id }) { exercise ->
+                matchingExercises.isEmpty() && query.isNotBlank() -> item {
+                    Text(
+                        text = stringResource(R.string.workout_search_no_results, query.trim()),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(24.dp)
+                    )
+                }
+                else -> items(matchingExercises, key = { it.id }) { exercise ->
                     ExercisePickerRow(
                         exercise = exercise,
                         added = uiState.workoutExercises.any { it.id == exercise.id },
@@ -191,6 +234,10 @@ private fun ExercisePicker(
         }
     }
 }
+
+/** True when every word of [query] appears in the name, ignoring case and word order. */
+internal fun Exercise.matches(query: String): Boolean =
+    query.split(' ').filter { it.isNotBlank() }.all { name.contains(it, ignoreCase = true) }
 
 /** Exercises already in the workout stay in place but are greyed out and can't be picked again. */
 @Composable

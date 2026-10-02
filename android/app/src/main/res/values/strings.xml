@@ -24,6 +24,9 @@
     <string name="workout_choose_exercise">Choose an exercise</string>
     <string name="workout_exercise_added">Added</string>
     <string name="workout_picker_back">Back to workout</string>
+    <string name="workout_search_exercises">Search exercises</string>
+    <string name="workout_search_clear">Clear search</string>
+    <string name="workout_search_no_results">No exercises match \"%1$s\"</string>
     <string name="workout_exercises_error_network">Could not load exercises. Check your connection and try again.</string>
     <string name="workout_exercises_error_server">Something went wrong loading exercises.</string>
     <string name="workout_exercises_retry">Try again</string>

@@ -10,11 +10,13 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasProgressBarRangeInfo
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -50,8 +52,8 @@ class WorkoutContentTest {
         }
     }
 
-    private fun str(@StringRes id: Int) =
-        InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
+    private fun str(@StringRes id: Int, vararg formatArgs: Any) =
+        InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *formatArgs)
 
     private fun openExercisePicker() {
         composeRule.onNodeWithText(str(R.string.workout_add_exercise)).performClick()
@@ -128,6 +130,51 @@ class WorkoutContentTest {
 
         assertEquals(emptyList<Exercise>(), selectedExercises)
         composeRule.onNodeWithText(str(R.string.workout_choose_exercise)).assertIsDisplayed()
+    }
+
+    @Test
+    fun searchingNarrowsTheListOfExercises() {
+        setContent(WorkoutUiState(exercises = listOf(benchPress, squat)))
+        openExercisePicker()
+
+        composeRule.onNode(hasSetTextAction()).performTextInput("squ")
+
+        composeRule.onNodeWithText("Squat (Barbell)").assertIsDisplayed()
+        composeRule.onNodeWithText("Bench Press (Barbell)").assertDoesNotExist()
+    }
+
+    @Test
+    fun searchWithoutMatchesSaysSo() {
+        setContent(WorkoutUiState(exercises = listOf(benchPress, squat)))
+        openExercisePicker()
+
+        composeRule.onNode(hasSetTextAction()).performTextInput("curl")
+
+        composeRule.onNodeWithText(str(R.string.workout_search_no_results, "curl")).assertIsDisplayed()
+    }
+
+    @Test
+    fun clearingTheSearchShowsAllExercisesAgain() {
+        setContent(WorkoutUiState(exercises = listOf(benchPress, squat)))
+        openExercisePicker()
+        composeRule.onNode(hasSetTextAction()).performTextInput("squ")
+
+        composeRule.onNodeWithContentDescription(str(R.string.workout_search_clear)).performClick()
+
+        composeRule.onNodeWithText("Bench Press (Barbell)").assertIsDisplayed()
+        composeRule.onNodeWithText("Squat (Barbell)").assertIsDisplayed()
+    }
+
+    @Test
+    fun reopeningThePickerStartsWithAnEmptySearch() {
+        setContent(WorkoutUiState(exercises = listOf(benchPress, squat)))
+        openExercisePicker()
+        composeRule.onNode(hasSetTextAction()).performTextInput("squ")
+        composeRule.onNodeWithContentDescription(str(R.string.workout_picker_back)).performClick()
+
+        openExercisePicker()
+
+        composeRule.onNodeWithText("Bench Press (Barbell)").assertIsDisplayed()
     }
 
     @Test

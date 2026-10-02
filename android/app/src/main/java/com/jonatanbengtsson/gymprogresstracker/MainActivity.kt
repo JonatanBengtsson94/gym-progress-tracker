@@ -12,8 +12,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import com.jonatanbengtsson.gymprogresstracker.ui.home.HomeScreen
 import com.jonatanbengtsson.gymprogresstracker.ui.login.LoginScreen
+import com.jonatanbengtsson.gymprogresstracker.ui.start.StartWorkoutScreen
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
 
 class MainActivity : ComponentActivity() {
@@ -25,13 +25,21 @@ class MainActivity : ComponentActivity() {
                 var sessionId by rememberSaveable { mutableStateOf<String?>(null) }
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    if (sessionId == null) {
+                    val currentSessionId = sessionId
+                    if (currentSessionId == null) {
                         LoginScreen(
                             onLoggedIn = { sessionId = it },
                             modifier = Modifier.padding(innerPadding)
                         )
                     } else {
-                        HomeScreen(modifier = Modifier.padding(innerPadding))
+                        StartWorkoutScreen(
+                            sessionId = currentSessionId,
+                            onSessionExpired = { sessionId = null },
+                            // TODO: open the workout screen once it exists.
+                            onStartNewWorkout = {},
+                            onStartFromTemplate = {},
+                            modifier = Modifier.padding(innerPadding)
+                        )
                     }
                 }
             }

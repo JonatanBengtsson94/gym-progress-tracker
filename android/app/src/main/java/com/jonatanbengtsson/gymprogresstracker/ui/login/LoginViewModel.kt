@@ -35,4 +35,13 @@ class LoginViewModel(private val authApi: AuthApi) : ViewModel() {
             }
         }
     }
+
+    /**
+     * Clears the session id once the screen has handed it on. The view model outlives the screen,
+     * so without this a later return to login (e.g. after the session expires) would immediately
+     * report the stale session again.
+     */
+    fun onLoggedInHandled() {
+        uiState = LoginUiState()
+    }
 }

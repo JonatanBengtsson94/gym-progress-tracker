@@ -49,7 +49,10 @@ fun LoginScreen(
     val uiState = viewModel.uiState
 
     LaunchedEffect(uiState.sessionId) {
-        uiState.sessionId?.let(onLoggedIn)
+        uiState.sessionId?.let {
+            onLoggedIn(it)
+            viewModel.onLoggedInHandled()
+        }
     }
 
     LoginContent(

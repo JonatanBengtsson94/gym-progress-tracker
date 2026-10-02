@@ -6,5 +6,13 @@
     <string name="login_error_invalid_credentials">Wrong username or password</string>
     <string name="login_error_network">Could not reach the server. Check your connection and try again.</string>
     <string name="login_error_server">Something went wrong. Please try again.</string>
-    <string name="home_placeholder">You\'re logged in!</string>
+    <string name="start_workout_title">Start a workout</string>
+    <string name="start_workout_new">New workout</string>
+    <string name="start_workout_from_template">From a template</string>
+    <string name="start_workout_last_performed">Last performed %1$s</string>
+    <string name="start_workout_never_performed">Not performed yet</string>
+    <string name="start_workout_no_templates">No templates yet. Finish a workout to save it as a template.</string>
+    <string name="start_workout_error_network">Could not load your templates. Check your connection and try again.</string>
+    <string name="start_workout_error_server">Something went wrong loading your templates.</string>
+    <string name="start_workout_retry">Try again</string>
 </resources>

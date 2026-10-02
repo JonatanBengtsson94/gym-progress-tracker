@@ -90,6 +90,16 @@ class LoginViewModelTest {
         assertEquals(LoginUiState(sessionId = "session-123"), viewModel.uiState)
     }
 
+    @Test
+    fun `handling the login clears the session id`() {
+        viewModel.login("alice", "pw")
+        authApi.response.complete(LoginResult.Success("session-123"))
+
+        viewModel.onLoggedInHandled()
+
+        assertEquals(LoginUiState(), viewModel.uiState)
+    }
+
     private fun assertErrorFor(result: LoginResult, expectedMessage: Int) {
         viewModel.login("alice", "pw")
         authApi.response.complete(result)

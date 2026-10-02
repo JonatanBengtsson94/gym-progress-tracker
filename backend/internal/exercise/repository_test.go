@@ -34,8 +34,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// countGlobalExercises reads the number of global exercises straight from the
-// database, so the tests don't break whenever the migration adds more.
 func countGlobalExercises(t *testing.T) int {
 	t.Helper()
 	var count int

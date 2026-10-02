@@ -11,7 +11,6 @@ INSERT INTO sets(set_id, exercise_id, workout_id, reps, weight_grams) VALUES (2,
 
 -- Workout 2: belongs to user 2, has one set.
 INSERT INTO workouts(workout_id, template_id, started_at, completed_at) VALUES (2, 2, '2024-01-16 10:00:00', '2024-01-16 11:00:00');
--- Looked up by name so adding global exercises to the migration doesn't change which one this is.
 INSERT INTO sets(set_id, exercise_id, workout_id, reps, weight_grams) VALUES (3, (SELECT exercise_id FROM exercises WHERE user_id IS NULL AND exercise_name = 'Incline Bench Press (Barbell)'), 2, 5, 120000);
 
 -- Workout 3: belongs to user 1, has no sets (should be treated as not found).

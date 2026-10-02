@@ -23,6 +23,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
+import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -78,6 +80,14 @@ class WorkoutContentTest {
         composeRule.onNodeWithText(str(R.string.workout_choose_exercise)).assertIsDisplayed()
         composeRule.onNodeWithText("Bench Press (Barbell)").assertIsDisplayed()
         composeRule.onNodeWithText("Squat (Barbell)").assertIsDisplayed()
+    }
+
+    @Test
+    fun aWorkoutStillLoadingShowsProgressInsteadOfAddExercise() {
+        setContent(WorkoutUiState(isLoadingWorkout = true))
+
+        composeRule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertIsDisplayed()
+        composeRule.onNodeWithText(str(R.string.workout_add_exercise)).assertDoesNotExist()
     }
 
     @Test

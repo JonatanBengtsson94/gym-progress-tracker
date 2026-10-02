@@ -4,6 +4,9 @@ import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesApi
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesResult
+import com.jonatanbengtsson.gymprogresstracker.data.FakeActiveWorkoutRepository
+import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.ui.login.MainDispatcherRule
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
@@ -33,9 +36,10 @@ class WorkoutViewModelTest {
     private val squat = Exercise(1, "Squat (Barbell)")
 
     private val exercisesApi = FakeExercisesApi()
+    private val activeWorkoutRepository = FakeActiveWorkoutRepository()
 
-    // Created lazily so each test can set up the fake before the view model loads on init.
-    private val viewModel by lazy { WorkoutViewModel(exercisesApi, "session-123") }
+    // Created lazily so each test can set up the fakes before the view model loads on init.
+    private val viewModel by lazy { WorkoutViewModel(exercisesApi, activeWorkoutRepository, "session-123") }
 
     @Test
     fun `loads exercises with the session id on creation`() {
@@ -152,21 +156,32 @@ class WorkoutViewModelTest {
     }
 
     @Test
-    fun `a workout is in progress once it has an exercise`() {
-        assertFalse(viewModel.uiState.workoutInProgress)
+    fun `the workout is loading until the saved one has been read`() {
+        activeWorkoutRepository.exercises.value = null
 
-        viewModel.addExercise(squat)
+        assertTrue(viewModel.uiState.isLoadingWorkout)
 
-        assertTrue(viewModel.uiState.workoutInProgress)
+        activeWorkoutRepository.exercises.value = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5"))))
+
+        assertFalse(viewModel.uiState.isLoadingWorkout)
+        assertEquals(listOf(SetEntry(reps = "5")), setsOf(squat))
     }
 
     @Test
-    fun `discarding the workout removes its exercises but keeps the ones to pick from`() {
+    fun `changes to the workout are saved`() {
+        viewModel.addExercise(squat)
+        viewModel.updateReps(squat.id, 0, "5")
+
+        assertEquals(listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5")))), activeWorkoutRepository.exercises.value)
+    }
+
+    @Test
+    fun `a workout discarded elsewhere is gone, but the exercises to pick from are kept`() {
         exercisesApi.response.complete(ExercisesResult.Success(listOf(benchPress, squat)))
         viewModel.addExercise(squat)
         viewModel.updateReps(squat.id, 0, "5")
 
-        viewModel.discardWorkout()
+        activeWorkoutRepository.update { emptyList() }
 
         assertEquals(WorkoutUiState(exercises = listOf(benchPress, squat)), viewModel.uiState)
     }

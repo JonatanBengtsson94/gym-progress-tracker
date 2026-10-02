@@ -71,8 +71,11 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jonatanbengtsson.gymprogresstracker.BuildConfig
 import com.jonatanbengtsson.gymprogresstracker.R
+import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.HttpExercisesApi
+import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
 
 @Composable
@@ -81,7 +84,19 @@ fun WorkoutScreen(
     onSessionExpired: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: WorkoutViewModel = workoutViewModel(sessionId)
+    // Keyed by session so logging in again doesn't reuse the previous session's view model.
+    viewModel: WorkoutViewModel = viewModel(
+        key = "workout:$sessionId",
+        factory = viewModelFactory {
+            initializer {
+                WorkoutViewModel(
+                    HttpExercisesApi(BuildConfig.BASE_URL),
+                    appContainer.activeWorkoutRepository,
+                    sessionId
+                )
+            }
+        }
+    )
 ) {
     BackHandler(onBack = onBack)
 
@@ -104,24 +119,6 @@ fun WorkoutScreen(
         modifier = modifier
     )
 }
-
-/**
- * The workout of [sessionId], shared by every screen that asks for it, so the start screen can
- * tell whether a workout is in progress. Keyed by session so logging in again starts afresh.
- */
-@Composable
-fun workoutViewModel(sessionId: String): WorkoutViewModel = viewModel(
-    key = workoutViewModelKey(sessionId),
-    factory = viewModelFactory {
-        initializer { WorkoutViewModel(HttpExercisesApi(BuildConfig.BASE_URL), sessionId) }
-    }
-)
-
-/**
- * The activity's view model store is shared by every screen, and a view model of another class
- * under the same key would replace this one, so the key names the screen as well as the session.
- */
-internal fun workoutViewModelKey(sessionId: String) = "workout:$sessionId"
 
 @Composable
 fun WorkoutContent(
@@ -166,23 +163,31 @@ fun WorkoutContent(
                 style = MaterialTheme.typography.headlineMedium
             )
         }
-        items(uiState.workoutExercises, key = { it.exercise.id }) { entry ->
-            val exerciseId = entry.exercise.id
-            WorkoutExerciseCard(
-                entry = entry,
-                onRemove = {
-                    if (entry.hasEnteredSets) exerciseIdToConfirmRemoval = exerciseId else onRemoveExercise(exerciseId)
-                },
-                onAddSet = { onAddSet(exerciseId) },
-                onRemoveSet = { onRemoveSet(exerciseId, it) },
-                onToggleCompleted = { onToggleSetCompleted(exerciseId, it) },
-                onWeightChange = { setIndex, weightKg -> onWeightChange(exerciseId, setIndex, weightKg) },
-                onRepsChange = { setIndex, reps -> onRepsChange(exerciseId, setIndex, reps) }
-            )
-        }
-        item {
-            Button(onClick = { showExercisePicker = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.workout_add_exercise))
+        if (uiState.isLoadingWorkout) {
+            item {
+                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            }
+        } else {
+            items(uiState.workoutExercises, key = { it.exercise.id }) { entry ->
+                val exerciseId = entry.exercise.id
+                WorkoutExerciseCard(
+                    entry = entry,
+                    onRemove = {
+                        if (entry.hasEnteredSets) exerciseIdToConfirmRemoval = exerciseId else onRemoveExercise(exerciseId)
+                    },
+                    onAddSet = { onAddSet(exerciseId) },
+                    onRemoveSet = { onRemoveSet(exerciseId, it) },
+                    onToggleCompleted = { onToggleSetCompleted(exerciseId, it) },
+                    onWeightChange = { setIndex, weightKg -> onWeightChange(exerciseId, setIndex, weightKg) },
+                    onRepsChange = { setIndex, reps -> onRepsChange(exerciseId, setIndex, reps) }
+                )
+            }
+            item {
+                Button(onClick = { showExercisePicker = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.workout_add_exercise))
+                }
             }
         }
     }

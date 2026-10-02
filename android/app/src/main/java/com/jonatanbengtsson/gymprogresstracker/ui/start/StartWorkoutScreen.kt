@@ -46,6 +46,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jonatanbengtsson.gymprogresstracker.BuildConfig
 import com.jonatanbengtsson.gymprogresstracker.R
+import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.HttpTemplatesApi
 import com.jonatanbengtsson.gymprogresstracker.data.LatestWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExercise
@@ -61,17 +62,21 @@ import java.time.format.FormatStyle
 fun StartWorkoutScreen(
     sessionId: String,
     onSessionExpired: () -> Unit,
-    workoutInProgress: Boolean,
     onStartNewWorkout: () -> Unit,
     onContinueWorkout: () -> Unit,
-    onDiscardWorkout: () -> Unit,
     onStartFromTemplate: (WorkoutTemplate) -> Unit,
     modifier: Modifier = Modifier,
     // Keyed by session so logging in again doesn't reuse the previous session's view model.
     viewModel: StartWorkoutViewModel = viewModel(
         key = "start-workout:$sessionId",
         factory = viewModelFactory {
-            initializer { StartWorkoutViewModel(HttpTemplatesApi(BuildConfig.BASE_URL), sessionId) }
+            initializer {
+                StartWorkoutViewModel(
+                    HttpTemplatesApi(BuildConfig.BASE_URL),
+                    appContainer.activeWorkoutRepository,
+                    sessionId
+                )
+            }
         }
     )
 ) {
@@ -84,10 +89,9 @@ fun StartWorkoutScreen(
     StartWorkoutContent(
         uiState = uiState,
         onRetry = viewModel::loadTemplates,
-        workoutInProgress = workoutInProgress,
         onStartNewWorkout = onStartNewWorkout,
         onContinueWorkout = onContinueWorkout,
-        onDiscardWorkout = onDiscardWorkout,
+        onDiscardWorkout = viewModel::discardWorkout,
         onStartFromTemplate = onStartFromTemplate,
         modifier = modifier
     )
@@ -97,7 +101,6 @@ fun StartWorkoutScreen(
 fun StartWorkoutContent(
     uiState: StartWorkoutUiState,
     onRetry: () -> Unit,
-    workoutInProgress: Boolean,
     onStartNewWorkout: () -> Unit,
     onContinueWorkout: () -> Unit,
     onDiscardWorkout: () -> Unit,
@@ -117,7 +120,7 @@ fun StartWorkoutContent(
                 style = MaterialTheme.typography.headlineMedium
             )
         }
-        if (workoutInProgress) {
+        if (uiState.workoutInProgress) {
             item {
                 Button(onClick = onContinueWorkout, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.start_workout_continue))
@@ -298,7 +301,6 @@ fun StartWorkoutContentPreview() {
         StartWorkoutContent(
             uiState = StartWorkoutUiState(templates = previewTemplates),
             onRetry = {},
-            workoutInProgress = false,
             onStartNewWorkout = {},
             onContinueWorkout = {},
             onDiscardWorkout = {},
@@ -314,7 +316,6 @@ fun StartWorkoutContentErrorPreview() {
         StartWorkoutContent(
             uiState = StartWorkoutUiState(errorMessage = R.string.start_workout_error_network),
             onRetry = {},
-            workoutInProgress = false,
             onStartNewWorkout = {},
             onContinueWorkout = {},
             onDiscardWorkout = {},

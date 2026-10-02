@@ -75,17 +75,16 @@ class StartWorkoutContentTest {
     private var retryClicks = 0
     private val startedTemplates = mutableListOf<WorkoutTemplate>()
 
-    private fun setContent(uiState: StartWorkoutUiState, workoutInProgress: Boolean = false) {
-        composeRule.setContent { Content(uiState, workoutInProgress) }
+    private fun setContent(uiState: StartWorkoutUiState) {
+        composeRule.setContent { Content(uiState) }
     }
 
     @Composable
-    private fun Content(uiState: StartWorkoutUiState, workoutInProgress: Boolean = false) {
+    private fun Content(uiState: StartWorkoutUiState) {
         GymProgressTrackerTheme {
             StartWorkoutContent(
                 uiState = uiState,
                 onRetry = { retryClicks++ },
-                workoutInProgress = workoutInProgress,
                 onStartNewWorkout = { newWorkoutClicks++ },
                 onContinueWorkout = { continueClicks++ },
                 onDiscardWorkout = { discardClicks++ },
@@ -105,7 +104,7 @@ class StartWorkoutContentTest {
 
     @Test
     fun aWorkoutInProgressCanBeContinuedInsteadOfStartingANewOne() {
-        setContent(StartWorkoutUiState(), workoutInProgress = true)
+        setContent(StartWorkoutUiState(workoutInProgress = true))
 
         composeRule.onNodeWithText(str(R.string.start_workout_new)).assertDoesNotExist()
         composeRule.onNodeWithText(str(R.string.start_workout_continue)).performClick()
@@ -116,7 +115,7 @@ class StartWorkoutContentTest {
 
     @Test
     fun discardingAWorkoutAsksFirst() {
-        setContent(StartWorkoutUiState(), workoutInProgress = true)
+        setContent(StartWorkoutUiState(workoutInProgress = true))
 
         composeRule.onNodeWithText(str(R.string.start_workout_discard)).performClick()
         composeRule.onNodeWithText(str(R.string.start_workout_discard_title)).assertIsDisplayed()
@@ -130,7 +129,7 @@ class StartWorkoutContentTest {
 
     @Test
     fun cancellingTheDiscardKeepsTheWorkout() {
-        setContent(StartWorkoutUiState(), workoutInProgress = true)
+        setContent(StartWorkoutUiState(workoutInProgress = true))
 
         composeRule.onNodeWithText(str(R.string.start_workout_discard)).performClick()
         composeRule.onNodeWithText(str(R.string.start_workout_discard_cancel)).performClick()

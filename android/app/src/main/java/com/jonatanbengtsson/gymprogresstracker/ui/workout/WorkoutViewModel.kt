@@ -7,62 +7,54 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jonatanbengtsson.gymprogresstracker.R
+import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesApi
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesResult
+import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 
-/** A set as typed, kept as text so partial input like "62," survives until it's finished. */
-data class SetEntry(val weightKg: String = "", val reps: String = "", val completed: Boolean = false) {
-    /** A set can only be completed once it has at least one rep. */
-    val canComplete: Boolean get() = (reps.toIntOrNull() ?: 0) > 0
-}
-
-data class WorkoutExerciseEntry(val exercise: Exercise, val sets: List<SetEntry> = listOf(SetEntry())) {
-    val allSetsCompleted: Boolean get() = sets.isNotEmpty() && sets.all { it.completed }
-
-    /** True when any set has a weight, reps or is completed, i.e. removing the exercise would lose input. */
-    val hasEnteredSets: Boolean get() = sets.any { it.weightKg.isNotEmpty() || it.reps.isNotEmpty() || it.completed }
-}
-
 data class WorkoutUiState(
+    /** True until the saved workout has been read from disk. */
+    val isLoadingWorkout: Boolean = false,
     /** The exercises added to the workout, in the order they were added. */
     val workoutExercises: List<WorkoutExerciseEntry> = emptyList(),
     val isLoadingExercises: Boolean = false,
     val exercises: List<Exercise> = emptyList(),
     @StringRes val exercisesErrorMessage: Int? = null,
     val sessionExpired: Boolean = false
-) {
-    /** A workout is in progress once it has an exercise; opening an empty one doesn't count. */
-    val workoutInProgress: Boolean get() = workoutExercises.isNotEmpty()
-}
+)
 
 class WorkoutViewModel(
     private val exercisesApi: ExercisesApi,
+    private val activeWorkoutRepository: ActiveWorkoutRepository,
     private val sessionId: String
 ) : ViewModel() {
 
-    var uiState by mutableStateOf(WorkoutUiState())
+    var uiState by mutableStateOf(WorkoutUiState(isLoadingWorkout = true))
         private set
 
-    // Loaded up front so the list is ready by the time the user adds an exercise.
     init {
+        // viewModelScope runs on Dispatchers.Main.immediate, so an edit reaches uiState before the next
+        // keystroke arrives; the set text fields would drop input otherwise.
+        viewModelScope.launch {
+            activeWorkoutRepository.exercises.filterNotNull().collect { exercises ->
+                uiState = uiState.copy(isLoadingWorkout = false, workoutExercises = exercises)
+            }
+        }
+        // Loaded up front so the list is ready by the time the user adds an exercise.
         loadExercises()
     }
 
     /** Adds [exercise] to the end of the workout with one empty set, unless it's already in it. */
-    fun addExercise(exercise: Exercise) {
-        if (uiState.workoutExercises.any { it.exercise.id == exercise.id }) return
-        uiState = uiState.copy(workoutExercises = uiState.workoutExercises + WorkoutExerciseEntry(exercise))
+    fun addExercise(exercise: Exercise) = activeWorkoutRepository.update { exercises ->
+        if (exercises.any { it.exercise.id == exercise.id }) exercises else exercises + WorkoutExerciseEntry(exercise)
     }
 
-    /** Throws away the workout in progress. The loaded list of exercises to pick from is kept. */
-    fun discardWorkout() {
-        uiState = uiState.copy(workoutExercises = emptyList())
-    }
-
-    fun removeExercise(exerciseId: Long) {
-        uiState = uiState.copy(workoutExercises = uiState.workoutExercises.filter { it.exercise.id != exerciseId })
+    fun removeExercise(exerciseId: Long) = activeWorkoutRepository.update { exercises ->
+        exercises.filter { it.exercise.id != exerciseId }
     }
 
     /** Adds an uncompleted set to the exercise, prefilled with its last set's weight and reps. */
@@ -99,13 +91,12 @@ class WorkoutViewModel(
             sets.mapIndexed { index, set -> if (index == setIndex) transform(set) else set }
         }
 
-    private fun updateSets(exerciseId: Long, transform: (List<SetEntry>) -> List<SetEntry>) {
-        uiState = uiState.copy(
-            workoutExercises = uiState.workoutExercises.map { entry ->
+    private fun updateSets(exerciseId: Long, transform: (List<SetEntry>) -> List<SetEntry>) =
+        activeWorkoutRepository.update { exercises ->
+            exercises.map { entry ->
                 if (entry.exercise.id == exerciseId) entry.copy(sets = transform(entry.sets)) else entry
             }
-        )
-    }
+        }
 
     fun loadExercises() {
         if (uiState.isLoadingExercises) return

@@ -35,6 +35,11 @@ class MainActivity : ComponentActivity() {
                         )
                     } else if (inWorkout) {
                         WorkoutScreen(
+                            sessionId = currentSessionId,
+                            onSessionExpired = {
+                                inWorkout = false
+                                sessionId = null
+                            },
                             onBack = { inWorkout = false },
                             modifier = Modifier.padding(innerPadding)
                         )

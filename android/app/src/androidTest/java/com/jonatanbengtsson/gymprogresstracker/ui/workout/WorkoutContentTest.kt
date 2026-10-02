@@ -2,11 +2,20 @@ package com.jonatanbengtsson.gymprogresstracker.ui.workout
 
 import androidx.annotation.StringRes
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.test.and
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasProgressBarRangeInfo
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.jonatanbengtsson.gymprogresstracker.R
@@ -70,6 +79,55 @@ class WorkoutContentTest {
 
         assertEquals(listOf(squat), selectedExercises)
         composeRule.onNodeWithText(str(R.string.workout_choose_exercise)).assertDoesNotExist()
+    }
+
+    @Test
+    fun backArrowClosesThePickerWithoutChoosing() {
+        setContent(WorkoutUiState(exercises = listOf(benchPress, squat)))
+        openExercisePicker()
+
+        composeRule.onNodeWithContentDescription(str(R.string.workout_picker_back)).performClick()
+
+        composeRule.onNodeWithText(str(R.string.workout_choose_exercise)).assertDoesNotExist()
+        composeRule.onNodeWithText(str(R.string.workout_add_exercise)).assertIsDisplayed()
+        assertEquals(emptyList<Exercise>(), selectedExercises)
+    }
+
+    @Test
+    fun systemBackClosesThePickerWithoutChoosing() {
+        setContent(WorkoutUiState(exercises = listOf(benchPress, squat)))
+        openExercisePicker()
+
+        Espresso.pressBack()
+
+        composeRule.onNodeWithText(str(R.string.workout_choose_exercise)).assertDoesNotExist()
+        composeRule.onNodeWithText(str(R.string.workout_add_exercise)).assertIsDisplayed()
+        assertEquals(emptyList<Exercise>(), selectedExercises)
+    }
+
+    @Test
+    fun addedExercisesAreShownInTheWorkout() {
+        setContent(WorkoutUiState(workoutExercises = listOf(squat, benchPress), exercises = listOf(benchPress, squat)))
+
+        composeRule.onNodeWithText("Squat (Barbell)").assertIsDisplayed()
+        composeRule.onNodeWithText("Bench Press (Barbell)").assertIsDisplayed()
+        composeRule.onNodeWithText(str(R.string.workout_add_exercise)).assertIsDisplayed()
+    }
+
+    @Test
+    fun exercisesAlreadyInTheWorkoutCannotBePickedAgain() {
+        setContent(WorkoutUiState(workoutExercises = listOf(squat), exercises = listOf(benchPress, squat)))
+        openExercisePicker()
+
+        val pickerSquat = composeRule.onNode(hasText("Squat (Barbell)") and hasClickAction())
+        pickerSquat.assertIsNotEnabled()
+        pickerSquat.assert(hasContentDescription(str(R.string.workout_exercise_added)))
+        composeRule.onNode(hasText("Bench Press (Barbell)") and hasClickAction()).assertIsEnabled()
+
+        pickerSquat.performClick()
+
+        assertEquals(emptyList<Exercise>(), selectedExercises)
+        composeRule.onNodeWithText(str(R.string.workout_choose_exercise)).assertIsDisplayed()
     }
 
     @Test

@@ -22,6 +22,8 @@
     <string name="workout_title">New workout</string>
     <string name="workout_add_exercise">Add exercise</string>
     <string name="workout_choose_exercise">Choose an exercise</string>
+    <string name="workout_exercise_added">Added</string>
+    <string name="workout_picker_back">Back to workout</string>
     <string name="workout_exercises_error_network">Could not load exercises. Check your connection and try again.</string>
     <string name="workout_exercises_error_server">Something went wrong loading exercises.</string>
     <string name="workout_exercises_retry">Try again</string>

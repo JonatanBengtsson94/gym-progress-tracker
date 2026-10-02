@@ -89,6 +89,35 @@ class WorkoutViewModelTest {
         assertEquals(listOf("session-123", "session-123"), exercisesApi.calls)
     }
 
+    @Test
+    fun `added exercises are kept in the order they were added`() {
+        viewModel.addExercise(squat)
+        viewModel.addExercise(benchPress)
+
+        assertEquals(listOf(squat, benchPress), viewModel.uiState.workoutExercises)
+    }
+
+    @Test
+    fun `adding an exercise that is already in the workout is ignored`() {
+        viewModel.addExercise(squat)
+        viewModel.addExercise(benchPress)
+        viewModel.addExercise(squat)
+
+        assertEquals(listOf(squat, benchPress), viewModel.uiState.workoutExercises)
+    }
+
+    @Test
+    fun `added exercises survive reloading the exercise list`() {
+        viewModel.addExercise(squat)
+        exercisesApi.response.complete(ExercisesResult.NetworkError)
+        exercisesApi.response = CompletableDeferred()
+
+        viewModel.loadExercises()
+        exercisesApi.response.complete(ExercisesResult.Success(listOf(benchPress, squat)))
+
+        assertEquals(listOf(squat), viewModel.uiState.workoutExercises)
+    }
+
     private fun assertErrorFor(result: ExercisesResult, expectedMessage: Int) {
         viewModel
         exercisesApi.response.complete(result)

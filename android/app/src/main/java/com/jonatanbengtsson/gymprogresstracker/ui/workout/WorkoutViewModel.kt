@@ -13,6 +13,8 @@ import com.jonatanbengtsson.gymprogresstracker.data.ExercisesResult
 import kotlinx.coroutines.launch
 
 data class WorkoutUiState(
+    /** The exercises added to the workout, in the order they were added. */
+    val workoutExercises: List<Exercise> = emptyList(),
     val isLoadingExercises: Boolean = false,
     val exercises: List<Exercise> = emptyList(),
     @StringRes val exercisesErrorMessage: Int? = null,
@@ -30,6 +32,12 @@ class WorkoutViewModel(
     // Loaded up front so the list is ready by the time the user adds an exercise.
     init {
         loadExercises()
+    }
+
+    /** Adds [exercise] to the end of the workout, unless it's already in it. */
+    fun addExercise(exercise: Exercise) {
+        if (uiState.workoutExercises.any { it.id == exercise.id }) return
+        uiState = uiState.copy(workoutExercises = uiState.workoutExercises + exercise)
     }
 
     fun loadExercises() {

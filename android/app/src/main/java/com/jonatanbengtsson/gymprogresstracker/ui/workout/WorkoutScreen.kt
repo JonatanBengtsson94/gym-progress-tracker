@@ -6,16 +6,23 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,8 +70,7 @@ fun WorkoutScreen(
     WorkoutContent(
         uiState = uiState,
         onRetryExercises = viewModel::loadExercises,
-        // TODO: add the chosen exercise to the workout.
-        onExerciseSelected = {},
+        onExerciseSelected = viewModel::addExercise,
         modifier = modifier
     )
 }
@@ -78,50 +84,80 @@ fun WorkoutContent(
 ) {
     var showExercisePicker by rememberSaveable { mutableStateOf(false) }
 
-    Column(
-        modifier = modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.workout_title),
-            style = MaterialTheme.typography.headlineMedium
-        )
-        Button(onClick = { showExercisePicker = true }, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.workout_add_exercise))
-        }
-    }
-
     if (showExercisePicker) {
-        ExercisePickerSheet(
+        // Composed after WorkoutScreen's BackHandler, so system back closes the picker first.
+        BackHandler { showExercisePicker = false }
+        ExercisePicker(
             uiState = uiState,
             onRetry = onRetryExercises,
             onExerciseSelected = {
                 showExercisePicker = false
                 onExerciseSelected(it)
             },
-            onDismiss = { showExercisePicker = false }
+            onBack = { showExercisePicker = false },
+            modifier = modifier
         )
+        return
+    }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text(
+                text = stringResource(R.string.workout_title),
+                style = MaterialTheme.typography.headlineMedium
+            )
+        }
+        items(uiState.workoutExercises, key = { it.id }) { exercise ->
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = exercise.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+        }
+        item {
+            Button(onClick = { showExercisePicker = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.workout_add_exercise))
+            }
+        }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ExercisePickerSheet(
+private fun ExercisePicker(
     uiState: WorkoutUiState,
     onRetry: () -> Unit,
     onExerciseSelected: (Exercise) -> Unit,
-    onDismiss: () -> Unit
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
-            item {
-                Text(
-                    text = stringResource(R.string.workout_choose_exercise),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+    Column(modifier = modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.workout_picker_back)
                 )
             }
+            Text(
+                text = stringResource(R.string.workout_choose_exercise),
+                style = MaterialTheme.typography.titleLarge
+            )
+        }
+        HorizontalDivider()
 
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(vertical = 8.dp)
+        ) {
             when {
                 uiState.isLoadingExercises -> item {
                     Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
@@ -145,16 +181,47 @@ private fun ExercisePickerSheet(
                     }
                 }
                 else -> items(uiState.exercises, key = { it.id }) { exercise ->
-                    Text(
-                        text = exercise.name,
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onExerciseSelected(exercise) }
-                            .padding(horizontal = 24.dp, vertical = 12.dp)
+                    ExercisePickerRow(
+                        exercise = exercise,
+                        added = uiState.workoutExercises.any { it.id == exercise.id },
+                        onClick = { onExerciseSelected(exercise) }
                     )
                 }
             }
+        }
+    }
+}
+
+/** Exercises already in the workout stay in place but are greyed out and can't be picked again. */
+@Composable
+private fun ExercisePickerRow(exercise: Exercise, added: Boolean, onClick: () -> Unit) {
+    // Material's standard opacity for disabled content.
+    val contentColor = if (added) {
+        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = !added, onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = exercise.name,
+            style = MaterialTheme.typography.bodyLarge,
+            color = contentColor,
+            modifier = Modifier.weight(1f)
+        )
+        if (added) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = stringResource(R.string.workout_exercise_added),
+                tint = contentColor,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
@@ -165,6 +232,7 @@ fun WorkoutContentPreview() {
     GymProgressTrackerTheme {
         WorkoutContent(
             uiState = WorkoutUiState(
+                workoutExercises = listOf(Exercise(1, "Bench Press (Barbell)")),
                 exercises = listOf(Exercise(1, "Bench Press (Barbell)"), Exercise(2, "Squat (Barbell)"))
             ),
             onRetryExercises = {},

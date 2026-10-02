@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import com.jonatanbengtsson.gymprogresstracker.ui.login.LoginScreen
 import com.jonatanbengtsson.gymprogresstracker.ui.start.StartWorkoutScreen
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
+import com.jonatanbengtsson.gymprogresstracker.ui.workout.WorkoutScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,6 +24,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             GymProgressTrackerTheme {
                 var sessionId by rememberSaveable { mutableStateOf<String?>(null) }
+                var inWorkout by rememberSaveable { mutableStateOf(false) }
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     val currentSessionId = sessionId
@@ -31,12 +33,17 @@ class MainActivity : ComponentActivity() {
                             onLoggedIn = { sessionId = it },
                             modifier = Modifier.padding(innerPadding)
                         )
+                    } else if (inWorkout) {
+                        WorkoutScreen(
+                            onBack = { inWorkout = false },
+                            modifier = Modifier.padding(innerPadding)
+                        )
                     } else {
                         StartWorkoutScreen(
                             sessionId = currentSessionId,
                             onSessionExpired = { sessionId = null },
-                            // TODO: open the workout screen once it exists.
-                            onStartNewWorkout = {},
+                            onStartNewWorkout = { inWorkout = true },
+                            // TODO: open the workout screen prefilled from the template.
                             onStartFromTemplate = {},
                             modifier = Modifier.padding(innerPadding)
                         )

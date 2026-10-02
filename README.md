@@ -4,11 +4,13 @@ An easy way to keep track of progression in the gym.
 
 ## Local Development
 
-### Requirements
-- Docker
-- Go 1.27
-
 ### Backend
+
+#### Requirements
+- Docker
+- Go 1.27 (only for running the tests; the backend itself runs in Docker)
+
+#### Setup
 Create `docker/.env`:
 
     DB_USER=gym
@@ -56,7 +58,7 @@ From `backend/`, with Docker running (tests start their own Postgres container):
 The app lives in `android/` and needs a device or emulator running Android 16 (API 36) or newer.
 
 #### Requirements
-- Android Studio (or a JDK and the Android SDK)
+- Android Studio, or JDK 25 and the Android SDK
 
 #### Backend URL
 Debug builds talk to `http://10.0.2.2:8080`, which is the host machine as seen from the emulator. To use a physical device, point it at your machine's LAN address in `android/local.properties`:

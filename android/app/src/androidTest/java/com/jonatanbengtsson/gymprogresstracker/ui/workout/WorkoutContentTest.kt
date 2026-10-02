@@ -2,7 +2,6 @@ package com.jonatanbengtsson.gymprogresstracker.ui.workout
 
 import androidx.annotation.StringRes
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
-import androidx.compose.ui.test.and
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled

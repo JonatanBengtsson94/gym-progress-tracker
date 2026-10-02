@@ -26,6 +26,11 @@
     <string name="workout_picker_back">Back to workout</string>
     <string name="workout_search_exercises">Search exercises</string>
     <string name="workout_search_clear">Clear search</string>
+    <string name="workout_remove_exercise">Remove %1$s</string>
+    <string name="workout_remove_exercise_title">Remove %1$s?</string>
+    <string name="workout_remove_exercise_text">The sets you have logged for it will be removed too.</string>
+    <string name="workout_remove_exercise_confirm">Remove</string>
+    <string name="workout_remove_exercise_cancel">Cancel</string>
     <string name="workout_set_number">Set</string>
     <string name="workout_set_weight">kg</string>
     <string name="workout_set_reps">Reps</string>

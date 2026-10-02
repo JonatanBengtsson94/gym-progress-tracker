@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -100,6 +101,7 @@ fun WorkoutScreen(
         uiState = uiState,
         onRetryExercises = viewModel::loadExercises,
         onExerciseSelected = viewModel::addExercise,
+        onRemoveExercise = viewModel::removeExercise,
         onAddSet = viewModel::addSet,
         onRemoveSet = viewModel::removeSet,
         onToggleSetCompleted = viewModel::toggleSetCompleted,
@@ -114,6 +116,7 @@ fun WorkoutContent(
     uiState: WorkoutUiState,
     onRetryExercises: () -> Unit,
     onExerciseSelected: (Exercise) -> Unit,
+    onRemoveExercise: (exerciseId: Long) -> Unit,
     onAddSet: (exerciseId: Long) -> Unit,
     onRemoveSet: (exerciseId: Long, setIndex: Int) -> Unit,
     onToggleSetCompleted: (exerciseId: Long, setIndex: Int) -> Unit,
@@ -122,6 +125,7 @@ fun WorkoutContent(
     modifier: Modifier = Modifier
 ) {
     var showExercisePicker by rememberSaveable { mutableStateOf(false) }
+    var exerciseIdToConfirmRemoval by rememberSaveable { mutableStateOf<Long?>(null) }
 
     if (showExercisePicker) {
         // Composed after WorkoutScreen's BackHandler, so system back closes the picker first.
@@ -154,6 +158,9 @@ fun WorkoutContent(
             val exerciseId = entry.exercise.id
             WorkoutExerciseCard(
                 entry = entry,
+                onRemove = {
+                    if (entry.hasEnteredSets) exerciseIdToConfirmRemoval = exerciseId else onRemoveExercise(exerciseId)
+                },
                 onAddSet = { onAddSet(exerciseId) },
                 onRemoveSet = { onRemoveSet(exerciseId, it) },
                 onToggleCompleted = { onToggleSetCompleted(exerciseId, it) },
@@ -167,11 +174,33 @@ fun WorkoutContent(
             }
         }
     }
+
+    uiState.workoutExercises.find { it.exercise.id == exerciseIdToConfirmRemoval }?.let { entry ->
+        AlertDialog(
+            onDismissRequest = { exerciseIdToConfirmRemoval = null },
+            title = { Text(stringResource(R.string.workout_remove_exercise_title, entry.exercise.name)) },
+            text = { Text(stringResource(R.string.workout_remove_exercise_text)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    exerciseIdToConfirmRemoval = null
+                    onRemoveExercise(entry.exercise.id)
+                }) {
+                    Text(stringResource(R.string.workout_remove_exercise_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { exerciseIdToConfirmRemoval = null }) {
+                    Text(stringResource(R.string.workout_remove_exercise_cancel))
+                }
+            }
+        )
+    }
 }
 
 @Composable
 private fun WorkoutExerciseCard(
     entry: WorkoutExerciseEntry,
+    onRemove: () -> Unit,
     onAddSet: () -> Unit,
     onRemoveSet: (setIndex: Int) -> Unit,
     onToggleCompleted: (setIndex: Int) -> Unit,
@@ -190,8 +219,20 @@ private fun WorkoutExerciseCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = containerColor, contentColor = contentColor)
     ) {
-        Column(modifier = Modifier.padding(start = 16.dp, top = 16.dp, end = 4.dp, bottom = 4.dp)) {
-            Text(text = entry.exercise.name, style = MaterialTheme.typography.titleMedium)
+        Column(modifier = Modifier.padding(start = 16.dp, top = 4.dp, end = 4.dp, bottom = 4.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = entry.exercise.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = onRemove) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.workout_remove_exercise, entry.exercise.name)
+                    )
+                }
+            }
             if (entry.sets.isNotEmpty()) {
                 Row(
                     modifier = Modifier.padding(top = 8.dp),
@@ -230,6 +271,7 @@ private fun WorkoutExerciseCard(
                             onValueChange = { onWeightChange(index, it) },
                             keyboardType = KeyboardType.Decimal,
                             description = stringResource(R.string.workout_set_weight_description, setNumber),
+                            completed = set.completed,
                             modifier = Modifier.weight(1f)
                         )
                         SetField(
@@ -237,6 +279,7 @@ private fun WorkoutExerciseCard(
                             onValueChange = { onRepsChange(index, it) },
                             keyboardType = KeyboardType.Number,
                             description = stringResource(R.string.workout_set_reps_description, setNumber),
+                            completed = set.completed,
                             modifier = Modifier.weight(1f)
                         )
                         Row {
@@ -304,17 +347,24 @@ private fun SetField(
     onValueChange: (String) -> Unit,
     keyboardType: KeyboardType,
     description: String,
+    completed: Boolean,
     modifier: Modifier
 ) {
+    val surface = MaterialTheme.colorScheme.surface
+    val backgroundColor by animateColorAsState(if (completed) surface.copy(alpha = 0f) else surface)
+    val textColor by animateColorAsState(
+        if (completed) LocalContentColor.current else MaterialTheme.colorScheme.onSurface
+    )
+
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier
             .height(40.dp)
-            .background(MaterialTheme.colorScheme.surface, MaterialTheme.shapes.small)
+            .background(backgroundColor, MaterialTheme.shapes.small)
             .semantics { contentDescription = description },
         textStyle = MaterialTheme.typography.bodyLarge.copy(
-            color = MaterialTheme.colorScheme.onSurface,
+            color = textColor,
             textAlign = TextAlign.Center
         ),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Next),
@@ -481,6 +531,7 @@ fun WorkoutContentPreview() {
             ),
             onRetryExercises = {},
             onExerciseSelected = {},
+            onRemoveExercise = {},
             onAddSet = {},
             onRemoveSet = { _, _ -> },
             onToggleSetCompleted = { _, _ -> },

@@ -20,6 +20,9 @@ data class SetEntry(val weightKg: String = "", val reps: String = "", val comple
 
 data class WorkoutExerciseEntry(val exercise: Exercise, val sets: List<SetEntry> = listOf(SetEntry())) {
     val allSetsCompleted: Boolean get() = sets.isNotEmpty() && sets.all { it.completed }
+
+    /** True when any set has a weight, reps or is completed, i.e. removing the exercise would lose input. */
+    val hasEnteredSets: Boolean get() = sets.any { it.weightKg.isNotEmpty() || it.reps.isNotEmpty() || it.completed }
 }
 
 data class WorkoutUiState(
@@ -48,6 +51,10 @@ class WorkoutViewModel(
     fun addExercise(exercise: Exercise) {
         if (uiState.workoutExercises.any { it.exercise.id == exercise.id }) return
         uiState = uiState.copy(workoutExercises = uiState.workoutExercises + WorkoutExerciseEntry(exercise))
+    }
+
+    fun removeExercise(exerciseId: Long) {
+        uiState = uiState.copy(workoutExercises = uiState.workoutExercises.filter { it.exercise.id != exerciseId })
     }
 
     /** Adds an uncompleted set to the exercise, prefilled with its last set's weight and reps. */

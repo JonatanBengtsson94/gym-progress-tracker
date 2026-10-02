@@ -29,6 +29,7 @@ class WorkoutViewModelTest {
     }
 
     private val benchPress = Exercise(2, "Bench Press (Barbell)")
+    private val deadlift = Exercise(3, "Deadlift")
     private val squat = Exercise(1, "Squat (Barbell)")
 
     private val exercisesApi = FakeExercisesApi()
@@ -118,6 +119,36 @@ class WorkoutViewModelTest {
         exercisesApi.response.complete(ExercisesResult.Success(listOf(benchPress, squat)))
 
         assertEquals(listOf(squat), workoutExercises())
+    }
+
+    @Test
+    fun `removing an exercise keeps the others in order`() {
+        viewModel.addExercise(squat)
+        viewModel.addExercise(benchPress)
+        viewModel.addExercise(deadlift)
+
+        viewModel.removeExercise(benchPress.id)
+
+        assertEquals(listOf(squat, deadlift), workoutExercises())
+    }
+
+    @Test
+    fun `a removed exercise can be added again, starting over`() {
+        viewModel.addExercise(squat)
+        viewModel.updateReps(squat.id, 0, "5")
+        viewModel.removeExercise(squat.id)
+
+        viewModel.addExercise(squat)
+
+        assertEquals(listOf(SetEntry()), setsOf(squat))
+    }
+
+    @Test
+    fun `an exercise has entered sets once any set has a value or is completed`() {
+        assertFalse(WorkoutExerciseEntry(squat).hasEnteredSets)
+        assertFalse(WorkoutExerciseEntry(squat, emptyList()).hasEnteredSets)
+        assertTrue(WorkoutExerciseEntry(squat, listOf(SetEntry(), SetEntry(weightKg = "60"))).hasEnteredSets)
+        assertTrue(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5"))).hasEnteredSets)
     }
 
     @Test

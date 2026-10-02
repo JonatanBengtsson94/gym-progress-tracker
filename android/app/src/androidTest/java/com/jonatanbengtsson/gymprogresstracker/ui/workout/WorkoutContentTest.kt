@@ -49,6 +49,7 @@ class WorkoutContentTest {
                     uiState = uiState,
                     onRetryExercises = { retryClicks++ },
                     onExerciseSelected = { selectedExercises += it },
+                    onRemoveExercise = { setEvents += "remove exercise $it" },
                     onAddSet = { setEvents += "add $it" },
                     onRemoveSet = { id, index -> setEvents += "remove $id $index" },
                     onToggleSetCompleted = { id, index -> setEvents += "complete $id $index" },
@@ -256,6 +257,42 @@ class WorkoutContentTest {
         setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat))))
 
         composeRule.onNodeWithContentDescription(str(R.string.workout_complete_set, 1)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun removingAnExerciseWithoutEnteredSetsDoesNotAsk() {
+        setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat))))
+
+        composeRule.onNodeWithContentDescription(str(R.string.workout_remove_exercise, squat.name)).performClick()
+
+        assertEquals(listOf("remove exercise ${squat.id}"), setEvents)
+        composeRule.onNodeWithText(str(R.string.workout_remove_exercise_title, squat.name)).assertDoesNotExist()
+    }
+
+    @Test
+    fun removingAnExerciseWithEnteredSetsAsksFirst() {
+        setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5"))))))
+
+        composeRule.onNodeWithContentDescription(str(R.string.workout_remove_exercise, squat.name)).performClick()
+
+        composeRule.onNodeWithText(str(R.string.workout_remove_exercise_title, squat.name)).assertIsDisplayed()
+        assertEquals(emptyList<String>(), setEvents)
+
+        composeRule.onNodeWithText(str(R.string.workout_remove_exercise_confirm)).performClick()
+
+        assertEquals(listOf("remove exercise ${squat.id}"), setEvents)
+        composeRule.onNodeWithText(str(R.string.workout_remove_exercise_title, squat.name)).assertDoesNotExist()
+    }
+
+    @Test
+    fun cancellingTheRemovalKeepsTheExercise() {
+        setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5"))))))
+
+        composeRule.onNodeWithContentDescription(str(R.string.workout_remove_exercise, squat.name)).performClick()
+        composeRule.onNodeWithText(str(R.string.workout_remove_exercise_cancel)).performClick()
+
+        assertEquals(emptyList<String>(), setEvents)
+        composeRule.onNodeWithText(str(R.string.workout_remove_exercise_title, squat.name)).assertDoesNotExist()
     }
 
     @Test

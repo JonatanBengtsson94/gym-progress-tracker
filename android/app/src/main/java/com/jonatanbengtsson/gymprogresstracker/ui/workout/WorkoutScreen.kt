@@ -230,8 +230,10 @@ private fun WorkoutExerciseCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = containerColor, contentColor = contentColor)
     ) {
-        Column(modifier = Modifier.padding(start = 16.dp, top = 4.dp, end = 4.dp, bottom = 4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        // Each row pads itself, so a completed set's colour reaches the edges of the card.
+        val rowPadding = PaddingValues(start = 16.dp, end = 4.dp)
+        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+            Row(modifier = Modifier.padding(rowPadding), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = entry.exercise.name,
                     style = MaterialTheme.typography.titleMedium,
@@ -246,7 +248,7 @@ private fun WorkoutExerciseCard(
             }
             if (entry.sets.isNotEmpty()) {
                 Row(
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(rowPadding).padding(top = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     SetColumnHeader(stringResource(R.string.workout_set_number), Modifier.width(SET_NUMBER_WIDTH))
@@ -265,10 +267,10 @@ private fun WorkoutExerciseCard(
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         color = rowColor,
-                        contentColor = if (set.completed) MaterialTheme.colorScheme.onPrimaryContainer else LocalContentColor.current,
-                        shape = MaterialTheme.shapes.small
+                        contentColor = if (set.completed) MaterialTheme.colorScheme.onPrimaryContainer else LocalContentColor.current
                     ) {
                         Row(
+                            modifier = Modifier.padding(rowPadding),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -324,8 +326,7 @@ private fun WorkoutExerciseCard(
             }
             TextButton(
                 onClick = onAddSet,
-                // Evens out the card's 16dp start and 4dp end padding so the button is centred in the card.
-                modifier = Modifier.align(Alignment.CenterHorizontally).padding(end = 12.dp)
+                modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Add,

@@ -46,13 +46,13 @@ func TestExerciseRepository_GetGlobalExercises(t *testing.T) {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
 
-	if len(exercises) != 17 {
-		t.Errorf("Expected 17 exercises got: %d", len(exercises))
+	if len(exercises) != 22 {
+		t.Errorf("Expected 22 exercises got: %d", len(exercises))
 	}
 
 	expectedNames := []string{
 		"Bench Press (Barbell)",
-		"Squat",
+		"Squat (Barbell)",
 	}
 
 	for _, expected := range expectedNames {
@@ -81,13 +81,13 @@ func TestExerciseRepository_GetUserExercises(t *testing.T) {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
 
-	if len(exercises) != 18 {
-		t.Errorf("Expected 18 exercises got: %d", len(exercises))
+	if len(exercises) != 23 {
+		t.Errorf("Expected 23 exercises got: %d", len(exercises))
 	}
 
 	expectedNames := []string{
 		"Bench Press (Barbell)",
-		"Squat",
+		"Squat (Barbell)",
 		"Custom Test Exercise",
 	}
 

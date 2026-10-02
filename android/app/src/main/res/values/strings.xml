@@ -8,6 +8,12 @@
     <string name="login_error_server">Something went wrong. Please try again.</string>
     <string name="start_workout_title">Start a workout</string>
     <string name="start_workout_new">Start without a template</string>
+    <string name="start_workout_continue">Continue workout</string>
+    <string name="start_workout_discard">Discard workout</string>
+    <string name="start_workout_discard_title">Discard workout?</string>
+    <string name="start_workout_discard_text">The exercises and sets you have entered will be lost.</string>
+    <string name="start_workout_discard_confirm">Discard</string>
+    <string name="start_workout_discard_cancel">Cancel</string>
     <string name="start_workout_from_template">From a template</string>
     <string name="start_workout_last_performed">Last performed %1$s</string>
     <string name="start_workout_never_performed">Not performed yet</string>

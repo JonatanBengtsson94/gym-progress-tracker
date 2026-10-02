@@ -17,13 +17,16 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,12 +61,15 @@ import java.time.format.FormatStyle
 fun StartWorkoutScreen(
     sessionId: String,
     onSessionExpired: () -> Unit,
+    workoutInProgress: Boolean,
     onStartNewWorkout: () -> Unit,
+    onContinueWorkout: () -> Unit,
+    onDiscardWorkout: () -> Unit,
     onStartFromTemplate: (WorkoutTemplate) -> Unit,
     modifier: Modifier = Modifier,
     // Keyed by session so logging in again doesn't reuse the previous session's view model.
     viewModel: StartWorkoutViewModel = viewModel(
-        key = sessionId,
+        key = "start-workout:$sessionId",
         factory = viewModelFactory {
             initializer { StartWorkoutViewModel(HttpTemplatesApi(BuildConfig.BASE_URL), sessionId) }
         }
@@ -78,7 +84,10 @@ fun StartWorkoutScreen(
     StartWorkoutContent(
         uiState = uiState,
         onRetry = viewModel::loadTemplates,
+        workoutInProgress = workoutInProgress,
         onStartNewWorkout = onStartNewWorkout,
+        onContinueWorkout = onContinueWorkout,
+        onDiscardWorkout = onDiscardWorkout,
         onStartFromTemplate = onStartFromTemplate,
         modifier = modifier
     )
@@ -88,10 +97,15 @@ fun StartWorkoutScreen(
 fun StartWorkoutContent(
     uiState: StartWorkoutUiState,
     onRetry: () -> Unit,
+    workoutInProgress: Boolean,
     onStartNewWorkout: () -> Unit,
+    onContinueWorkout: () -> Unit,
+    onDiscardWorkout: () -> Unit,
     onStartFromTemplate: (WorkoutTemplate) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var confirmDiscard by rememberSaveable { mutableStateOf(false) }
+
     LazyColumn(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(24.dp),
@@ -103,9 +117,26 @@ fun StartWorkoutContent(
                 style = MaterialTheme.typography.headlineMedium
             )
         }
-        item {
-            Button(onClick = onStartNewWorkout, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.start_workout_new))
+        if (workoutInProgress) {
+            item {
+                Button(onClick = onContinueWorkout, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.start_workout_continue))
+                }
+            }
+            item {
+                TextButton(
+                    onClick = { confirmDiscard = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(stringResource(R.string.start_workout_discard))
+                }
+            }
+        } else {
+            item {
+                Button(onClick = onStartNewWorkout, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.start_workout_new))
+                }
             }
         }
         item {
@@ -152,6 +183,27 @@ fun StartWorkoutContent(
                 }
             }
         }
+    }
+
+    if (confirmDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text(stringResource(R.string.start_workout_discard_title)) },
+            text = { Text(stringResource(R.string.start_workout_discard_text)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmDiscard = false
+                    onDiscardWorkout()
+                }) {
+                    Text(stringResource(R.string.start_workout_discard_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDiscard = false }) {
+                    Text(stringResource(R.string.start_workout_discard_cancel))
+                }
+            }
+        )
     }
 }
 
@@ -246,7 +298,10 @@ fun StartWorkoutContentPreview() {
         StartWorkoutContent(
             uiState = StartWorkoutUiState(templates = previewTemplates),
             onRetry = {},
+            workoutInProgress = false,
             onStartNewWorkout = {},
+            onContinueWorkout = {},
+            onDiscardWorkout = {},
             onStartFromTemplate = {}
         )
     }
@@ -259,7 +314,10 @@ fun StartWorkoutContentErrorPreview() {
         StartWorkoutContent(
             uiState = StartWorkoutUiState(errorMessage = R.string.start_workout_error_network),
             onRetry = {},
+            workoutInProgress = false,
             onStartNewWorkout = {},
+            onContinueWorkout = {},
+            onDiscardWorkout = {},
             onStartFromTemplate = {}
         )
     }

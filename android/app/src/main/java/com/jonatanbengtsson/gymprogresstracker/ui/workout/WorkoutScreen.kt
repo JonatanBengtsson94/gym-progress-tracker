@@ -81,13 +81,7 @@ fun WorkoutScreen(
     onSessionExpired: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    // Keyed by session so logging in again doesn't reuse the previous session's view model.
-    viewModel: WorkoutViewModel = viewModel(
-        key = sessionId,
-        factory = viewModelFactory {
-            initializer { WorkoutViewModel(HttpExercisesApi(BuildConfig.BASE_URL), sessionId) }
-        }
-    )
+    viewModel: WorkoutViewModel = workoutViewModel(sessionId)
 ) {
     BackHandler(onBack = onBack)
 
@@ -110,6 +104,24 @@ fun WorkoutScreen(
         modifier = modifier
     )
 }
+
+/**
+ * The workout of [sessionId], shared by every screen that asks for it, so the start screen can
+ * tell whether a workout is in progress. Keyed by session so logging in again starts afresh.
+ */
+@Composable
+fun workoutViewModel(sessionId: String): WorkoutViewModel = viewModel(
+    key = workoutViewModelKey(sessionId),
+    factory = viewModelFactory {
+        initializer { WorkoutViewModel(HttpExercisesApi(BuildConfig.BASE_URL), sessionId) }
+    }
+)
+
+/**
+ * The activity's view model store is shared by every screen, and a view model of another class
+ * under the same key would replace this one, so the key names the screen as well as the session.
+ */
+internal fun workoutViewModelKey(sessionId: String) = "workout:$sessionId"
 
 @Composable
 fun WorkoutContent(

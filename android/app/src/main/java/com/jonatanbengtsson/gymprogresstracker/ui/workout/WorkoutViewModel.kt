@@ -32,7 +32,10 @@ data class WorkoutUiState(
     val exercises: List<Exercise> = emptyList(),
     @StringRes val exercisesErrorMessage: Int? = null,
     val sessionExpired: Boolean = false
-)
+) {
+    /** A workout is in progress once it has an exercise; opening an empty one doesn't count. */
+    val workoutInProgress: Boolean get() = workoutExercises.isNotEmpty()
+}
 
 class WorkoutViewModel(
     private val exercisesApi: ExercisesApi,
@@ -51,6 +54,11 @@ class WorkoutViewModel(
     fun addExercise(exercise: Exercise) {
         if (uiState.workoutExercises.any { it.exercise.id == exercise.id }) return
         uiState = uiState.copy(workoutExercises = uiState.workoutExercises + WorkoutExerciseEntry(exercise))
+    }
+
+    /** Throws away the workout in progress. The loaded list of exercises to pick from is kept. */
+    fun discardWorkout() {
+        uiState = uiState.copy(workoutExercises = emptyList())
     }
 
     fun removeExercise(exerciseId: Long) {

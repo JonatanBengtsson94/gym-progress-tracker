@@ -16,6 +16,7 @@ import com.jonatanbengtsson.gymprogresstracker.ui.login.LoginScreen
 import com.jonatanbengtsson.gymprogresstracker.ui.start.StartWorkoutScreen
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
 import com.jonatanbengtsson.gymprogresstracker.ui.workout.WorkoutScreen
+import com.jonatanbengtsson.gymprogresstracker.ui.workout.workoutViewModel
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,25 +34,32 @@ class MainActivity : ComponentActivity() {
                             onLoggedIn = { sessionId = it },
                             modifier = Modifier.padding(innerPadding)
                         )
-                    } else if (inWorkout) {
-                        WorkoutScreen(
-                            sessionId = currentSessionId,
-                            onSessionExpired = {
-                                inWorkout = false
-                                sessionId = null
-                            },
-                            onBack = { inWorkout = false },
-                            modifier = Modifier.padding(innerPadding)
-                        )
                     } else {
-                        StartWorkoutScreen(
-                            sessionId = currentSessionId,
-                            onSessionExpired = { sessionId = null },
-                            onStartNewWorkout = { inWorkout = true },
-                            // TODO: open the workout screen prefilled from the template.
-                            onStartFromTemplate = {},
-                            modifier = Modifier.padding(innerPadding)
-                        )
+                        val workoutViewModel = workoutViewModel(currentSessionId)
+                        if (inWorkout) {
+                            WorkoutScreen(
+                                sessionId = currentSessionId,
+                                onSessionExpired = {
+                                    inWorkout = false
+                                    sessionId = null
+                                },
+                                onBack = { inWorkout = false },
+                                modifier = Modifier.padding(innerPadding),
+                                viewModel = workoutViewModel
+                            )
+                        } else {
+                            StartWorkoutScreen(
+                                sessionId = currentSessionId,
+                                onSessionExpired = { sessionId = null },
+                                workoutInProgress = workoutViewModel.uiState.workoutInProgress,
+                                onStartNewWorkout = { inWorkout = true },
+                                onContinueWorkout = { inWorkout = true },
+                                onDiscardWorkout = workoutViewModel::discardWorkout,
+                                // TODO: open the workout screen prefilled from the template.
+                                onStartFromTemplate = {},
+                                modifier = Modifier.padding(innerPadding)
+                            )
+                        }
                     }
                 }
             }

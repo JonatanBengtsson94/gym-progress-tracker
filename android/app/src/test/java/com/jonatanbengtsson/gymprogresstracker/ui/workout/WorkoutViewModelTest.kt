@@ -152,6 +152,26 @@ class WorkoutViewModelTest {
     }
 
     @Test
+    fun `a workout is in progress once it has an exercise`() {
+        assertFalse(viewModel.uiState.workoutInProgress)
+
+        viewModel.addExercise(squat)
+
+        assertTrue(viewModel.uiState.workoutInProgress)
+    }
+
+    @Test
+    fun `discarding the workout removes its exercises but keeps the ones to pick from`() {
+        exercisesApi.response.complete(ExercisesResult.Success(listOf(benchPress, squat)))
+        viewModel.addExercise(squat)
+        viewModel.updateReps(squat.id, 0, "5")
+
+        viewModel.discardWorkout()
+
+        assertEquals(WorkoutUiState(exercises = listOf(benchPress, squat)), viewModel.uiState)
+    }
+
+    @Test
     fun `an added exercise starts with one empty set`() {
         viewModel.addExercise(squat)
 

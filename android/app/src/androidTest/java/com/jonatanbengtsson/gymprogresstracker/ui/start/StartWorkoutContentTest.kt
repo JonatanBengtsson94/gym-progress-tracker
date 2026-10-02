@@ -70,23 +70,73 @@ class StartWorkoutContentTest {
     )
 
     private var newWorkoutClicks = 0
+    private var continueClicks = 0
+    private var discardClicks = 0
     private var retryClicks = 0
     private val startedTemplates = mutableListOf<WorkoutTemplate>()
 
-    private fun setContent(uiState: StartWorkoutUiState) {
-        composeRule.setContent { Content(uiState) }
+    private fun setContent(uiState: StartWorkoutUiState, workoutInProgress: Boolean = false) {
+        composeRule.setContent { Content(uiState, workoutInProgress) }
     }
 
     @Composable
-    private fun Content(uiState: StartWorkoutUiState) {
+    private fun Content(uiState: StartWorkoutUiState, workoutInProgress: Boolean = false) {
         GymProgressTrackerTheme {
             StartWorkoutContent(
                 uiState = uiState,
                 onRetry = { retryClicks++ },
+                workoutInProgress = workoutInProgress,
                 onStartNewWorkout = { newWorkoutClicks++ },
+                onContinueWorkout = { continueClicks++ },
+                onDiscardWorkout = { discardClicks++ },
                 onStartFromTemplate = { startedTemplates += it }
             )
         }
+    }
+
+    @Test
+    fun withoutAWorkoutInProgressThereIsNothingToContinue() {
+        setContent(StartWorkoutUiState())
+
+        composeRule.onNodeWithText(str(R.string.start_workout_new)).assertIsDisplayed()
+        composeRule.onNodeWithText(str(R.string.start_workout_continue)).assertDoesNotExist()
+        composeRule.onNodeWithText(str(R.string.start_workout_discard)).assertDoesNotExist()
+    }
+
+    @Test
+    fun aWorkoutInProgressCanBeContinuedInsteadOfStartingANewOne() {
+        setContent(StartWorkoutUiState(), workoutInProgress = true)
+
+        composeRule.onNodeWithText(str(R.string.start_workout_new)).assertDoesNotExist()
+        composeRule.onNodeWithText(str(R.string.start_workout_continue)).performClick()
+
+        assertEquals(1, continueClicks)
+        assertEquals(0, newWorkoutClicks)
+    }
+
+    @Test
+    fun discardingAWorkoutAsksFirst() {
+        setContent(StartWorkoutUiState(), workoutInProgress = true)
+
+        composeRule.onNodeWithText(str(R.string.start_workout_discard)).performClick()
+        composeRule.onNodeWithText(str(R.string.start_workout_discard_title)).assertIsDisplayed()
+        assertEquals(0, discardClicks)
+
+        composeRule.onNodeWithText(str(R.string.start_workout_discard_confirm)).performClick()
+
+        assertEquals(1, discardClicks)
+        composeRule.onNodeWithText(str(R.string.start_workout_discard_title)).assertDoesNotExist()
+    }
+
+    @Test
+    fun cancellingTheDiscardKeepsTheWorkout() {
+        setContent(StartWorkoutUiState(), workoutInProgress = true)
+
+        composeRule.onNodeWithText(str(R.string.start_workout_discard)).performClick()
+        composeRule.onNodeWithText(str(R.string.start_workout_discard_cancel)).performClick()
+
+        assertEquals(0, discardClicks)
+        composeRule.onNodeWithText(str(R.string.start_workout_discard_title)).assertDoesNotExist()
     }
 
     private fun str(@StringRes id: Int, vararg formatArgs: Any) =

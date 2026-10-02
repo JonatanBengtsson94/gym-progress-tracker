@@ -40,7 +40,7 @@ class RoomActiveWorkoutRepositoryTest {
     private val benchPress = Exercise(2, "Bench Press (Barbell)")
 
     private val workout = listOf(
-        WorkoutExerciseEntry(squat, listOf(SetEntry("100", "5", completed = true), SetEntry("102,5", "3"))),
+        WorkoutExerciseEntry(squat, listOf(SetEntry("100", "5", completed = true), SetEntry("102,5", "3", id = 1))),
         WorkoutExerciseEntry(benchPress, listOf(SetEntry()))
     )
 

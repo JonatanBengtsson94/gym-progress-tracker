@@ -205,7 +205,7 @@ class WorkoutContentTest {
         setContent(
             WorkoutUiState(
                 workoutExercises = listOf(
-                    WorkoutExerciseEntry(squat, listOf(SetEntry("100", "5"), SetEntry("102,5", "3")))
+                    WorkoutExerciseEntry(squat, listOf(SetEntry("100", "5"), SetEntry("102,5", "3", id = 1)))
                 )
             )
         )
@@ -230,7 +230,7 @@ class WorkoutContentTest {
     fun addAndRemoveSetReportTheExerciseAndSet() {
         setContent(
             WorkoutUiState(
-                workoutExercises = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(), SetEntry())))
+                workoutExercises = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(), SetEntry(id = 1))))
             )
         )
 

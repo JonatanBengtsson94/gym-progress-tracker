@@ -60,7 +60,8 @@ class WorkoutViewModel(
 
     /** Adds an uncompleted set to the exercise, prefilled with its last set's weight and reps. */
     fun addSet(exerciseId: Long) = updateSets(exerciseId) { sets ->
-        sets + (sets.lastOrNull()?.copy(completed = false) ?: SetEntry())
+        val id = (sets.maxOfOrNull { it.id } ?: -1) + 1
+        sets + (sets.lastOrNull()?.copy(completed = false, id = id) ?: SetEntry(id = id))
     }
 
     /** Toggles whether the set is completed. Ignored for a set that [SetEntry.canComplete] rules out. */

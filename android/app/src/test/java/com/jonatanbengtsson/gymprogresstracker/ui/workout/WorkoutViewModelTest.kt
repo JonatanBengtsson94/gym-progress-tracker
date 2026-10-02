@@ -205,7 +205,7 @@ class WorkoutViewModelTest {
 
         viewModel.addSet(squat.id)
 
-        assertEquals(listOf(SetEntry("100", "5"), SetEntry("100", "5")), setsOf(squat))
+        assertEquals(listOf(SetEntry("100", "5"), SetEntry("100", "5", id = 1)), setsOf(squat))
     }
 
     @Test
@@ -230,7 +230,19 @@ class WorkoutViewModelTest {
 
         viewModel.removeSet(squat.id, 1)
 
-        assertEquals(listOf(SetEntry(reps = "5"), SetEntry(reps = "3")), setsOf(squat))
+        assertEquals(listOf(SetEntry(reps = "5"), SetEntry(reps = "3", id = 2)), setsOf(squat))
+    }
+
+    @Test
+    fun `a set added after removing one gets an id no other set has`() {
+        viewModel.addExercise(squat)
+        viewModel.addSet(squat.id)
+        viewModel.addSet(squat.id)
+        viewModel.removeSet(squat.id, 0)
+
+        viewModel.addSet(squat.id)
+
+        assertEquals(listOf(1, 2, 3), setsOf(squat).map { it.id })
     }
 
     @Test
@@ -292,7 +304,7 @@ class WorkoutViewModelTest {
 
         viewModel.addSet(squat.id)
 
-        assertEquals(listOf(SetEntry(reps = "5", completed = true), SetEntry(reps = "5")), setsOf(squat))
+        assertEquals(listOf(SetEntry(reps = "5", completed = true), SetEntry(reps = "5", id = 1)), setsOf(squat))
     }
 
     @Test
@@ -312,7 +324,7 @@ class WorkoutViewModelTest {
         viewModel.addSet(benchPress.id)
 
         assertEquals(listOf(SetEntry()), setsOf(squat))
-        assertEquals(listOf(SetEntry("60", "8"), SetEntry("60", "8")), setsOf(benchPress))
+        assertEquals(listOf(SetEntry("60", "8"), SetEntry("60", "8", id = 1)), setsOf(benchPress))
     }
 
     @Test

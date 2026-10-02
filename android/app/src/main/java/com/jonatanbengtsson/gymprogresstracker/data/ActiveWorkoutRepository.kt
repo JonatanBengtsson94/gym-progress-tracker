@@ -12,8 +12,16 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** A set as typed, kept as text so partial input like "62," survives until it's finished. */
-data class SetEntry(val weightKg: String = "", val reps: String = "", val completed: Boolean = false) {
+/**
+ * A set as typed, kept as text so partial input like "62," survives until it's finished. [id] tells the
+ * set apart from the others in its exercise, so it can be followed as sets before it are removed.
+ */
+data class SetEntry(
+    val weightKg: String = "",
+    val reps: String = "",
+    val completed: Boolean = false,
+    val id: Int = 0
+) {
     /** A set can only be completed once it has at least one rep. */
     val canComplete: Boolean get() = (reps.toIntOrNull() ?: 0) > 0
 }
@@ -79,6 +87,8 @@ class RoomActiveWorkoutRepository(
 
     private fun ActiveWorkoutExerciseWithSets.toEntry() = WorkoutExerciseEntry(
         exercise = Exercise(id = exercise.exerciseId, name = exercise.name),
-        sets = sets.sortedBy { it.position }.map { SetEntry(weightKg = it.weightKg, reps = it.reps, completed = it.completed) }
+        sets = sets.sortedBy { it.position }.map {
+            SetEntry(weightKg = it.weightKg, reps = it.reps, completed = it.completed, id = it.position)
+        }
     )
 }

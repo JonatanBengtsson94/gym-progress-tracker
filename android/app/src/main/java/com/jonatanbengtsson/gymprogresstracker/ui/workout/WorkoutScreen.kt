@@ -48,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -255,65 +256,67 @@ private fun WorkoutExerciseCard(
                 }
             }
             entry.sets.forEachIndexed { index, set ->
-                val setNumber = index + 1
-                val completedColor = MaterialTheme.colorScheme.primaryContainer
-                val rowColor by animateColorAsState(
-                    if (set.completed) completedColor else completedColor.copy(alpha = 0f)
-                )
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    color = rowColor,
-                    contentColor = if (set.completed) MaterialTheme.colorScheme.onPrimaryContainer else LocalContentColor.current,
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                key(set.id) {
+                    val setNumber = index + 1
+                    val completedColor = MaterialTheme.colorScheme.primaryContainer
+                    val rowColor by animateColorAsState(
+                        if (set.completed) completedColor else completedColor.copy(alpha = 0f)
+                    )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = rowColor,
+                        contentColor = if (set.completed) MaterialTheme.colorScheme.onPrimaryContainer else LocalContentColor.current,
+                        shape = MaterialTheme.shapes.small
                     ) {
-                        Text(
-                            text = "$setNumber",
-                            style = MaterialTheme.typography.titleSmall,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.width(SET_NUMBER_WIDTH)
-                        )
-                        SetField(
-                            value = set.weightKg,
-                            onValueChange = { onWeightChange(index, it) },
-                            keyboardType = KeyboardType.Decimal,
-                            description = stringResource(R.string.workout_set_weight_description, setNumber),
-                            completed = set.completed,
-                            modifier = Modifier.weight(1f)
-                        )
-                        SetField(
-                            value = set.reps,
-                            onValueChange = { onRepsChange(index, it) },
-                            keyboardType = KeyboardType.Number,
-                            description = stringResource(R.string.workout_set_reps_description, setNumber),
-                            completed = set.completed,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Row {
-                            IconToggleButton(
-                                checked = set.completed,
-                                onCheckedChange = { onToggleCompleted(index) },
-                                enabled = set.completed || set.canComplete,
-                                colors = IconButtonDefaults.iconToggleButtonColors(
-                                    checkedContainerColor = Color.Transparent,
-                                    checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Check,
-                                    contentDescription = stringResource(R.string.workout_complete_set, setNumber),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            IconButton(onClick = { onRemoveSet(index) }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = stringResource(R.string.workout_remove_set, setNumber),
-                                    modifier = Modifier.size(20.dp)
-                                )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "$setNumber",
+                                style = MaterialTheme.typography.titleSmall,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.width(SET_NUMBER_WIDTH)
+                            )
+                            SetField(
+                                value = set.weightKg,
+                                onValueChange = { onWeightChange(index, it) },
+                                keyboardType = KeyboardType.Decimal,
+                                description = stringResource(R.string.workout_set_weight_description, setNumber),
+                                completed = set.completed,
+                                modifier = Modifier.weight(1f)
+                            )
+                            SetField(
+                                value = set.reps,
+                                onValueChange = { onRepsChange(index, it) },
+                                keyboardType = KeyboardType.Number,
+                                description = stringResource(R.string.workout_set_reps_description, setNumber),
+                                completed = set.completed,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Row {
+                                IconToggleButton(
+                                    checked = set.completed,
+                                    onCheckedChange = { onToggleCompleted(index) },
+                                    enabled = set.completed || set.canComplete,
+                                    colors = IconButtonDefaults.iconToggleButtonColors(
+                                        checkedContainerColor = Color.Transparent,
+                                        checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Check,
+                                        contentDescription = stringResource(R.string.workout_complete_set, setNumber),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                IconButton(onClick = { onRemoveSet(index) }) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Close,
+                                        contentDescription = stringResource(R.string.workout_remove_set, setNumber),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -533,7 +536,7 @@ fun WorkoutContentPreview() {
                         exercise = Exercise(1, "Bench Press (Barbell)"),
                         sets = listOf(
                             SetEntry(weightKg = "60", reps = "8", completed = true),
-                            SetEntry(weightKg = "62,5", reps = "6")
+                            SetEntry(weightKg = "62,5", reps = "6", id = 1)
                         )
                     )
                 ),

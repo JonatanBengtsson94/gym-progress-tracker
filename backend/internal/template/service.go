@@ -6,6 +6,7 @@ import (
 )
 
 type TemplateRepository interface {
+	GetTemplatesByUserId(ctx context.Context, userId uint32) ([]TemplateWithLatestWorkout, error)
 	CreateTemplate(ctx context.Context, template Template) (Template, error)
 }
 
@@ -15,6 +16,10 @@ type TemplateServiceImpl struct {
 
 func NewTemplateService(repo TemplateRepository) *TemplateServiceImpl {
 	return &TemplateServiceImpl{repo: repo}
+}
+
+func (s *TemplateServiceImpl) GetTemplates(ctx context.Context, userId uint32) ([]TemplateWithLatestWorkout, error) {
+	return s.repo.GetTemplatesByUserId(ctx, userId)
 }
 
 func (s *TemplateServiceImpl) CreateTemplate(ctx context.Context, template Template) (Template, error) {

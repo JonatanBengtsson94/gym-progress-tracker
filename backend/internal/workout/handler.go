@@ -35,51 +35,24 @@ type workoutSet struct {
 	WeightGrams uint32 `json:"weight_grams"`
 }
 
-type workoutResponseExercise struct {
-	ExerciseId   uint32       `json:"exercise_id"`
-	ExerciseName string       `json:"exercise_name"`
-	Sets         []workoutSet `json:"sets"`
-}
-
 type WorkoutResponse struct {
-	WorkoutId    uint32                    `json:"workout_id"`
-	TemplateId   uint32                    `json:"template_id"`
-	TemplateName string                    `json:"template_name"`
-	StartedAt    time.Time                 `json:"started_at"`
-	CompletedAt  time.Time                 `json:"completed_at"`
-	Exercises    []workoutResponseExercise `json:"exercises"`
+	WorkoutId    uint32                     `json:"workout_id"`
+	TemplateId   uint32                     `json:"template_id"`
+	TemplateName string                     `json:"template_name"`
+	StartedAt    time.Time                  `json:"started_at"`
+	CompletedAt  time.Time                  `json:"completed_at"`
+	Exercises    []set.ExerciseSetsResponse `json:"exercises"`
 }
 
-// toWorkoutResponse groups the workout's flat set list by exercise. Exercises
-// keep the order they first appear in, so repeating an exercise later in the
-// workout adds to its existing group rather than starting a second one.
+// toWorkoutResponse groups the workout's flat set list by exercise.
 func toWorkoutResponse(workout Workout) WorkoutResponse {
-	exercises := make([]workoutResponseExercise, 0, len(workout.Sets))
-	indexByExerciseId := make(map[uint32]int, len(workout.Sets))
-
-	for _, s := range workout.Sets {
-		i, ok := indexByExerciseId[s.Exercise.ExerciseId]
-		if !ok {
-			i = len(exercises)
-			indexByExerciseId[s.Exercise.ExerciseId] = i
-			exercises = append(exercises, workoutResponseExercise{
-				ExerciseId:   s.Exercise.ExerciseId,
-				ExerciseName: s.Exercise.ExerciseName,
-			})
-		}
-		exercises[i].Sets = append(exercises[i].Sets, workoutSet{
-			Reps:        s.Reps,
-			WeightGrams: s.WeightGrams,
-		})
-	}
-
 	return WorkoutResponse{
 		WorkoutId:    workout.WorkoutId,
 		TemplateId:   workout.Template.TemplateId,
 		TemplateName: workout.Template.TemplateName,
 		StartedAt:    workout.StartedAt,
 		CompletedAt:  workout.CompletedAt,
-		Exercises:    exercises,
+		Exercises:    set.GroupByExercise(workout.Sets),
 	}
 }
 

@@ -7,6 +7,8 @@ import com.jonatanbengtsson.gymprogresstracker.data.ExercisesResult
 import com.jonatanbengtsson.gymprogresstracker.ui.login.MainDispatcherRule
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -94,7 +96,7 @@ class WorkoutViewModelTest {
         viewModel.addExercise(squat)
         viewModel.addExercise(benchPress)
 
-        assertEquals(listOf(squat, benchPress), viewModel.uiState.workoutExercises)
+        assertEquals(listOf(squat, benchPress), workoutExercises())
     }
 
     @Test
@@ -103,7 +105,7 @@ class WorkoutViewModelTest {
         viewModel.addExercise(benchPress)
         viewModel.addExercise(squat)
 
-        assertEquals(listOf(squat, benchPress), viewModel.uiState.workoutExercises)
+        assertEquals(listOf(squat, benchPress), workoutExercises())
     }
 
     @Test
@@ -115,8 +117,173 @@ class WorkoutViewModelTest {
         viewModel.loadExercises()
         exercisesApi.response.complete(ExercisesResult.Success(listOf(benchPress, squat)))
 
-        assertEquals(listOf(squat), viewModel.uiState.workoutExercises)
+        assertEquals(listOf(squat), workoutExercises())
     }
+
+    @Test
+    fun `an added exercise starts with one empty set`() {
+        viewModel.addExercise(squat)
+
+        assertEquals(listOf(SetEntry()), setsOf(squat))
+    }
+
+    @Test
+    fun `adding a set copies the previous one`() {
+        viewModel.addExercise(squat)
+        viewModel.updateWeight(squat.id, 0, "100")
+        viewModel.updateReps(squat.id, 0, "5")
+
+        viewModel.addSet(squat.id)
+
+        assertEquals(listOf(SetEntry("100", "5"), SetEntry("100", "5")), setsOf(squat))
+    }
+
+    @Test
+    fun `adding a set after removing them all starts empty`() {
+        viewModel.addExercise(squat)
+        viewModel.updateWeight(squat.id, 0, "100")
+        viewModel.removeSet(squat.id, 0)
+
+        viewModel.addSet(squat.id)
+
+        assertEquals(listOf(SetEntry()), setsOf(squat))
+    }
+
+    @Test
+    fun `removing a set keeps the others in order`() {
+        viewModel.addExercise(squat)
+        viewModel.updateReps(squat.id, 0, "5")
+        viewModel.addSet(squat.id)
+        viewModel.updateReps(squat.id, 1, "4")
+        viewModel.addSet(squat.id)
+        viewModel.updateReps(squat.id, 2, "3")
+
+        viewModel.removeSet(squat.id, 1)
+
+        assertEquals(listOf(SetEntry(reps = "5"), SetEntry(reps = "3")), setsOf(squat))
+    }
+
+    @Test
+    fun `a set with reps can be completed and un-completed`() {
+        viewModel.addExercise(squat)
+        viewModel.updateReps(squat.id, 0, "5")
+
+        viewModel.toggleSetCompleted(squat.id, 0)
+        assertEquals(SetEntry(reps = "5", completed = true), setsOf(squat).single())
+
+        viewModel.toggleSetCompleted(squat.id, 0)
+        assertEquals(SetEntry(reps = "5"), setsOf(squat).single())
+    }
+
+    @Test
+    fun `a set without reps cannot be completed`() {
+        viewModel.addExercise(squat)
+
+        viewModel.toggleSetCompleted(squat.id, 0)
+        assertEquals(SetEntry(), setsOf(squat).single())
+
+        viewModel.updateReps(squat.id, 0, "0")
+        viewModel.toggleSetCompleted(squat.id, 0)
+        assertEquals(SetEntry(reps = "0"), setsOf(squat).single())
+    }
+
+    @Test
+    fun `changing the reps of a completed set keeps it completed`() {
+        viewModel.addExercise(squat)
+        viewModel.updateReps(squat.id, 0, "5")
+        viewModel.toggleSetCompleted(squat.id, 0)
+
+        viewModel.updateReps(squat.id, 0, "6")
+        viewModel.updateWeight(squat.id, 0, "100")
+
+        assertEquals(SetEntry("100", "6", completed = true), setsOf(squat).single())
+    }
+
+    @Test
+    fun `clearing the reps of a completed set un-completes it`() {
+        viewModel.addExercise(squat)
+        viewModel.updateReps(squat.id, 0, "5")
+        viewModel.toggleSetCompleted(squat.id, 0)
+
+        viewModel.updateReps(squat.id, 0, "")
+        assertEquals(SetEntry(), setsOf(squat).single())
+
+        viewModel.updateReps(squat.id, 0, "5")
+        viewModel.toggleSetCompleted(squat.id, 0)
+        viewModel.updateReps(squat.id, 0, "0")
+        assertEquals(SetEntry(reps = "0"), setsOf(squat).single())
+    }
+
+    @Test
+    fun `adding a set after a completed one starts uncompleted`() {
+        viewModel.addExercise(squat)
+        viewModel.updateReps(squat.id, 0, "5")
+        viewModel.toggleSetCompleted(squat.id, 0)
+
+        viewModel.addSet(squat.id)
+
+        assertEquals(listOf(SetEntry(reps = "5", completed = true), SetEntry(reps = "5")), setsOf(squat))
+    }
+
+    @Test
+    fun `an exercise is completed only when it has sets and all are completed`() {
+        assertFalse(WorkoutExerciseEntry(squat, emptyList()).allSetsCompleted)
+        assertFalse(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5", completed = true), SetEntry(reps = "5"))).allSetsCompleted)
+        assertTrue(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5", completed = true))).allSetsCompleted)
+    }
+
+    @Test
+    fun `set changes only affect the given exercise`() {
+        viewModel.addExercise(squat)
+        viewModel.addExercise(benchPress)
+
+        viewModel.updateWeight(benchPress.id, 0, "60")
+        viewModel.updateReps(benchPress.id, 0, "8")
+        viewModel.addSet(benchPress.id)
+
+        assertEquals(listOf(SetEntry()), setsOf(squat))
+        assertEquals(listOf(SetEntry("60", "8"), SetEntry("60", "8")), setsOf(benchPress))
+    }
+
+    @Test
+    fun `weight accepts whole and decimal kg with a point or a comma`() {
+        viewModel.addExercise(squat)
+
+        for (weight in listOf("", "0", "100", "62.5", "62,5", "62,", "1.25", "1000")) {
+            viewModel.updateWeight(squat.id, 0, weight)
+            assertEquals(weight, setsOf(squat).single().weightKg)
+        }
+    }
+
+    @Test
+    fun `weight that isn't a kg value is ignored`() {
+        viewModel.addExercise(squat)
+        viewModel.updateWeight(squat.id, 0, "60")
+
+        for (weight in listOf("abc", "-5", "1.255", "1,2,3", "6 0", "10000")) {
+            viewModel.updateWeight(squat.id, 0, weight)
+            assertEquals("60", setsOf(squat).single().weightKg)
+        }
+    }
+
+    @Test
+    fun `reps accept up to three digits only`() {
+        viewModel.addExercise(squat)
+        viewModel.updateReps(squat.id, 0, "12")
+
+        for (reps in listOf("1.5", "-1", "abc", "1000")) {
+            viewModel.updateReps(squat.id, 0, reps)
+            assertEquals("12", setsOf(squat).single().reps)
+        }
+
+        viewModel.updateReps(squat.id, 0, "")
+        assertEquals("", setsOf(squat).single().reps)
+    }
+
+    private fun workoutExercises() = viewModel.uiState.workoutExercises.map { it.exercise }
+
+    private fun setsOf(exercise: Exercise) =
+        viewModel.uiState.workoutExercises.single { it.exercise == exercise }.sets
 
     private fun assertErrorFor(result: ExercisesResult, expectedMessage: Int) {
         viewModel

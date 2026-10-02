@@ -26,6 +26,14 @@
     <string name="workout_picker_back">Back to workout</string>
     <string name="workout_search_exercises">Search exercises</string>
     <string name="workout_search_clear">Clear search</string>
+    <string name="workout_set_number">Set</string>
+    <string name="workout_set_weight">kg</string>
+    <string name="workout_set_reps">Reps</string>
+    <string name="workout_set_weight_description">Set %1$d weight in kg</string>
+    <string name="workout_set_reps_description">Set %1$d reps</string>
+    <string name="workout_add_set">Add set</string>
+    <string name="workout_complete_set">Set %1$d completed</string>
+    <string name="workout_remove_set">Remove set %1$d</string>
     <string name="workout_search_no_results">No exercises match \"%1$s\"</string>
     <string name="workout_exercises_error_network">Could not load exercises. Check your connection and try again.</string>
     <string name="workout_exercises_error_server">Something went wrong loading exercises.</string>

@@ -6,6 +6,8 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasProgressBarRangeInfo
@@ -38,6 +40,7 @@ class WorkoutContentTest {
 
     private var retryClicks = 0
     private val selectedExercises = mutableListOf<Exercise>()
+    private val setEvents = mutableListOf<String>()
 
     private fun setContent(uiState: WorkoutUiState) {
         composeRule.setContent {
@@ -45,7 +48,12 @@ class WorkoutContentTest {
                 WorkoutContent(
                     uiState = uiState,
                     onRetryExercises = { retryClicks++ },
-                    onExerciseSelected = { selectedExercises += it }
+                    onExerciseSelected = { selectedExercises += it },
+                    onAddSet = { setEvents += "add $it" },
+                    onRemoveSet = { id, index -> setEvents += "remove $id $index" },
+                    onToggleSetCompleted = { id, index -> setEvents += "complete $id $index" },
+                    onWeightChange = { id, index, kg -> setEvents += "weight $id $index $kg" },
+                    onRepsChange = { id, index, reps -> setEvents += "reps $id $index $reps" }
                 )
             }
         }
@@ -108,7 +116,12 @@ class WorkoutContentTest {
 
     @Test
     fun addedExercisesAreShownInTheWorkout() {
-        setContent(WorkoutUiState(workoutExercises = listOf(squat, benchPress), exercises = listOf(benchPress, squat)))
+        setContent(
+            WorkoutUiState(
+                workoutExercises = listOf(WorkoutExerciseEntry(squat), WorkoutExerciseEntry(benchPress)),
+                exercises = listOf(benchPress, squat)
+            )
+        )
 
         composeRule.onNodeWithText("Squat (Barbell)").assertIsDisplayed()
         composeRule.onNodeWithText("Bench Press (Barbell)").assertIsDisplayed()
@@ -117,7 +130,7 @@ class WorkoutContentTest {
 
     @Test
     fun exercisesAlreadyInTheWorkoutCannotBePickedAgain() {
-        setContent(WorkoutUiState(workoutExercises = listOf(squat), exercises = listOf(benchPress, squat)))
+        setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat)), exercises = listOf(benchPress, squat)))
         openExercisePicker()
 
         val pickerSquat = composeRule.onNode(hasText("Squat (Barbell)") and hasClickAction())
@@ -174,6 +187,75 @@ class WorkoutContentTest {
         openExercisePicker()
 
         composeRule.onNodeWithText("Bench Press (Barbell)").assertIsDisplayed()
+    }
+
+    @Test
+    fun exerciseCardsShowTheirSets() {
+        setContent(
+            WorkoutUiState(
+                workoutExercises = listOf(
+                    WorkoutExerciseEntry(squat, listOf(SetEntry("100", "5"), SetEntry("102,5", "3")))
+                )
+            )
+        )
+
+        composeRule.onNodeWithText("100").assertIsDisplayed()
+        composeRule.onNodeWithText("102,5").assertIsDisplayed()
+        composeRule.onNodeWithText("3").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(str(R.string.workout_remove_set, 2)).assertIsDisplayed()
+    }
+
+    @Test
+    fun typingInASetReportsTheExerciseSetAndValue() {
+        setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat))))
+
+        composeRule.onNodeWithContentDescription(str(R.string.workout_set_weight_description, 1)).performTextInput("100")
+        composeRule.onNodeWithContentDescription(str(R.string.workout_set_reps_description, 1)).performTextInput("5")
+
+        assertEquals(listOf("weight ${squat.id} 0 100", "reps ${squat.id} 0 5"), setEvents)
+    }
+
+    @Test
+    fun addAndRemoveSetReportTheExerciseAndSet() {
+        setContent(
+            WorkoutUiState(
+                workoutExercises = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(), SetEntry())))
+            )
+        )
+
+        composeRule.onNodeWithText(str(R.string.workout_add_set)).performClick()
+        composeRule.onNodeWithContentDescription(str(R.string.workout_remove_set, 2)).performClick()
+
+        assertEquals(listOf("add ${squat.id}", "remove ${squat.id} 1"), setEvents)
+    }
+
+    @Test
+    fun tickingASetReportsTheExerciseAndSet() {
+        setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5"))))))
+
+        composeRule.onNodeWithContentDescription(str(R.string.workout_complete_set, 1))
+            .assertIsOff()
+            .performClick()
+
+        assertEquals(listOf("complete ${squat.id} 0"), setEvents)
+    }
+
+    @Test
+    fun completedSetsShowAsTicked() {
+        setContent(
+            WorkoutUiState(
+                workoutExercises = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5", completed = true))))
+            )
+        )
+
+        composeRule.onNodeWithContentDescription(str(R.string.workout_complete_set, 1)).assertIsOn()
+    }
+
+    @Test
+    fun setsWithoutRepsCannotBeTicked() {
+        setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat))))
+
+        composeRule.onNodeWithContentDescription(str(R.string.workout_complete_set, 1)).assertIsNotEnabled()
     }
 
     @Test

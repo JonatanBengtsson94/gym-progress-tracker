@@ -16,6 +16,15 @@ val localProperties = Properties().apply {
 // e.g. http://192.168.1.10:8080 for a physical device. Defaults to the host as seen from the emulator.
 val devBaseUrl: String = localProperties.getProperty("api.baseUrl") ?: "http://10.0.2.2:8080"
 
+// Version comes from the latest git tag (e.g. v0.1.0), or v0.1.0-3-gabc1234 for commits after it.
+val gitVersionName: String = providers.exec {
+    commandLine("git", "describe", "--tags", "--always", "--dirty")
+}.standardOutput.asText.get().trim().removePrefix("v")
+
+val gitCommitCount: Int = providers.exec {
+    commandLine("git", "rev-list", "--count", "HEAD")
+}.standardOutput.asText.get().trim().toInt()
+
 android {
     namespace = "com.jonatanbengtsson.gymprogresstracker"
     compileSdk {
@@ -26,8 +35,8 @@ android {
         applicationId = "com.jonatanbengtsson.gymprogresstracker"
         minSdk = 36
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = gitCommitCount
+        versionName = gitVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

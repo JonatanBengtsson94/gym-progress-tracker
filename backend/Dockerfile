@@ -7,4 +7,7 @@ RUN go mod download
 
 COPY . .
 
-CMD ["go", "run", "./cmd/main.go"]
+ARG VERSION=dev
+RUN go build -ldflags "-X main.version=${VERSION}" -o /usr/local/bin/server ./cmd
+
+CMD ["server"]

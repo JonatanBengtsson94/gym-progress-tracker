@@ -24,6 +24,8 @@ services:
   backend:
     build:
       context: ../backend
+      args:
+        VERSION: ${VERSION:-dev}
     environment:
       DB_USER: ${DB_USER}
       DB_PWD: ${DB_PWD}

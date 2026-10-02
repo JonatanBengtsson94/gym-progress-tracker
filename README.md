@@ -20,7 +20,9 @@ Create `docker/.env`:
 
 Then, from the `docker/` directory:
 
-    docker compose up -d --build
+    VERSION=$(git describe --tags --always --dirty) docker compose up -d --build
+
+`VERSION` is baked into the backend and logged at startup; without it the version is `dev`.
 
 | Service  | URL / port                                        |
 |----------|---------------------------------------------------|

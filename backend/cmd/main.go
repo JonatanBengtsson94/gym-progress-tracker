@@ -17,7 +17,12 @@ import (
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/workout"
 )
 
+// version is set at build time with -ldflags "-X main.version=...".
+var version = "dev"
+
 func main() {
+	slog.Info("Starting gym-progress-tracker", "version", version)
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		slog.Error("Failed to load config", "error", err)

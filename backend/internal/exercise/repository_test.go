@@ -34,6 +34,17 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// countGlobalExercises reads the number of global exercises straight from the
+// database, so the tests don't break whenever the migration adds more.
+func countGlobalExercises(t *testing.T) int {
+	t.Helper()
+	var count int
+	if err := testPool.QueryRow(t.Context(), "SELECT COUNT(*) FROM exercises WHERE user_id IS NULL").Scan(&count); err != nil {
+		t.Fatalf("Count global exercises failed: %v", err)
+	}
+	return count
+}
+
 func TestExerciseRepository_GetGlobalExercises(t *testing.T) {
 	ctx := t.Context()
 	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
@@ -46,8 +57,8 @@ func TestExerciseRepository_GetGlobalExercises(t *testing.T) {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
 
-	if len(exercises) != 22 {
-		t.Errorf("Expected 22 exercises got: %d", len(exercises))
+	if want := countGlobalExercises(t); len(exercises) != want {
+		t.Errorf("Expected %d exercises got: %d", want, len(exercises))
 	}
 
 	expectedNames := []string{
@@ -81,8 +92,9 @@ func TestExerciseRepository_GetUserExercises(t *testing.T) {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
 
-	if len(exercises) != 23 {
-		t.Errorf("Expected 23 exercises got: %d", len(exercises))
+	// The globals plus the one custom exercise seeded for user 1.
+	if want := countGlobalExercises(t) + 1; len(exercises) != want {
+		t.Errorf("Expected %d exercises got: %d", want, len(exercises))
 	}
 
 	expectedNames := []string{
@@ -324,7 +336,7 @@ func TestExerciseRepository_ModifyExercise_WrongUser(t *testing.T) {
 	}
 
 	// user 2 does not own this exercise, so it should look not found to them.
-	_, err = repo.ModifyExercise(ctx, exercise.Exercise{ExerciseId: created.ExerciseId, ExerciseName: "Chin Up", UserId: 2})
+	_, err = repo.ModifyExercise(ctx, exercise.Exercise{ExerciseId: created.ExerciseId, ExerciseName: "Wrong User Rename", UserId: 2})
 	if !errors.Is(err, exercise.ErrExerciseNotFound) {
 		t.Fatalf("Expected ErrExerciseNotFound, got %v", err)
 	}

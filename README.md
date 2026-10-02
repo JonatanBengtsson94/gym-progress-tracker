@@ -52,5 +52,29 @@ From `backend/`, with Docker running (tests start their own Postgres container):
 
     go test ./...
 
-### Frontend
-TODO
+### Android app
+The app lives in `android/` and needs a device or emulator running Android 16 (API 36) or newer.
+
+#### Requirements
+- Android Studio (or a JDK and the Android SDK)
+
+#### Backend URL
+Debug builds talk to `http://10.0.2.2:8080`, which is the host machine as seen from the emulator. To use a physical device, point it at your machine's LAN address in `android/local.properties`:
+
+    api.baseUrl=http://192.168.1.10:8080
+
+Plain HTTP is only allowed in debug builds.
+
+#### Run
+Open `android/` in Android Studio and run the `app` configuration, or from `android/`:
+
+    ./gradlew installDebug
+
+#### Tests
+From `android/`, unit tests:
+
+    ./gradlew testDebugUnitTest
+
+UI tests, on a connected device or a running emulator:
+
+    ./gradlew connectedDebugAndroidTest

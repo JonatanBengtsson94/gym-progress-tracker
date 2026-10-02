@@ -10,9 +10,11 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.AuthApi
 import com.jonatanbengtsson.gymprogresstracker.data.LoginResult
+import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
+import com.jonatanbengtsson.gymprogresstracker.data.SessionState
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,13 +30,25 @@ class LoginScreenTest {
         override suspend fun login(username: String, password: String) = result
     }
 
-    private var loggedInSessionId: String? = null
+    private class FakeSessionRepository : SessionRepository {
+        override val session = MutableStateFlow<SessionState>(SessionState.LoggedOut)
+
+        override suspend fun logIn(username: String, sessionId: String) {
+            session.value = SessionState.LoggedIn(sessionId)
+        }
+
+        override suspend fun endSession(sessionId: String) {
+            session.value = SessionState.LoggedOut
+        }
+    }
+
+    private val sessionRepository = FakeSessionRepository()
 
     private fun setContent(result: LoginResult) {
-        val viewModel = LoginViewModel(FakeAuthApi(result))
+        val viewModel = LoginViewModel(FakeAuthApi(result), sessionRepository)
         composeRule.setContent {
             GymProgressTrackerTheme {
-                LoginScreen(onLoggedIn = { loggedInSessionId = it }, viewModel = viewModel)
+                LoginScreen(viewModel = viewModel)
             }
         }
     }
@@ -49,12 +63,12 @@ class LoginScreenTest {
     }
 
     @Test
-    fun successfulLoginReportsSessionId() {
+    fun successfulLoginStartsTheSession() {
         setContent(LoginResult.Success("session-123"))
 
         logIn()
 
-        assertEquals("session-123", loggedInSessionId)
+        assertEquals(SessionState.LoggedIn("session-123"), sessionRepository.session.value)
     }
 
     @Test
@@ -64,7 +78,7 @@ class LoginScreenTest {
         logIn()
 
         composeRule.onNodeWithText(str(R.string.login_error_invalid_credentials)).assertIsDisplayed()
-        assertNull(loggedInSessionId)
+        assertEquals(SessionState.LoggedOut, sessionRepository.session.value)
     }
 
     @Test

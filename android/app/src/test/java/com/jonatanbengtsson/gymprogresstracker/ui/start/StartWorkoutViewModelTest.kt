@@ -3,6 +3,8 @@ package com.jonatanbengtsson.gymprogresstracker.ui.start
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.FakeActiveWorkoutRepository
+import com.jonatanbengtsson.gymprogresstracker.data.FakeSessionRepository
+import com.jonatanbengtsson.gymprogresstracker.data.SessionState
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesApi
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesResult
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
@@ -40,9 +42,10 @@ class StartWorkoutViewModelTest {
 
     private val templatesApi = FakeTemplatesApi()
     private val activeWorkoutRepository = FakeActiveWorkoutRepository()
+    private val sessionRepository = FakeSessionRepository(SessionState.LoggedIn("session-123"))
 
     // Created lazily so each test can set up the fakes before the view model loads on init.
-    private val viewModel by lazy { StartWorkoutViewModel(templatesApi, activeWorkoutRepository, "session-123") }
+    private val viewModel by lazy { StartWorkoutViewModel(templatesApi, activeWorkoutRepository, sessionRepository, "session-123") }
 
     @Test
     fun `loads templates with the session id on creation`() {
@@ -71,11 +74,22 @@ class StartWorkoutViewModelTest {
     }
 
     @Test
-    fun `expired session is reported`() {
+    fun `an expired session is ended`() {
         viewModel
         templatesApi.response.complete(TemplatesResult.SessionExpired)
 
-        assertEquals(StartWorkoutUiState(sessionExpired = true), viewModel.uiState)
+        assertEquals(SessionState.LoggedOut, sessionRepository.session.value)
+        assertEquals(StartWorkoutUiState(), viewModel.uiState)
+    }
+
+    @Test
+    fun `logging out ends the session but keeps the workout`() {
+        activeWorkoutRepository.exercises.value = listOf(WorkoutExerciseEntry(squat))
+
+        viewModel.logOut()
+
+        assertEquals(SessionState.LoggedOut, sessionRepository.session.value)
+        assertEquals(listOf(WorkoutExerciseEntry(squat)), activeWorkoutRepository.exercises.value)
     }
 
     @Test

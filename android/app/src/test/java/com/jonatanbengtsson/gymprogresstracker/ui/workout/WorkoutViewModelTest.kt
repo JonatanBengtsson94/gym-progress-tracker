@@ -5,6 +5,8 @@ import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesApi
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesResult
 import com.jonatanbengtsson.gymprogresstracker.data.FakeActiveWorkoutRepository
+import com.jonatanbengtsson.gymprogresstracker.data.FakeSessionRepository
+import com.jonatanbengtsson.gymprogresstracker.data.SessionState
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.ui.login.MainDispatcherRule
@@ -37,9 +39,10 @@ class WorkoutViewModelTest {
 
     private val exercisesApi = FakeExercisesApi()
     private val activeWorkoutRepository = FakeActiveWorkoutRepository()
+    private val sessionRepository = FakeSessionRepository(SessionState.LoggedIn("session-123"))
 
     // Created lazily so each test can set up the fakes before the view model loads on init.
-    private val viewModel by lazy { WorkoutViewModel(exercisesApi, activeWorkoutRepository, "session-123") }
+    private val viewModel by lazy { WorkoutViewModel(exercisesApi, activeWorkoutRepository, sessionRepository, "session-123") }
 
     @Test
     fun `loads exercises with the session id on creation`() {
@@ -68,11 +71,12 @@ class WorkoutViewModelTest {
     }
 
     @Test
-    fun `expired session is reported`() {
+    fun `an expired session is ended`() {
         viewModel
         exercisesApi.response.complete(ExercisesResult.SessionExpired)
 
-        assertEquals(WorkoutUiState(sessionExpired = true), viewModel.uiState)
+        assertEquals(SessionState.LoggedOut, sessionRepository.session.value)
+        assertEquals(WorkoutUiState(), viewModel.uiState)
     }
 
     @Test

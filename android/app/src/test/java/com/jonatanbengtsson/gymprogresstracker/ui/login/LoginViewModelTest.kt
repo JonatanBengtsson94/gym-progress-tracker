@@ -2,7 +2,9 @@ package com.jonatanbengtsson.gymprogresstracker.ui.login
 
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.AuthApi
+import com.jonatanbengtsson.gymprogresstracker.data.FakeSessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.LoginResult
+import com.jonatanbengtsson.gymprogresstracker.data.SessionState
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -25,7 +27,8 @@ class LoginViewModelTest {
     }
 
     private val authApi = FakeAuthApi()
-    private val viewModel = LoginViewModel(authApi)
+    private val sessionRepository = FakeSessionRepository()
+    private val viewModel = LoginViewModel(authApi, sessionRepository)
 
     @Test
     fun `initial state is idle`() {
@@ -47,11 +50,13 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `success exposes the session id`() {
+    fun `success logs the user in and leaves the form idle`() {
         viewModel.login("alice", "pw")
         authApi.response.complete(LoginResult.Success("session-123"))
 
-        assertEquals(LoginUiState(sessionId = "session-123"), viewModel.uiState)
+        assertEquals(listOf("alice" to "session-123"), sessionRepository.logIns)
+        assertEquals(SessionState.LoggedIn("session-123"), sessionRepository.session.value)
+        assertEquals(LoginUiState(), viewModel.uiState)
     }
 
     @Test
@@ -87,17 +92,8 @@ class LoginViewModelTest {
 
         assertEquals(LoginUiState(isLoading = true), viewModel.uiState)
         authApi.response.complete(LoginResult.Success("session-123"))
-        assertEquals(LoginUiState(sessionId = "session-123"), viewModel.uiState)
-    }
-
-    @Test
-    fun `handling the login clears the session id`() {
-        viewModel.login("alice", "pw")
-        authApi.response.complete(LoginResult.Success("session-123"))
-
-        viewModel.onLoggedInHandled()
-
         assertEquals(LoginUiState(), viewModel.uiState)
+        assertEquals(SessionState.LoggedIn("session-123"), sessionRepository.session.value)
     }
 
     private fun assertErrorFor(result: LoginResult, expectedMessage: Int) {

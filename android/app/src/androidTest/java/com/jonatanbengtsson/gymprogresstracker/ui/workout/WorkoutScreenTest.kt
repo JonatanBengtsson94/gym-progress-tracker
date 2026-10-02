@@ -16,6 +16,8 @@ import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesApi
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesResult
+import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
+import com.jonatanbengtsson.gymprogresstracker.data.SessionState
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesApi
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesResult
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
@@ -44,6 +46,18 @@ class WorkoutScreenTest {
         }
     }
 
+    private class FakeSessionRepository(sessionId: String) : SessionRepository {
+        override val session = MutableStateFlow<SessionState>(SessionState.LoggedIn(sessionId))
+
+        override suspend fun logIn(username: String, sessionId: String) {
+            session.value = SessionState.LoggedIn(sessionId)
+        }
+
+        override suspend fun endSession(sessionId: String) {
+            session.value = SessionState.LoggedOut
+        }
+    }
+
     private val sessionId = "session-123"
     private val squat = Exercise(1, "Squat (Barbell)")
 
@@ -53,6 +67,7 @@ class WorkoutScreenTest {
     @Before
     fun setUp() {
         val activeWorkoutRepository = FakeActiveWorkoutRepository()
+        val sessionRepository = FakeSessionRepository(sessionId)
         val templatesApi = object : TemplatesApi {
             override suspend fun getTemplates(sessionId: String) = TemplatesResult.Success(emptyList())
         }
@@ -61,10 +76,10 @@ class WorkoutScreenTest {
         }
         // On the main thread, like viewModel() would, since both update their state as they start.
         val startWorkoutViewModel = composeRule.runOnUiThread {
-            StartWorkoutViewModel(templatesApi, activeWorkoutRepository, sessionId)
+            StartWorkoutViewModel(templatesApi, activeWorkoutRepository, sessionRepository, sessionId)
         }
         workoutViewModel = composeRule.runOnUiThread {
-            WorkoutViewModel(exercisesApi, activeWorkoutRepository, sessionId)
+            WorkoutViewModel(exercisesApi, activeWorkoutRepository, sessionRepository, sessionId)
         }
 
         composeRule.setContent {
@@ -72,14 +87,12 @@ class WorkoutScreenTest {
                 if (inWorkout) {
                     WorkoutScreen(
                         sessionId = sessionId,
-                        onSessionExpired = {},
                         onBack = { inWorkout = false },
                         viewModel = workoutViewModel
                     )
                 } else {
                     StartWorkoutScreen(
                         sessionId = sessionId,
-                        onSessionExpired = {},
                         onStartNewWorkout = { inWorkout = true },
                         onContinueWorkout = { inWorkout = true },
                         onStartFromTemplate = {},

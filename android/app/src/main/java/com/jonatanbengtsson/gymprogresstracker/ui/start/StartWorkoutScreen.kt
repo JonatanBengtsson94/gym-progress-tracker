@@ -28,7 +28,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,7 +60,6 @@ import java.time.format.FormatStyle
 @Composable
 fun StartWorkoutScreen(
     sessionId: String,
-    onSessionExpired: () -> Unit,
     onStartNewWorkout: () -> Unit,
     onContinueWorkout: () -> Unit,
     onStartFromTemplate: (WorkoutTemplate) -> Unit,
@@ -74,25 +72,21 @@ fun StartWorkoutScreen(
                 StartWorkoutViewModel(
                     HttpTemplatesApi(BuildConfig.BASE_URL),
                     appContainer.activeWorkoutRepository,
+                    appContainer.sessionRepository,
                     sessionId
                 )
             }
         }
     )
 ) {
-    val uiState = viewModel.uiState
-
-    LaunchedEffect(uiState.sessionExpired) {
-        if (uiState.sessionExpired) onSessionExpired()
-    }
-
     StartWorkoutContent(
-        uiState = uiState,
+        uiState = viewModel.uiState,
         onRetry = viewModel::loadTemplates,
         onStartNewWorkout = onStartNewWorkout,
         onContinueWorkout = onContinueWorkout,
         onDiscardWorkout = viewModel::discardWorkout,
         onStartFromTemplate = onStartFromTemplate,
+        onLogOut = viewModel::logOut,
         modifier = modifier
     )
 }
@@ -105,6 +99,7 @@ fun StartWorkoutContent(
     onContinueWorkout: () -> Unit,
     onDiscardWorkout: () -> Unit,
     onStartFromTemplate: (WorkoutTemplate) -> Unit,
+    onLogOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var confirmDiscard by rememberSaveable { mutableStateOf(false) }
@@ -115,10 +110,16 @@ fun StartWorkoutContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text(
-                text = stringResource(R.string.start_workout_title),
-                style = MaterialTheme.typography.headlineMedium
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.start_workout_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                TextButton(onClick = onLogOut) {
+                    Text(stringResource(R.string.start_workout_log_out))
+                }
+            }
         }
         if (uiState.workoutInProgress) {
             item {
@@ -304,7 +305,8 @@ fun StartWorkoutContentPreview() {
             onStartNewWorkout = {},
             onContinueWorkout = {},
             onDiscardWorkout = {},
-            onStartFromTemplate = {}
+            onStartFromTemplate = {},
+            onLogOut = {}
         )
     }
 }
@@ -319,7 +321,8 @@ fun StartWorkoutContentErrorPreview() {
             onStartNewWorkout = {},
             onContinueWorkout = {},
             onDiscardWorkout = {},
-            onStartFromTemplate = {}
+            onStartFromTemplate = {},
+            onLogOut = {}
         )
     }
 }

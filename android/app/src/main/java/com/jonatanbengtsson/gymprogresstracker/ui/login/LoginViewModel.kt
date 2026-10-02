@@ -9,15 +9,18 @@ import androidx.lifecycle.viewModelScope
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.AuthApi
 import com.jonatanbengtsson.gymprogresstracker.data.LoginResult
+import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
 import kotlinx.coroutines.launch
 
 data class LoginUiState(
     val isLoading: Boolean = false,
-    @StringRes val errorMessage: Int? = null,
-    val sessionId: String? = null
+    @StringRes val errorMessage: Int? = null
 )
 
-class LoginViewModel(private val authApi: AuthApi) : ViewModel() {
+class LoginViewModel(
+    private val authApi: AuthApi,
+    private val sessionRepository: SessionRepository
+) : ViewModel() {
 
     var uiState by mutableStateOf(LoginUiState())
         private set
@@ -28,20 +31,15 @@ class LoginViewModel(private val authApi: AuthApi) : ViewModel() {
 
         viewModelScope.launch {
             uiState = when (val result = authApi.login(username, password)) {
-                is LoginResult.Success -> LoginUiState(sessionId = result.sessionId)
+                is LoginResult.Success -> {
+                    sessionRepository.logIn(username, result.sessionId)
+                    // The app leaves this screen once the session is saved; idle again for the next login.
+                    LoginUiState()
+                }
                 LoginResult.InvalidCredentials -> LoginUiState(errorMessage = R.string.login_error_invalid_credentials)
                 LoginResult.NetworkError -> LoginUiState(errorMessage = R.string.login_error_network)
                 LoginResult.ServerError -> LoginUiState(errorMessage = R.string.login_error_server)
             }
         }
-    }
-
-    /**
-     * Clears the session id once the screen has handed it on. The view model outlives the screen,
-     * so without this a later return to login (e.g. after the session expires) would immediately
-     * report the stale session again.
-     */
-    fun onLoggedInHandled() {
-        uiState = LoginUiState()
     }
 }

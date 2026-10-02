@@ -73,6 +73,7 @@ class StartWorkoutContentTest {
     private var continueClicks = 0
     private var discardClicks = 0
     private var retryClicks = 0
+    private var logOutClicks = 0
     private val startedTemplates = mutableListOf<WorkoutTemplate>()
 
     private fun setContent(uiState: StartWorkoutUiState) {
@@ -88,7 +89,8 @@ class StartWorkoutContentTest {
                 onStartNewWorkout = { newWorkoutClicks++ },
                 onContinueWorkout = { continueClicks++ },
                 onDiscardWorkout = { discardClicks++ },
-                onStartFromTemplate = { startedTemplates += it }
+                onStartFromTemplate = { startedTemplates += it },
+                onLogOut = { logOutClicks++ }
             )
         }
     }
@@ -140,6 +142,15 @@ class StartWorkoutContentTest {
 
     private fun str(@StringRes id: Int, vararg formatArgs: Any) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *formatArgs)
+
+    @Test
+    fun clickingLogOutLogsOut() {
+        setContent(StartWorkoutUiState())
+
+        composeRule.onNodeWithText(str(R.string.start_workout_log_out)).performClick()
+
+        assertEquals(1, logOutClicks)
+    }
 
     @Test
     fun clickingNewWorkoutStartsAnEmptyWorkout() {

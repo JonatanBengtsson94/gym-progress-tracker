@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
+import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesApi
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesResult
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
@@ -17,7 +18,6 @@ data class StartWorkoutUiState(
     val isLoading: Boolean = false,
     val templates: List<WorkoutTemplate> = emptyList(),
     @StringRes val errorMessage: Int? = null,
-    val sessionExpired: Boolean = false,
     /** A workout is in progress once it has an exercise; opening an empty one doesn't count. */
     val workoutInProgress: Boolean = false
 )
@@ -25,6 +25,7 @@ data class StartWorkoutUiState(
 class StartWorkoutViewModel(
     private val templatesApi: TemplatesApi,
     private val activeWorkoutRepository: ActiveWorkoutRepository,
+    private val sessionRepository: SessionRepository,
     private val sessionId: String
 ) : ViewModel() {
 
@@ -47,7 +48,10 @@ class StartWorkoutViewModel(
         viewModelScope.launch {
             uiState = when (val result = templatesApi.getTemplates(sessionId)) {
                 is TemplatesResult.Success -> uiState.copy(isLoading = false, templates = result.templates)
-                TemplatesResult.SessionExpired -> uiState.copy(isLoading = false, sessionExpired = true)
+                TemplatesResult.SessionExpired -> {
+                    sessionRepository.endSession(sessionId)
+                    uiState.copy(isLoading = false)
+                }
                 TemplatesResult.NetworkError -> uiState.copy(isLoading = false, errorMessage = R.string.start_workout_error_network)
                 TemplatesResult.ServerError -> uiState.copy(isLoading = false, errorMessage = R.string.start_workout_error_server)
             }
@@ -56,4 +60,8 @@ class StartWorkoutViewModel(
 
     /** Throws away the workout in progress. */
     fun discardWorkout() = activeWorkoutRepository.update { emptyList() }
+
+    fun logOut() {
+        viewModelScope.launch { sessionRepository.endSession(sessionId) }
+    }
 }

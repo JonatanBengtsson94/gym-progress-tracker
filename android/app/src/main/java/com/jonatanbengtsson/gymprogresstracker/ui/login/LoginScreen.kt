@@ -15,7 +15,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,27 +32,20 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jonatanbengtsson.gymprogresstracker.BuildConfig
 import com.jonatanbengtsson.gymprogresstracker.R
+import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.HttpAuthApi
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
 
 @Composable
 fun LoginScreen(
-    onLoggedIn: (sessionId: String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: LoginViewModel = viewModel(
         factory = viewModelFactory {
-            initializer { LoginViewModel(HttpAuthApi(BuildConfig.BASE_URL)) }
+            initializer { LoginViewModel(HttpAuthApi(BuildConfig.BASE_URL), appContainer.sessionRepository) }
         }
     )
 ) {
     val uiState = viewModel.uiState
-
-    LaunchedEffect(uiState.sessionId) {
-        uiState.sessionId?.let {
-            onLoggedIn(it)
-            viewModel.onLoggedInHandled()
-        }
-    }
 
     LoginContent(
         isLoading = uiState.isLoading,

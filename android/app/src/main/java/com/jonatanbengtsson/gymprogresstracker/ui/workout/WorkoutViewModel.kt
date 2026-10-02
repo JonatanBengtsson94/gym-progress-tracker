@@ -11,6 +11,7 @@ import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesApi
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesResult
+import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import kotlinx.coroutines.flow.filterNotNull
@@ -23,13 +24,13 @@ data class WorkoutUiState(
     val workoutExercises: List<WorkoutExerciseEntry> = emptyList(),
     val isLoadingExercises: Boolean = false,
     val exercises: List<Exercise> = emptyList(),
-    @StringRes val exercisesErrorMessage: Int? = null,
-    val sessionExpired: Boolean = false
+    @StringRes val exercisesErrorMessage: Int? = null
 )
 
 class WorkoutViewModel(
     private val exercisesApi: ExercisesApi,
     private val activeWorkoutRepository: ActiveWorkoutRepository,
+    private val sessionRepository: SessionRepository,
     private val sessionId: String
 ) : ViewModel() {
 
@@ -105,7 +106,10 @@ class WorkoutViewModel(
         viewModelScope.launch {
             uiState = when (val result = exercisesApi.getExercises(sessionId)) {
                 is ExercisesResult.Success -> uiState.copy(isLoadingExercises = false, exercises = result.exercises)
-                ExercisesResult.SessionExpired -> uiState.copy(isLoadingExercises = false, sessionExpired = true)
+                ExercisesResult.SessionExpired -> {
+                    sessionRepository.endSession(sessionId)
+                    uiState.copy(isLoadingExercises = false)
+                }
                 ExercisesResult.NetworkError -> uiState.copy(isLoadingExercises = false, exercisesErrorMessage = R.string.workout_exercises_error_network)
                 ExercisesResult.ServerError -> uiState.copy(isLoadingExercises = false, exercisesErrorMessage = R.string.workout_exercises_error_server)
             }

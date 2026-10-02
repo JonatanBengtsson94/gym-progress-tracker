@@ -47,7 +47,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,7 +80,6 @@ import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
 @Composable
 fun WorkoutScreen(
     sessionId: String,
-    onSessionExpired: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     // Keyed by session so logging in again doesn't reuse the previous session's view model.
@@ -92,6 +90,7 @@ fun WorkoutScreen(
                 WorkoutViewModel(
                     HttpExercisesApi(BuildConfig.BASE_URL),
                     appContainer.activeWorkoutRepository,
+                    appContainer.sessionRepository,
                     sessionId
                 )
             }
@@ -100,14 +99,8 @@ fun WorkoutScreen(
 ) {
     BackHandler(onBack = onBack)
 
-    val uiState = viewModel.uiState
-
-    LaunchedEffect(uiState.sessionExpired) {
-        if (uiState.sessionExpired) onSessionExpired()
-    }
-
     WorkoutContent(
-        uiState = uiState,
+        uiState = viewModel.uiState,
         onRetryExercises = viewModel::loadExercises,
         onExerciseSelected = viewModel::addExercise,
         onRemoveExercise = viewModel::removeExercise,

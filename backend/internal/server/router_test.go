@@ -396,13 +396,14 @@ func TestIntegration_CreateExercise_OfflineOnTwoDevices(t *testing.T) {
 	}
 
 	workoutBody := func(exerciseId uuid.UUID) string {
-		return fmt.Sprintf(`{"template_id":%q,"started_at":"2024-06-01T17:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":8,"weight_grams":40000}]}]}`,
+		return fmt.Sprintf(`{"template_id":%q,"started_at":"2024-06-01T17:00:00Z","completed_at":"2024-06-01T18:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":8,"weight_grams":40000}]}]}`,
 			testutil.Id(1), exerciseId)
 	}
-	if rec := post(router, token, "/workouts", workoutBody(phoneId)); rec.Code != http.StatusBadRequest {
+	workoutId := uuid.NewV7()
+	if rec := putWorkout(router, token, workoutId, workoutBody(phoneId)); rec.Code != http.StatusBadRequest {
 		t.Errorf("expected the phone's own exercise id to be unknown, got status %d", rec.Code)
 	}
-	if rec := post(router, token, "/workouts", workoutBody(got.ExerciseId)); rec.Code != http.StatusCreated {
+	if rec := putWorkout(router, token, workoutId, workoutBody(got.ExerciseId)); rec.Code != http.StatusCreated {
 		t.Errorf("expected the workout to be logged against the existing exercise, got status %d", rec.Code)
 	}
 }
@@ -587,54 +588,27 @@ func TestIntegration_GetWorkout(t *testing.T) {
 	}
 }
 
-func TestIntegration_CreateWorkoutAndGetItBack(t *testing.T) {
+func TestIntegration_PutNewWorkoutAndGetItBack(t *testing.T) {
 	router := newTestRouter(t)
 	token := mustLogin(t, router, "alice", "secret")
+	workoutId := uuid.NewV7()
 
-	createReq := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(fmt.Sprintf(`{
+	rec := putWorkout(router, token, workoutId, fmt.Sprintf(`{
 		"template_name": "Full Body",
 		"started_at": "2024-03-01T17:00:00Z",
 		"completed_at": "2024-03-01T18:00:00Z",
 		"exercises": [{"exercise_id": %q, "sets": [{"reps": 10, "weight_grams": 50000}]}]
-	}`, benchPressId)))
-	createReq.Header.Set("Authorization", "Bearer "+token)
-	createRec := httptest.NewRecorder()
-	router.ServeHTTP(createRec, createReq)
+	}`, benchPressId))
 
-	createRes := createRec.Result()
-	defer createRes.Body.Close()
-
-	if createRes.StatusCode != http.StatusCreated {
-		t.Fatalf("expected create status 201, got %d", createRes.StatusCode)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", rec.Code)
+	}
+	created := decodeBody[workout.WorkoutResponse](t, rec)
+	if created.WorkoutId != workoutId || created.TemplateId == uuid.Nil() || created.TemplateName != "Full Body" {
+		t.Fatalf("expected workout %v under a new template Full Body, got %+v", workoutId, created)
 	}
 
-	var created workout.WorkoutResponse
-	if err := json.NewDecoder(createRes.Body).Decode(&created); err != nil {
-		t.Fatalf("failed to decode create response: %v", err)
-	}
-	if created.WorkoutId == uuid.Nil() || created.TemplateId == uuid.Nil() {
-		t.Fatalf("expected generated ids in create response, got %+v", created)
-	}
-	if created.TemplateName != "Full Body" {
-		t.Errorf("expected TemplateName %q, got %q", "Full Body", created.TemplateName)
-	}
-
-	getReq := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/workouts/%v", created.WorkoutId), nil)
-	getReq.Header.Set("Authorization", "Bearer "+token)
-	getRec := httptest.NewRecorder()
-	router.ServeHTTP(getRec, getReq)
-
-	getRes := getRec.Result()
-	defer getRes.Body.Close()
-
-	if getRes.StatusCode != http.StatusOK {
-		t.Fatalf("expected get status 200, got %d", getRes.StatusCode)
-	}
-
-	var got workout.WorkoutResponse
-	if err := json.NewDecoder(getRes.Body).Decode(&got); err != nil {
-		t.Fatalf("failed to decode workout response: %v", err)
-	}
+	got := mustGetWorkout(t, router, token, workoutId)
 	if got.TemplateId != created.TemplateId || got.TemplateName != "Full Body" {
 		t.Errorf("unexpected workout response: %+v", got)
 	}
@@ -649,155 +623,134 @@ func TestIntegration_CreateWorkoutAndGetItBack(t *testing.T) {
 	}
 }
 
-func TestIntegration_CreateWorkout_ReusesExistingTemplate(t *testing.T) {
+func TestIntegration_PutNewWorkout_UnderExistingTemplate(t *testing.T) {
 	router := newTestRouter(t)
 	token := mustLogin(t, router, "alice", "secret")
 
 	// Template 1 ("Push Day") is seeded for alice.
-	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(fmt.Sprintf(`{
-		"template_id": %q,
-		"started_at": "2024-03-02T17:00:00Z",
-		"completed_at": "2024-03-02T18:00:00Z",
-		"exercises": [{"exercise_id": %q, "sets": [{"reps": 6, "weight_grams": 70000}]}]
-	}`, testutil.Id(1), benchPressId)))
-	req.Header.Set("Authorization", "Bearer "+token)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	created := mustCreateWorkout(t, router, token, createPushWorkoutBody())
 
-	res := rec.Result()
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusCreated {
-		t.Fatalf("expected status 201, got %d", res.StatusCode)
-	}
-
-	var created workout.WorkoutResponse
-	if err := json.NewDecoder(res.Body).Decode(&created); err != nil {
-		t.Fatalf("failed to decode create response: %v", err)
-	}
 	if created.TemplateId != testutil.Id(1) || created.TemplateName != "Push Day" {
 		t.Errorf("expected the seeded template to be reused, got %+v", created)
 	}
 }
 
-func TestIntegration_CreateWorkout_NoToken(t *testing.T) {
+func TestIntegration_PutWorkout_NoToken(t *testing.T) {
 	router := newTestRouter(t)
 
-	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(fmt.Sprintf(
-		`{"template_id":%q,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":6,"weight_grams":70000}]}]}`, testutil.Id(1), benchPressId)))
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	rec := putWorkout(router, "", uuid.NewV7(), createPushWorkoutBody())
 
-	if rec.Result().StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected status 401, got %d", rec.Result().StatusCode)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d", rec.Code)
 	}
 }
 
-func TestIntegration_CreateWorkout_OtherUsersTemplate(t *testing.T) {
+func TestIntegration_PutNewWorkout_OtherUsersTemplate(t *testing.T) {
 	router := newTestRouter(t)
 	// Template 1 belongs to alice, not bob.
 	token := mustLogin(t, router, "bob", "secret")
 
-	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(fmt.Sprintf(
-		`{"template_id":%q,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":6,"weight_grams":70000}]}]}`, testutil.Id(1), benchPressId)))
-	req.Header.Set("Authorization", "Bearer "+token)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	rec := putWorkout(router, token, uuid.NewV7(), createPushWorkoutBody())
 
-	if rec.Result().StatusCode != http.StatusNotFound {
-		t.Fatalf("expected status 404, got %d", rec.Result().StatusCode)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d", rec.Code)
 	}
 }
 
-func TestIntegration_CreateWorkout_NoSets(t *testing.T) {
+func TestIntegration_PutNewWorkout_WithoutTemplate(t *testing.T) {
 	router := newTestRouter(t)
 	token := mustLogin(t, router, "alice", "secret")
 
-	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(fmt.Sprintf(`{"template_id":%q,"started_at":"2024-03-02T17:00:00Z","exercises":[]}`, testutil.Id(1))))
-	req.Header.Set("Authorization", "Bearer "+token)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	rec := putWorkout(router, token, uuid.NewV7(), fmt.Sprintf(`{
+		"started_at": "2024-03-02T17:00:00Z",
+		"completed_at": "2024-03-02T18:00:00Z",
+		"exercises": [{"exercise_id": %q, "sets": [{"reps": 6, "weight_grams": 70000}]}]
+	}`, benchPressId))
 
-	if rec.Result().StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rec.Code)
 	}
 }
 
-func TestIntegration_CreateWorkout_RejectsInvalidValues(t *testing.T) {
-	router := newTestRouter(t)
-	token := mustLogin(t, router, "alice", "secret")
-
-	pushDay, bench := testutil.Id(1), benchPressId
-	tests := []struct {
-		name string
-		body string
-	}{
-		{"negative reps", fmt.Sprintf(`{"template_id":%q,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":-5,"weight_grams":60000}]}]}`, pushDay, bench)},
-		{"negative weight", fmt.Sprintf(`{"template_id":%q,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":8,"weight_grams":-60000}]}]}`, pushDay, bench)},
-		{"numeric exercise id", fmt.Sprintf(`{"template_id":%q,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":1,"sets":[{"reps":8,"weight_grams":60000}]}]}`, pushDay)},
-		{"numeric template id", fmt.Sprintf(`{"template_id":1,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":8,"weight_grams":60000}]}]}`, bench)},
-		{"invalid workout id", fmt.Sprintf(`{"workout_id":"abc","template_id":%q,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":8,"weight_grams":60000}]}]}`, pushDay, bench)},
-		{"reps above column range", fmt.Sprintf(`{"template_id":%q,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":300,"weight_grams":60000}]}]}`, pushDay, bench)},
-		{"weight above column range", fmt.Sprintf(`{"template_id":%q,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":8,"weight_grams":3000000000}]}]}`, pushDay, bench)},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(tt.body))
-			req.Header.Set("Authorization", "Bearer "+token)
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
-
-			if rec.Result().StatusCode != http.StatusBadRequest {
-				t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
-			}
-		})
-	}
-}
-
-func TestIntegration_CreateWorkout_DuplicateTemplateName(t *testing.T) {
+func TestIntegration_PutNewWorkout_DuplicateTemplateName(t *testing.T) {
 	router := newTestRouter(t)
 	token := mustLogin(t, router, "alice", "secret")
 
 	// "Push Day" is already seeded for alice.
-	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(fmt.Sprintf(`{
+	rec := putWorkout(router, token, uuid.NewV7(), fmt.Sprintf(`{
 		"template_name": "Push Day",
 		"started_at": "2024-03-02T17:00:00Z",
+		"completed_at": "2024-03-02T18:00:00Z",
 		"exercises": [{"exercise_id": %q, "sets": [{"reps": 6, "weight_grams": 70000}]}]
-	}`, benchPressId)))
-	req.Header.Set("Authorization", "Bearer "+token)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
+	}`, benchPressId))
 
-	if rec.Result().StatusCode != http.StatusConflict {
-		t.Fatalf("expected status 409, got %d", rec.Result().StatusCode)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected status 409, got %d", rec.Code)
 	}
 }
 
-func TestIntegration_CreateWorkout_SafeToRetry(t *testing.T) {
+func TestIntegration_PutWorkout_RejectsInvalidValues(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	// Each body is valid apart from the one thing its name says, so a 400 is for that.
+	body := func(templateId, exerciseId, sets string) string {
+		return fmt.Sprintf(`{"template_id":%s,"started_at":"2024-03-02T17:00:00Z","completed_at":"2024-03-02T18:00:00Z","exercises":[{"exercise_id":%s,"sets":[%s]}]}`,
+			templateId, exerciseId, sets)
+	}
+	pushDay, bench := fmt.Sprintf("%q", testutil.Id(1)), fmt.Sprintf("%q", benchPressId)
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"no sets", fmt.Sprintf(`{"template_id":%s,"started_at":"2024-03-02T17:00:00Z","completed_at":"2024-03-02T18:00:00Z","exercises":[]}`, pushDay)},
+		{"zero reps", body(pushDay, bench, `{"reps":0,"weight_grams":60000}`)},
+		{"negative reps", body(pushDay, bench, `{"reps":-5,"weight_grams":60000}`)},
+		{"negative weight", body(pushDay, bench, `{"reps":8,"weight_grams":-60000}`)},
+		{"reps above column range", body(pushDay, bench, `{"reps":300,"weight_grams":60000}`)},
+		{"weight above column range", body(pushDay, bench, `{"reps":8,"weight_grams":3000000000}`)},
+		{"numeric exercise id", body(pushDay, "1", `{"reps":8,"weight_grams":60000}`)},
+		{"numeric template id", body("1", bench, `{"reps":8,"weight_grams":60000}`)},
+		{"unknown exercise", body(pushDay, fmt.Sprintf("%q", uuid.NewV7()), `{"reps":8,"weight_grams":60000}`)},
+		{"missing started_at", fmt.Sprintf(`{"template_id":%s,"completed_at":"2024-03-02T18:00:00Z","exercises":[{"exercise_id":%s,"sets":[{"reps":8,"weight_grams":60000}]}]}`, pushDay, bench)},
+		{"missing completed_at", fmt.Sprintf(`{"template_id":%s,"started_at":"2024-03-02T17:00:00Z","exercises":[{"exercise_id":%s,"sets":[{"reps":8,"weight_grams":60000}]}]}`, pushDay, bench)},
+		{"started_at after completed_at", fmt.Sprintf(`{"template_id":%s,"started_at":"2024-03-02T19:00:00Z","completed_at":"2024-03-02T18:00:00Z","exercises":[{"exercise_id":%s,"sets":[{"reps":8,"weight_grams":60000}]}]}`, pushDay, bench)},
+	}
+
+	// Both a new workout and a replacement must reject them, leaving the stored one untouched.
+	stored := mustCreateWorkout(t, router, token, createPushWorkoutBody())
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, workoutId := range []uuid.UUID{uuid.NewV7(), stored.WorkoutId} {
+				if rec := putWorkout(router, token, workoutId, tt.body); rec.Code != http.StatusBadRequest {
+					t.Errorf("workout %v: expected status 400, got %d", workoutId, rec.Code)
+				}
+			}
+		})
+	}
+
+	got := mustGetWorkout(t, router, token, stored.WorkoutId)
+	if len(got.Exercises) != 1 || len(got.Exercises[0].Sets) != 2 {
+		t.Errorf("expected rejected puts to leave the workout untouched, got %+v", got.Exercises)
+	}
+}
+
+// A client syncing a workout it logged offline can send it as often as it
+// needs to: the first put creates it, and sending it again changes nothing.
+func TestIntegration_PutWorkout_SafeToRepeat(t *testing.T) {
 	router := newTestRouter(t)
 	token := mustLogin(t, router, "alice", "secret")
 	workoutId := uuid.NewV7()
 
-	body := fmt.Sprintf(`{
-		"workout_id": %q,
-		"template_id": %q,
-		"started_at": "2024-03-03T17:00:00Z",
-		"completed_at": "2024-03-03T18:00:00Z",
-		"exercises": [{"exercise_id": %q, "sets": [{"reps": 8, "weight_grams": 60000}]}]
-	}`, workoutId, testutil.Id(1), benchPressId)
+	first := putWorkout(router, token, workoutId, createPushWorkoutBody())
+	again := putWorkout(router, token, workoutId, createPushWorkoutBody())
 
-	first := post(router, token, "/workouts", body)
-	retry := post(router, token, "/workouts", body)
-
-	if first.Code != http.StatusCreated || retry.Code != http.StatusOK {
-		t.Fatalf("expected status 201 and then 200, got %d and %d", first.Code, retry.Code)
+	if first.Code != http.StatusCreated || again.Code != http.StatusOK {
+		t.Fatalf("expected status 201 and then 200, got %d and %d", first.Code, again.Code)
 	}
-	if first.Body.String() != retry.Body.String() {
-		t.Errorf("expected the retry to return the same workout, got %q and %q", first.Body.String(), retry.Body.String())
-	}
-	if got := decodeBody[workout.WorkoutResponse](t, first); got.WorkoutId != workoutId {
-		t.Errorf("expected the workout to be stored under %v, got %v", workoutId, got.WorkoutId)
+	if first.Body.String() != again.Body.String() {
+		t.Errorf("expected the same workout back, got %q and %q", first.Body.String(), again.Body.String())
 	}
 
 	listed := 0
@@ -811,47 +764,102 @@ func TestIntegration_CreateWorkout_SafeToRetry(t *testing.T) {
 	}
 }
 
-func TestIntegration_CreateWorkout_IdOfAnotherUsersWorkout(t *testing.T) {
+func TestIntegration_PutWorkout_ReplacesAndGetItBack(t *testing.T) {
 	router := newTestRouter(t)
-	// Workout 1 belongs to alice.
-	token := mustLogin(t, router, "bob", "secret")
+	token := mustLogin(t, router, "alice", "secret")
 
-	rec := post(router, token, "/workouts", fmt.Sprintf(`{
+	created := mustCreateWorkout(t, router, token, createPushWorkoutBody())
+
+	rec := putWorkout(router, token, created.WorkoutId, fmt.Sprintf(`{
+		"started_at": "2024-03-01T16:30:00Z",
+		"completed_at": "2024-03-02T19:30:00Z",
+		"exercises": [
+			{"exercise_id": %q, "sets": [{"reps": 8, "weight_grams": 60000}, {"reps": 6, "weight_grams": 65000}, {"reps": 4, "weight_grams": 70000}]},
+			{"exercise_id": %q, "sets": [{"reps": 5, "weight_grams": 100000}]}
+		]
+	}`, benchPressId, dumbbellBenchPressId))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	replaced := decodeBody[workout.WorkoutResponse](t, rec)
+	if replaced.WorkoutId != created.WorkoutId || replaced.TemplateId != testutil.Id(1) || replaced.TemplateName != "Push Day" {
+		t.Errorf("unexpected put response: %+v", replaced)
+	}
+
+	got := mustGetWorkout(t, router, token, created.WorkoutId)
+	if !got.StartedAt.Equal(time.Date(2024, 3, 1, 16, 30, 0, 0, time.UTC)) || !got.CompletedAt.Equal(time.Date(2024, 3, 2, 19, 30, 0, 0, time.UTC)) {
+		t.Errorf("expected both times to be replaced, got %v and %v", got.StartedAt, got.CompletedAt)
+	}
+	if got.TemplateId != testutil.Id(1) || got.TemplateName != "Push Day" {
+		t.Errorf("expected the template to be unchanged, got %+v", got)
+	}
+	if len(got.Exercises) != 2 || len(got.Exercises[0].Sets) != 3 || len(got.Exercises[1].Sets) != 1 {
+		t.Errorf("expected the sets to be replaced by the submitted ones, got %+v", got.Exercises)
+	}
+}
+
+func TestIntegration_PutWorkout_IgnoresTemplateFieldsOfExistingWorkout(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
+
+	created := mustCreateWorkout(t, router, token, createPushWorkoutBody())
+
+	// Sending back a GET response's fields, with a different template, must not swap it.
+	rec := putWorkout(router, token, created.WorkoutId, fmt.Sprintf(`{
 		"workout_id": %q,
+		"template_id": %q,
+		"template_name": "Sneaky Day",
+		"started_at": "2024-03-01T17:00:00Z",
+		"completed_at": "2024-03-01T18:00:00Z",
+		"exercises": [{"exercise_id": %q, "exercise_name": "Bench Press", "sets": [{"reps": 8, "weight_grams": 60000}]}]
+	}`, uuid.NewV7(), uuid.NewV7(), benchPressId))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+
+	got := mustGetWorkout(t, router, token, created.WorkoutId)
+	if got.WorkoutId != created.WorkoutId || got.TemplateId != testutil.Id(1) || got.TemplateName != "Push Day" {
+		t.Errorf("expected workout and template to be unchanged, got %+v", got)
+	}
+}
+
+func TestIntegration_PutWorkout_IdOfAnotherUsersWorkout(t *testing.T) {
+	router := newTestRouter(t)
+	aliceToken := mustLogin(t, router, "alice", "secret")
+	bobToken := mustLogin(t, router, "bob", "secret")
+
+	created := mustCreateWorkout(t, router, aliceToken, createPushWorkoutBody())
+
+	rec := putWorkout(router, bobToken, created.WorkoutId, fmt.Sprintf(`{
 		"template_name": "Bob's Day",
 		"started_at": "2024-03-04T17:00:00Z",
-		"exercises": [{"exercise_id": %q, "sets": [{"reps": 8, "weight_grams": 60000}]}]
-	}`, testutil.Id(1), benchPressId))
-
+		"completed_at": "2024-03-04T18:00:00Z",
+		"exercises": [{"exercise_id": %q, "sets": [{"reps": 1, "weight_grams": 1000}]}]
+	}`, benchPressId))
 	if rec.Code != http.StatusConflict {
 		t.Fatalf("expected status 409, got %d", rec.Code)
 	}
+
+	got := mustGetWorkout(t, router, aliceToken, created.WorkoutId)
+	if len(got.Exercises) != 1 || len(got.Exercises[0].Sets) != 2 {
+		t.Errorf("expected alice's workout to be untouched, got %+v", got.Exercises)
+	}
 }
 
-func mustCreateWorkout(t *testing.T, router http.Handler, token, body string) workout.WorkoutResponse {
-	t.Helper()
+func TestIntegration_PutWorkout_InvalidWorkoutId(t *testing.T) {
+	router := newTestRouter(t)
+	token := mustLogin(t, router, "alice", "secret")
 
-	req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+token)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-
-	res := rec.Result()
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusCreated {
-		t.Fatalf("create workout failed: expected status 201, got %d", res.StatusCode)
+	// Ids are UUIDs, so the numbers older clients sent are rejected too.
+	for _, workoutId := range []string{"abc", "1"} {
+		if rec := putWorkout(router, token, workoutId, createPushWorkoutBody()); rec.Code != http.StatusBadRequest {
+			t.Errorf("workout %q: expected status 400, got %d", workoutId, rec.Code)
+		}
 	}
-
-	var created workout.WorkoutResponse
-	if err := json.NewDecoder(res.Body).Decode(&created); err != nil {
-		t.Fatalf("failed to decode create response: %v", err)
-	}
-
-	return created
 }
 
-func modifyWorkout(router http.Handler, token string, workoutId any, body string) *httptest.ResponseRecorder {
+func putWorkout(router http.Handler, token string, workoutId any, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/workouts/%v", workoutId), strings.NewReader(body))
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -859,6 +867,17 @@ func modifyWorkout(router http.Handler, token string, workoutId any, body string
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
+}
+
+// mustCreateWorkout puts body under a new workout id.
+func mustCreateWorkout(t *testing.T, router http.Handler, token, body string) workout.WorkoutResponse {
+	t.Helper()
+
+	rec := putWorkout(router, token, uuid.NewV7(), body)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create workout failed: expected status 201, got %d", rec.Code)
+	}
+	return decodeBody[workout.WorkoutResponse](t, rec)
 }
 
 func mustGetWorkout(t *testing.T, router http.Handler, token string, workoutId uuid.UUID) workout.WorkoutResponse {
@@ -869,19 +888,10 @@ func mustGetWorkout(t *testing.T, router http.Handler, token string, workoutId u
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 
-	res := rec.Result()
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("get workout failed: expected status 200, got %d", res.StatusCode)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get workout failed: expected status 200, got %d", rec.Code)
 	}
-
-	var got workout.WorkoutResponse
-	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
-		t.Fatalf("failed to decode workout response: %v", err)
-	}
-
-	return got
+	return decodeBody[workout.WorkoutResponse](t, rec)
 }
 
 func createPushWorkoutBody() string {
@@ -891,275 +901,6 @@ func createPushWorkoutBody() string {
 	"completed_at": "2024-03-01T18:00:00Z",
 	"exercises": [{"exercise_id": %q, "sets": [{"reps": 8, "weight_grams": 60000}, {"reps": 6, "weight_grams": 65000}]}]
 }`, testutil.Id(1), benchPressId)
-}
-
-func TestIntegration_ModifyWorkoutAndGetItBack(t *testing.T) {
-	router := newTestRouter(t)
-	token := mustLogin(t, router, "alice", "secret")
-
-	created := mustCreateWorkout(t, router, token, createPushWorkoutBody())
-
-	rec := modifyWorkout(router, token, created.WorkoutId, fmt.Sprintf(`{
-		"completed_at": "2024-03-02T19:30:00Z",
-		"exercises": [
-			{"exercise_id": %q, "sets": [{"reps": 8, "weight_grams": 60000}, {"reps": 6, "weight_grams": 65000}, {"reps": 4, "weight_grams": 70000}]},
-			{"exercise_id": %q, "sets": [{"reps": 5, "weight_grams": 100000}]}
-		]
-	}`, benchPressId, dumbbellBenchPressId))
-
-	res := rec.Result()
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("expected modify status 200, got %d", res.StatusCode)
-	}
-
-	var modified workout.WorkoutResponse
-	if err := json.NewDecoder(res.Body).Decode(&modified); err != nil {
-		t.Fatalf("failed to decode modify response: %v", err)
-	}
-	if modified.WorkoutId != created.WorkoutId || modified.TemplateId != testutil.Id(1) || modified.TemplateName != "Push Day" {
-		t.Errorf("unexpected modify response: %+v", modified)
-	}
-
-	got := mustGetWorkout(t, router, token, created.WorkoutId)
-	if !got.CompletedAt.Equal(time.Date(2024, 3, 2, 19, 30, 0, 0, time.UTC)) {
-		t.Errorf("expected CompletedAt to be updated, got %v", got.CompletedAt)
-	}
-	if got.TemplateId != testutil.Id(1) || got.TemplateName != "Push Day" {
-		t.Errorf("expected the template to be unchanged, got %+v", got)
-	}
-	if len(got.Exercises) != 2 || len(got.Exercises[0].Sets) != 3 || len(got.Exercises[1].Sets) != 1 {
-		t.Errorf("expected the sets to be replaced by the submitted ones, got %+v", got.Exercises)
-	}
-}
-
-func TestIntegration_CreateWorkout_InvalidStartedAt(t *testing.T) {
-	router := newTestRouter(t)
-	token := mustLogin(t, router, "alice", "secret")
-
-	tests := []struct {
-		name string
-		body string
-	}{
-		{"missing started_at", fmt.Sprintf(`{"template_id":%q,"completed_at":"2024-03-02T18:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":6,"weight_grams":70000}]}]}`, testutil.Id(1), benchPressId)},
-		{"started_at after completed_at", fmt.Sprintf(`{"template_id":%q,"started_at":"2024-03-02T19:00:00Z","completed_at":"2024-03-02T18:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":6,"weight_grams":70000}]}]}`, testutil.Id(1), benchPressId)},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(tt.body))
-			req.Header.Set("Authorization", "Bearer "+token)
-			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, req)
-
-			if rec.Result().StatusCode != http.StatusBadRequest {
-				t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
-			}
-		})
-	}
-}
-
-func TestIntegration_ModifyWorkout_UpdatesStartedAt(t *testing.T) {
-	router := newTestRouter(t)
-	token := mustLogin(t, router, "alice", "secret")
-
-	created := mustCreateWorkout(t, router, token, createPushWorkoutBody())
-
-	rec := modifyWorkout(router, token, created.WorkoutId, fmt.Sprintf(`{
-		"started_at": "2024-03-01T16:30:00Z",
-		"exercises": [{"exercise_id": %q, "sets": [{"reps": 8, "weight_grams": 60000}]}]
-	}`, benchPressId))
-	if rec.Result().StatusCode != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Result().StatusCode)
-	}
-
-	got := mustGetWorkout(t, router, token, created.WorkoutId)
-	if !got.StartedAt.Equal(time.Date(2024, 3, 1, 16, 30, 0, 0, time.UTC)) {
-		t.Errorf("expected StartedAt to be updated, got %v", got.StartedAt)
-	}
-	if !got.CompletedAt.Equal(time.Date(2024, 3, 1, 18, 0, 0, 0, time.UTC)) {
-		t.Errorf("expected the original CompletedAt to be kept, got %v", got.CompletedAt)
-	}
-}
-
-// Omitting completed_at keeps the stored one, so a started_at that is only
-// invalid against the stored value must still be rejected.
-func TestIntegration_ModifyWorkout_RejectsStartedAtAfterStoredCompletedAt(t *testing.T) {
-	router := newTestRouter(t)
-	token := mustLogin(t, router, "alice", "secret")
-
-	created := mustCreateWorkout(t, router, token, createPushWorkoutBody())
-
-	rec := modifyWorkout(router, token, created.WorkoutId, fmt.Sprintf(`{
-		"started_at": "2024-03-01T19:00:00Z",
-		"exercises": [{"exercise_id": %q, "sets": [{"reps": 8, "weight_grams": 60000}]}]
-	}`, benchPressId))
-	if rec.Result().StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected status 400, got %d", rec.Result().StatusCode)
-	}
-
-	got := mustGetWorkout(t, router, token, created.WorkoutId)
-	if !got.StartedAt.Equal(time.Date(2024, 3, 1, 17, 0, 0, 0, time.UTC)) {
-		t.Errorf("expected the rejected modify to leave StartedAt untouched, got %v", got.StartedAt)
-	}
-}
-
-func TestIntegration_ModifyWorkout_KeepsTimesWhenOmitted(t *testing.T) {
-	router := newTestRouter(t)
-	token := mustLogin(t, router, "alice", "secret")
-
-	created := mustCreateWorkout(t, router, token, createPushWorkoutBody())
-
-	rec := modifyWorkout(router, token, created.WorkoutId,
-		fmt.Sprintf(`{"exercises": [{"exercise_id": %q, "sets": [{"reps": 8, "weight_grams": 60000}]}]}`, benchPressId))
-	if rec.Result().StatusCode != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Result().StatusCode)
-	}
-
-	got := mustGetWorkout(t, router, token, created.WorkoutId)
-	if !got.StartedAt.Equal(time.Date(2024, 3, 1, 17, 0, 0, 0, time.UTC)) {
-		t.Errorf("expected the original StartedAt to be kept, got %v", got.StartedAt)
-	}
-	if !got.CompletedAt.Equal(time.Date(2024, 3, 1, 18, 0, 0, 0, time.UTC)) {
-		t.Errorf("expected the original CompletedAt to be kept, got %v", got.CompletedAt)
-	}
-	if len(got.Exercises) != 1 || len(got.Exercises[0].Sets) != 1 {
-		t.Errorf("expected the sets to be replaced, got %+v", got.Exercises)
-	}
-}
-
-func TestIntegration_ModifyWorkout_IsIdempotent(t *testing.T) {
-	router := newTestRouter(t)
-	token := mustLogin(t, router, "alice", "secret")
-
-	created := mustCreateWorkout(t, router, token, createPushWorkoutBody())
-
-	body := fmt.Sprintf(`{
-		"completed_at": "2024-03-02T19:30:00Z",
-		"exercises": [{"exercise_id": %q, "sets": [{"reps": 5, "weight_grams": 80000}]}]
-	}`, benchPressId)
-
-	first := modifyWorkout(router, token, created.WorkoutId, body)
-	second := modifyWorkout(router, token, created.WorkoutId, body)
-
-	if first.Result().StatusCode != http.StatusOK || second.Result().StatusCode != http.StatusOK {
-		t.Fatalf("expected both requests to return 200, got %d and %d", first.Result().StatusCode, second.Result().StatusCode)
-	}
-	if first.Body.String() != second.Body.String() {
-		t.Errorf("expected identical responses, got %q and %q", first.Body.String(), second.Body.String())
-	}
-}
-
-func TestIntegration_ModifyWorkout_IgnoresTemplateFields(t *testing.T) {
-	router := newTestRouter(t)
-	token := mustLogin(t, router, "alice", "secret")
-
-	created := mustCreateWorkout(t, router, token, createPushWorkoutBody())
-
-	// Sending back a GET response's fields, with a different template, must not swap it.
-	rec := modifyWorkout(router, token, created.WorkoutId, fmt.Sprintf(`{
-		"workout_id": %q,
-		"template_id": %q,
-		"template_name": "Sneaky Day",
-		"exercises": [{"exercise_id": %q, "exercise_name": "Bench Press", "sets": [{"reps": 8, "weight_grams": 60000}]}]
-	}`, uuid.NewV7(), uuid.NewV7(), benchPressId))
-	if rec.Result().StatusCode != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rec.Result().StatusCode)
-	}
-
-	got := mustGetWorkout(t, router, token, created.WorkoutId)
-	if got.WorkoutId != created.WorkoutId || got.TemplateId != testutil.Id(1) || got.TemplateName != "Push Day" {
-		t.Errorf("expected workout and template to be unchanged, got %+v", got)
-	}
-}
-
-func TestIntegration_ModifyWorkout_NoToken(t *testing.T) {
-	router := newTestRouter(t)
-
-	rec := modifyWorkout(router, "", testutil.Id(1), fmt.Sprintf(`{"exercises":[{"exercise_id":%q,"sets":[{"reps":6,"weight_grams":70000}]}]}`, benchPressId))
-
-	if rec.Result().StatusCode != http.StatusUnauthorized {
-		t.Fatalf("expected status 401, got %d", rec.Result().StatusCode)
-	}
-}
-
-func TestIntegration_ModifyWorkout_NotFound(t *testing.T) {
-	router := newTestRouter(t)
-	token := mustLogin(t, router, "alice", "secret")
-
-	rec := modifyWorkout(router, token, uuid.NewV7(), fmt.Sprintf(`{"exercises":[{"exercise_id":%q,"sets":[{"reps":6,"weight_grams":70000}]}]}`, benchPressId))
-
-	if rec.Result().StatusCode != http.StatusNotFound {
-		t.Errorf("expected status 404, got %d", rec.Result().StatusCode)
-	}
-}
-
-func TestIntegration_ModifyWorkout_WrongUser(t *testing.T) {
-	router := newTestRouter(t)
-	aliceToken := mustLogin(t, router, "alice", "secret")
-	bobToken := mustLogin(t, router, "bob", "secret")
-
-	created := mustCreateWorkout(t, router, aliceToken, createPushWorkoutBody())
-
-	rec := modifyWorkout(router, bobToken, created.WorkoutId,
-		fmt.Sprintf(`{"exercises":[{"exercise_id":%q,"sets":[{"reps":1,"weight_grams":1000}]}]}`, benchPressId))
-	if rec.Result().StatusCode != http.StatusNotFound {
-		t.Fatalf("expected status 404, got %d", rec.Result().StatusCode)
-	}
-
-	got := mustGetWorkout(t, router, aliceToken, created.WorkoutId)
-	if len(got.Exercises) != 1 || len(got.Exercises[0].Sets) != 2 {
-		t.Errorf("expected alice's workout to be untouched, got %+v", got.Exercises)
-	}
-}
-
-func TestIntegration_ModifyWorkout_InvalidWorkoutId(t *testing.T) {
-	router := newTestRouter(t)
-	token := mustLogin(t, router, "alice", "secret")
-
-	// Ids are UUIDs, so the numbers older clients sent are rejected too.
-	for _, workoutId := range []string{"abc", "1"} {
-		rec := modifyWorkout(router, token, workoutId, fmt.Sprintf(`{"exercises":[{"exercise_id":%q,"sets":[{"reps":6,"weight_grams":70000}]}]}`, benchPressId))
-
-		if rec.Result().StatusCode != http.StatusBadRequest {
-			t.Errorf("workout %q: expected status 400, got %d", workoutId, rec.Result().StatusCode)
-		}
-	}
-}
-
-func TestIntegration_ModifyWorkout_RejectsInvalidSets(t *testing.T) {
-	router := newTestRouter(t)
-	token := mustLogin(t, router, "alice", "secret")
-
-	created := mustCreateWorkout(t, router, token, createPushWorkoutBody())
-
-	tests := []struct {
-		name       string
-		body       string
-		wantStatus int
-	}{
-		{"no sets", `{"exercises":[]}`, http.StatusBadRequest},
-		{"zero reps", fmt.Sprintf(`{"exercises":[{"exercise_id":%q,"sets":[{"reps":0,"weight_grams":60000}]}]}`, benchPressId), http.StatusBadRequest},
-		{"negative reps", fmt.Sprintf(`{"exercises":[{"exercise_id":%q,"sets":[{"reps":-5,"weight_grams":60000}]}]}`, benchPressId), http.StatusBadRequest},
-		{"weight above column range", fmt.Sprintf(`{"exercises":[{"exercise_id":%q,"sets":[{"reps":8,"weight_grams":3000000000}]}]}`, benchPressId), http.StatusBadRequest},
-		{"unknown exercise", fmt.Sprintf(`{"exercises":[{"exercise_id":%q,"sets":[{"reps":8,"weight_grams":60000}]}]}`, uuid.NewV7()), http.StatusBadRequest},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rec := modifyWorkout(router, token, created.WorkoutId, tt.body)
-
-			if rec.Result().StatusCode != tt.wantStatus {
-				t.Fatalf("expected status %d, got %d", tt.wantStatus, rec.Result().StatusCode)
-			}
-		})
-	}
-
-	got := mustGetWorkout(t, router, token, created.WorkoutId)
-	if len(got.Exercises) != 1 || len(got.Exercises[0].Sets) != 2 {
-		t.Errorf("expected rejected modifies to leave the workout untouched, got %+v", got.Exercises)
-	}
 }
 
 // createWorkoutBodyAt returns a create body for a one-hour workout under
@@ -1286,7 +1027,8 @@ func TestIntegration_GetWorkouts_ReflectsModifiedCompletedAt(t *testing.T) {
 
 	// Moving the first workout past the second must reorder the list, and
 	// editing must not otherwise change where a workout appears.
-	rec := modifyWorkout(router, token, first.WorkoutId, fmt.Sprintf(`{
+	rec := putWorkout(router, token, first.WorkoutId, fmt.Sprintf(`{
+		"started_at": "2033-05-03T09:00:00Z",
 		"completed_at": "2033-05-03T10:00:00Z",
 		"exercises": [{"exercise_id": %q, "sets": [{"reps": 8, "weight_grams": 60000}]}]
 	}`, benchPressId))
@@ -1571,27 +1313,8 @@ func TestIntegration_GetTemplates_ReturnsLatestWorkout(t *testing.T) {
 	router := newTestRouter(t)
 	token := mustLogin(t, router, "alice", "secret")
 
-	postWorkout := func(body string) workout.WorkoutResponse {
-		t.Helper()
-		req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(body))
-		req.Header.Set("Authorization", "Bearer "+token)
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
-
-		res := rec.Result()
-		defer res.Body.Close()
-		if res.StatusCode != http.StatusCreated {
-			t.Fatalf("expected create status 201, got %d", res.StatusCode)
-		}
-		var created workout.WorkoutResponse
-		if err := json.NewDecoder(res.Body).Decode(&created); err != nil {
-			t.Fatalf("failed to decode create response: %v", err)
-		}
-		return created
-	}
-
-	first := postWorkout(fmt.Sprintf(`{"template_name":"Latest Check","started_at":"2024-05-01T09:00:00Z","completed_at":"2024-05-01T10:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":5,"weight_grams":50000}]}]}`, benchPressId))
-	second := postWorkout(fmt.Sprintf(`{"template_id":%q,"started_at":"2024-05-08T09:00:00Z","completed_at":"2024-05-08T10:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":5,"weight_grams":52500},{"reps":4,"weight_grams":52500}]},{"exercise_id":%q,"sets":[{"reps":10,"weight_grams":20000}]}]}`, first.TemplateId, benchPressId, dumbbellBenchPressId))
+	first := mustCreateWorkout(t, router, token, fmt.Sprintf(`{"template_name":"Latest Check","started_at":"2024-05-01T09:00:00Z","completed_at":"2024-05-01T10:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":5,"weight_grams":50000}]}]}`, benchPressId))
+	second := mustCreateWorkout(t, router, token, fmt.Sprintf(`{"template_id":%q,"started_at":"2024-05-08T09:00:00Z","completed_at":"2024-05-08T10:00:00Z","exercises":[{"exercise_id":%q,"sets":[{"reps":5,"weight_grams":52500},{"reps":4,"weight_grams":52500}]},{"exercise_id":%q,"sets":[{"reps":10,"weight_grams":20000}]}]}`, first.TemplateId, benchPressId, dumbbellBenchPressId))
 
 	req := httptest.NewRequest(http.MethodGet, "/templates", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -1656,21 +1379,7 @@ func TestIntegration_GetTemplates_OrderFollowsLatestWorkout(t *testing.T) {
 		t.Helper()
 		body := fmt.Sprintf(`{%s,"started_at":%q,"completed_at":%q,"exercises":[{"exercise_id":%q,"sets":[{"reps":5,"weight_grams":50000}]}]}`,
 			templateRef, completedAt, completedAt, benchPressId)
-		req := httptest.NewRequest(http.MethodPost, "/workouts", strings.NewReader(body))
-		req.Header.Set("Authorization", "Bearer "+token)
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
-
-		res := rec.Result()
-		defer res.Body.Close()
-		if res.StatusCode != http.StatusCreated {
-			t.Fatalf("expected create status 201, got %d", res.StatusCode)
-		}
-		var created workout.WorkoutResponse
-		if err := json.NewDecoder(res.Body).Decode(&created); err != nil {
-			t.Fatalf("failed to decode create response: %v", err)
-		}
-		return created
+		return mustCreateWorkout(t, router, token, body)
 	}
 	indexOf := func(templates template.TemplatesResponse, templateId uuid.UUID) int {
 		for i, tmpl := range templates.Templates {

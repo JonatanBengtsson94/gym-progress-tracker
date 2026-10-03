@@ -1,0 +1,14 @@
+{
+  "workout_id": "0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d20",
+  "template_id": "0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d10",
+  "template_name": "Push Day",
+  "started_at": "2026-09-30T17:00:00Z",
+  "completed_at": "2026-09-30T18:00:00Z",
+  "exercises": [
+    {
+      "exercise_id": "0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d01",
+      "exercise_name": "Bench Press (Barbell)",
+      "sets": [{"reps": 8, "weight_grams": 60000}, {"reps": 6, "weight_grams": 62500}]
+    }
+  ]
+}

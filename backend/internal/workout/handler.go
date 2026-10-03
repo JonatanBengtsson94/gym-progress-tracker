@@ -18,8 +18,7 @@ type WorkoutService interface {
 	GetWorkout(context.Context, uint32, uuid.UUID) (Workout, error)
 	GetWorkouts(context.Context, uint32) ([]Workout, error)
 	GetWorkoutsByTemplate(context.Context, uint32, uuid.UUID) ([]Workout, error)
-	CreateWorkout(context.Context, uint32, Workout) (stored Workout, created bool, err error)
-	ModifyWorkout(context.Context, uint32, Workout) (Workout, error)
+	PutWorkout(context.Context, uint32, Workout) (stored Workout, created bool, err error)
 }
 
 type WorkoutHandler struct {
@@ -146,15 +145,6 @@ type workoutRequestExercise struct {
 	Sets       []workoutSet `json:"sets"`
 }
 
-type createWorkoutRequest struct {
-	WorkoutId    uuid.UUID                `json:"workout_id"`
-	TemplateId   uuid.UUID                `json:"template_id"`
-	TemplateName string                   `json:"template_name"`
-	StartedAt    time.Time                `json:"started_at"`
-	CompletedAt  time.Time                `json:"completed_at"`
-	Exercises    []workoutRequestExercise `json:"exercises"`
-}
-
 // toSets flattens the exercise groups of a request into a flat list of sets,
 // keeping the order they were sent in.
 func toSets(exercises []workoutRequestExercise) []set.Set {
@@ -175,8 +165,6 @@ func toSets(exercises []workoutRequestExercise) []set.Set {
 // response, falling back to a logged 500 for anything unexpected.
 func writeWorkoutError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, ErrWorkoutNotFound):
-		http.Error(w, "Workout not found", http.StatusNotFound)
 	case errors.Is(err, ErrWorkoutIdTaken):
 		http.Error(w, "workout_id is already in use", http.StatusConflict)
 	case errors.Is(err, ErrSetsRequired):
@@ -187,6 +175,8 @@ func writeWorkoutError(w http.ResponseWriter, err error) {
 		http.Error(w, "weight_grams is out of range", http.StatusBadRequest)
 	case errors.Is(err, ErrStartedAtRequired):
 		http.Error(w, "started_at is required", http.StatusBadRequest)
+	case errors.Is(err, ErrCompletedAtRequired):
+		http.Error(w, "completed_at is required", http.StatusBadRequest)
 	case errors.Is(err, ErrStartedAfterCompleted):
 		http.Error(w, "started_at must not be after completed_at", http.StatusBadRequest)
 	case errors.Is(err, template.ErrTemplateNameRequired):
@@ -202,27 +192,44 @@ func writeWorkoutError(w http.ResponseWriter, err error) {
 	}
 }
 
-// CreateWorkout logs a workout for the user, under the workout_id the client
-// sends or a new one if it sends none, and responds 201 Created. Its sets must
-// use exercise_ids the server knows, so a client that created exercises or the
-// template offline creates those first. If the user already has a workout with
-// the workout_id, nothing is created and that workout is returned as stored,
-// with 200 OK, so retrying a create is safe; a client with later changes
-// sends them with PUT. A workout_id belonging to another user's workout is
-// 409 Conflict.
-func (h *WorkoutHandler) CreateWorkout(w http.ResponseWriter, r *http.Request) {
+// putWorkoutRequest's template fields only matter when the PUT creates the
+// workout: an existing workout keeps the template it was logged under, so
+// template fields a client sends back (for example from a GET response) are
+// ignored.
+type putWorkoutRequest struct {
+	TemplateId   uuid.UUID                `json:"template_id"`
+	TemplateName string                   `json:"template_name"`
+	StartedAt    time.Time                `json:"started_at"`
+	CompletedAt  time.Time                `json:"completed_at"`
+	Exercises    []workoutRequestExercise `json:"exercises"`
+}
+
+// PutWorkout makes the user's workout with the workout_id in the path match
+// the body, so sending the same body again changes nothing. A workout that
+// doesn't exist yet is created, under template_id or a new template named
+// template_name, and gets 201 Created; an existing one has its times and sets
+// replaced and gets 200 OK. A client that logged workouts offline can PUT each
+// under the id it chose, as often as it needs to. A workout_id belonging to
+// another user's workout is 409 Conflict.
+func (h *WorkoutHandler) PutWorkout(w http.ResponseWriter, r *http.Request) {
 	userId, ok := identity.RequireUserId(w, r)
 	if !ok {
 		return
 	}
 
-	var req createWorkoutRequest
+	workoutId, err := uuid.Parse(r.PathValue("workoutId"))
+	if err != nil {
+		http.Error(w, "Invalid workout_id", http.StatusBadRequest)
+		return
+	}
+
+	var req putWorkoutRequest
 	if !httpx.DecodeJSONBody(w, r, &req) {
 		return
 	}
 
-	stored, created, err := h.service.CreateWorkout(r.Context(), userId, Workout{
-		WorkoutId:   req.WorkoutId,
+	stored, created, err := h.service.PutWorkout(r.Context(), userId, Workout{
+		WorkoutId:   workoutId,
 		StartedAt:   req.StartedAt,
 		CompletedAt: req.CompletedAt,
 		Template:    template.Template{TemplateId: req.TemplateId, TemplateName: req.TemplateName},
@@ -238,44 +245,4 @@ func (h *WorkoutHandler) CreateWorkout(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusCreated
 	}
 	httpx.WriteJSON(w, status, toWorkoutResponse(stored))
-}
-
-// modifyWorkoutRequest deliberately has no template fields: a workout keeps
-// the template it was logged under, so any template_id or template_name a
-// client sends back (for example from a GET response) is ignored.
-type modifyWorkoutRequest struct {
-	StartedAt   time.Time                `json:"started_at"`
-	CompletedAt time.Time                `json:"completed_at"`
-	Exercises   []workoutRequestExercise `json:"exercises"`
-}
-
-func (h *WorkoutHandler) ModifyWorkout(w http.ResponseWriter, r *http.Request) {
-	userId, ok := identity.RequireUserId(w, r)
-	if !ok {
-		return
-	}
-
-	workoutId, err := uuid.Parse(r.PathValue("workoutId"))
-	if err != nil {
-		http.Error(w, "Invalid workout_id", http.StatusBadRequest)
-		return
-	}
-
-	var req modifyWorkoutRequest
-	if !httpx.DecodeJSONBody(w, r, &req) {
-		return
-	}
-
-	modified, err := h.service.ModifyWorkout(r.Context(), userId, Workout{
-		WorkoutId:   workoutId,
-		StartedAt:   req.StartedAt,
-		CompletedAt: req.CompletedAt,
-		Sets:        toSets(req.Exercises),
-	})
-	if err != nil {
-		writeWorkoutError(w, err)
-		return
-	}
-
-	httpx.WriteJSON(w, http.StatusOK, toWorkoutResponse(modified))
 }

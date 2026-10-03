@@ -3,19 +3,16 @@ package workout
 import (
 	"context"
 	"strings"
-	"time"
 	"uuid"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/set"
-	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/template"
 )
 
 type WorkoutRepository interface {
 	GetWorkoutByUserIdAndWorkoutId(context.Context, uint32, uuid.UUID) (Workout, error)
 	GetWorkoutsByUserId(context.Context, uint32) ([]Workout, error)
 	GetWorkoutsByUserIdAndTemplateId(context.Context, uint32, uuid.UUID) ([]Workout, error)
-	CreateWorkout(context.Context, uint32, Workout) (stored Workout, created bool, err error)
-	ModifyWorkout(context.Context, uint32, Workout) (Workout, error)
+	PutWorkout(context.Context, uint32, Workout) (stored Workout, created bool, err error)
 }
 
 type WorkoutServiceImpl struct {
@@ -38,64 +35,26 @@ func (s *WorkoutServiceImpl) GetWorkoutsByTemplate(ctx context.Context, userId u
 	return s.repo.GetWorkoutsByUserIdAndTemplateId(ctx, userId, templateId)
 }
 
-// CreateWorkout stores workout under the id the client chose for it, or a new one if it chose
-// none. When the user already has a workout with that id, that one is returned instead, with
-// created false.
-func (s *WorkoutServiceImpl) CreateWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, bool, error) {
+// PutWorkout makes the user's workout with workout.WorkoutId match workout:
+// an existing one gets its times and sets replaced and keeps its template,
+// and a missing one is created, under its template or a new one named
+// Template.TemplateName. created reports which happened.
+func (s *WorkoutServiceImpl) PutWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, bool, error) {
 	if err := validateSets(workout.Sets); err != nil {
 		return Workout{}, false, err
 	}
-
-	if workout.Template.TemplateId == uuid.Nil() {
-		workout.Template.TemplateName = strings.TrimSpace(workout.Template.TemplateName)
-		if workout.Template.TemplateName == "" {
-			return Workout{}, false, template.ErrTemplateNameRequired
-		}
-	}
-
 	if workout.StartedAt.IsZero() {
 		return Workout{}, false, ErrStartedAtRequired
 	}
 	if workout.CompletedAt.IsZero() {
-		workout.CompletedAt = time.Now().UTC()
+		return Workout{}, false, ErrCompletedAtRequired
 	}
 	if workout.StartedAt.After(workout.CompletedAt) {
 		return Workout{}, false, ErrStartedAfterCompleted
 	}
+	workout.Template.TemplateName = strings.TrimSpace(workout.Template.TemplateName)
 
-	if workout.WorkoutId == uuid.Nil() {
-		workout.WorkoutId = uuid.NewV7()
-	}
-
-	return s.repo.CreateWorkout(ctx, userId, workout)
-}
-
-// ModifyWorkout replaces the start and completion times and sets of an
-// existing workout. The template cannot be changed, so the workout's current
-// one is kept, and an omitted StartedAt or CompletedAt keeps the current value
-// rather than defaulting to now.
-func (s *WorkoutServiceImpl) ModifyWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, error) {
-	if err := validateSets(workout.Sets); err != nil {
-		return Workout{}, err
-	}
-
-	existing, err := s.repo.GetWorkoutByUserIdAndWorkoutId(ctx, userId, workout.WorkoutId)
-	if err != nil {
-		return Workout{}, err
-	}
-
-	workout.Template = existing.Template
-	if workout.StartedAt.IsZero() {
-		workout.StartedAt = existing.StartedAt
-	}
-	if workout.CompletedAt.IsZero() {
-		workout.CompletedAt = existing.CompletedAt
-	}
-	if workout.StartedAt.After(workout.CompletedAt) {
-		return Workout{}, ErrStartedAfterCompleted
-	}
-
-	return s.repo.ModifyWorkout(ctx, userId, workout)
+	return s.repo.PutWorkout(ctx, userId, workout)
 }
 
 func validateSets(sets []set.Set) error {

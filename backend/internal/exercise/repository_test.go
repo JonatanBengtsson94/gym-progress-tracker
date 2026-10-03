@@ -283,6 +283,63 @@ func TestExerciseRepository_CreateExercise_ConcurrentlyUnderTheSameName(t *testi
 	}
 }
 
+// A retry must get back the exercise it created, even when its name now belongs
+// to another exercise, or the client would swap its id to the wrong one.
+func TestExerciseRepository_CreateExercise_RetryWinsOverSameName(t *testing.T) {
+	ctx := t.Context()
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
+	if err != nil {
+		t.Fatalf("NewExerciseRepository returned error: %v", err)
+	}
+
+	// Stored after the exercise holding the name, so only the lookup's order can pick it.
+	first := exercise.Exercise{ExerciseId: uuid.NewV7(), ExerciseName: "Pendlay Row (Dumbbell)", UserId: 1}
+	second := exercise.Exercise{ExerciseId: uuid.NewV7(), ExerciseName: "Seal Row", UserId: 1}
+	for _, e := range []exercise.Exercise{second, first} {
+		if _, _, err := repo.CreateExercise(ctx, e); err != nil {
+			t.Fatalf("CreateExercise returned error: %v", err)
+		}
+	}
+
+	got, isNew, err := repo.CreateExercise(ctx, exercise.Exercise{ExerciseId: first.ExerciseId, ExerciseName: "seal row", UserId: 1})
+	if err != nil {
+		t.Fatalf("CreateExercise returned error: %v", err)
+	}
+	if got != first || isNew {
+		t.Errorf("CreateExercise() = %+v, %v, want the retried exercise %+v, false", got, isNew, first)
+	}
+}
+
+// A global exercise can be added after a user already has one with its name.
+// The user's own then wins, since their history is logged against it.
+func TestExerciseRepository_CreateExercise_OwnNameWinsOverGlobal(t *testing.T) {
+	ctx := t.Context()
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
+	if err != nil {
+		t.Fatalf("NewExerciseRepository returned error: %v", err)
+	}
+
+	globalId := uuid.NewV7()
+	if _, err := testPool.Exec(ctx, `INSERT INTO exercises (exercise_id, exercise_name) VALUES ($1, 'Custom Test Exercise')`, globalId); err != nil {
+		t.Fatalf("failed to insert global exercise: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := testPool.Exec(context.Background(), `DELETE FROM exercises WHERE exercise_id = $1`, globalId); err != nil {
+			t.Errorf("failed to delete global exercise: %v", err)
+		}
+	})
+
+	// "Custom Test Exercise" (1) is seeded for user 1.
+	got, isNew, err := repo.CreateExercise(ctx, exercise.Exercise{ExerciseId: uuid.NewV7(), ExerciseName: "custom test exercise", UserId: 1})
+	if err != nil {
+		t.Fatalf("CreateExercise returned error: %v", err)
+	}
+	want := exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "Custom Test Exercise", UserId: 1}
+	if got != want || isNew {
+		t.Errorf("CreateExercise() = %+v, %v, want the user's own %+v, false", got, isNew, want)
+	}
+}
+
 func TestExerciseRepository_CreateExercise_IdOfAnotherUsersExercise(t *testing.T) {
 	ctx := t.Context()
 	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)

@@ -17,8 +17,7 @@ type mockWorkoutRepository struct {
 	getWorkoutFunc    func(ctx context.Context, userId uint32, workoutId uuid.UUID) (workout.Workout, error)
 	getWorkoutsFunc   func(ctx context.Context, userId uint32) ([]workout.Workout, error)
 	getByTemplateFunc func(ctx context.Context, userId uint32, templateId uuid.UUID) ([]workout.Workout, error)
-	createWorkoutFunc func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error)
-	modifyWorkoutFunc func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error)
+	putWorkoutFunc    func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error)
 }
 
 func (m *mockWorkoutRepository) GetWorkoutByUserIdAndWorkoutId(ctx context.Context, userId uint32, workoutId uuid.UUID) (workout.Workout, error) {
@@ -33,12 +32,8 @@ func (m *mockWorkoutRepository) GetWorkoutsByUserIdAndTemplateId(ctx context.Con
 	return m.getByTemplateFunc(ctx, userId, templateId)
 }
 
-func (m *mockWorkoutRepository) CreateWorkout(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error) {
-	return m.createWorkoutFunc(ctx, userId, w)
-}
-
-func (m *mockWorkoutRepository) ModifyWorkout(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
-	return m.modifyWorkoutFunc(ctx, userId, w)
+func (m *mockWorkoutRepository) PutWorkout(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error) {
+	return m.putWorkoutFunc(ctx, userId, w)
 }
 
 func TestWorkoutService_GetWorkout(t *testing.T) {
@@ -92,228 +87,6 @@ func validWorkout() workout.Workout {
 	}
 }
 
-func TestWorkoutService_CreateWorkout(t *testing.T) {
-	ctx := t.Context()
-	const wantUserId = 1
-	toCreate := validWorkout()
-	toCreate.WorkoutId = testutil.Id(7)
-
-	var gotUserId uint32
-	var gotWorkout workout.Workout
-	repo := &mockWorkoutRepository{
-		createWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error) {
-			gotUserId = userId
-			gotWorkout = w
-			return w, true, nil
-		},
-	}
-
-	service := workout.NewWorkoutService(repo)
-
-	got, created, err := service.CreateWorkout(ctx, wantUserId, toCreate)
-	if err != nil {
-		t.Fatalf("CreateWorkout returned error: %v", err)
-	}
-
-	if gotUserId != wantUserId {
-		t.Errorf("expected repo to receive userId %d, got %d", wantUserId, gotUserId)
-	}
-	if gotWorkout.WorkoutId != toCreate.WorkoutId {
-		t.Errorf("expected repo to receive WorkoutId %v unchanged, got %v", toCreate.WorkoutId, gotWorkout.WorkoutId)
-	}
-	if !gotWorkout.StartedAt.Equal(toCreate.StartedAt) {
-		t.Errorf("expected repo to receive StartedAt %v, got %v", toCreate.StartedAt, gotWorkout.StartedAt)
-	}
-	if !gotWorkout.CompletedAt.Equal(toCreate.CompletedAt) {
-		t.Errorf("expected repo to receive CompletedAt %v, got %v", toCreate.CompletedAt, gotWorkout.CompletedAt)
-	}
-	if got.WorkoutId != toCreate.WorkoutId || !created {
-		t.Errorf("CreateWorkout() = workout %v, created %v, want workout %v, created true", got.WorkoutId, created, toCreate.WorkoutId)
-	}
-}
-
-func TestWorkoutService_CreateWorkout_GeneratesIdWhenOmitted(t *testing.T) {
-	ctx := t.Context()
-
-	var got []uuid.UUID
-	repo := &mockWorkoutRepository{
-		createWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error) {
-			got = append(got, w.WorkoutId)
-			return w, true, nil
-		},
-	}
-
-	service := workout.NewWorkoutService(repo)
-
-	for range 2 {
-		if _, _, err := service.CreateWorkout(ctx, 1, validWorkout()); err != nil {
-			t.Fatalf("CreateWorkout returned error: %v", err)
-		}
-	}
-
-	if got[0] == uuid.Nil() || got[0] == got[1] {
-		t.Errorf("expected each create without an id to get a new one, got %v", got)
-	}
-}
-
-func TestWorkoutService_CreateWorkout_ReturnsStoredWorkout(t *testing.T) {
-	ctx := t.Context()
-	stored := existingWorkout()
-
-	repo := &mockWorkoutRepository{
-		createWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error) {
-			return stored, false, nil
-		},
-	}
-
-	service := workout.NewWorkoutService(repo)
-
-	toCreate := validWorkout()
-	toCreate.WorkoutId = stored.WorkoutId
-
-	got, created, err := service.CreateWorkout(ctx, 1, toCreate)
-	if err != nil {
-		t.Fatalf("CreateWorkout returned error: %v", err)
-	}
-	if got.WorkoutId != stored.WorkoutId || !got.CompletedAt.Equal(stored.CompletedAt) || created {
-		t.Errorf("CreateWorkout() = %+v, created %v, want the stored workout %+v, created false", got, created, stored)
-	}
-}
-
-func TestWorkoutService_CreateWorkout_ValidationErrors(t *testing.T) {
-	ctx := t.Context()
-
-	tests := []struct {
-		name    string
-		workout func() workout.Workout
-		wantErr error
-	}{
-		{
-			name: "no sets",
-			workout: func() workout.Workout {
-				w := validWorkout()
-				w.Sets = nil
-				return w
-			},
-			wantErr: workout.ErrSetsRequired,
-		},
-		{
-			name: "set with zero reps",
-			workout: func() workout.Workout {
-				w := validWorkout()
-				w.Sets = []set.Set{{Reps: 8}, {Reps: 0}}
-				return w
-			},
-			wantErr: workout.ErrRepsRequired,
-		},
-		{
-			name: "no template id and blank template name",
-			workout: func() workout.Workout {
-				w := validWorkout()
-				w.Template = template.Template{TemplateName: "   "}
-				return w
-			},
-			wantErr: template.ErrTemplateNameRequired,
-		},
-		{
-			name: "no started at",
-			workout: func() workout.Workout {
-				w := validWorkout()
-				w.StartedAt = time.Time{}
-				return w
-			},
-			wantErr: workout.ErrStartedAtRequired,
-		},
-		{
-			name: "started after completed",
-			workout: func() workout.Workout {
-				w := validWorkout()
-				w.StartedAt = w.CompletedAt.Add(time.Second)
-				return w
-			},
-			wantErr: workout.ErrStartedAfterCompleted,
-		},
-		{
-			name: "started in the future with completed at defaulted to now",
-			workout: func() workout.Workout {
-				w := validWorkout()
-				w.StartedAt = time.Now().Add(time.Hour)
-				w.CompletedAt = time.Time{}
-				return w
-			},
-			wantErr: workout.ErrStartedAfterCompleted,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			repo := &mockWorkoutRepository{
-				createWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error) {
-					t.Fatal("CreateWorkout should not reach the repository for an invalid workout")
-					return workout.Workout{}, false, nil
-				},
-			}
-
-			service := workout.NewWorkoutService(repo)
-
-			_, _, err := service.CreateWorkout(ctx, 1, tt.workout())
-			if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("Expected %v, got %v", tt.wantErr, err)
-			}
-		})
-	}
-}
-
-func TestWorkoutService_CreateWorkout_TrimsGeneratedTemplateName(t *testing.T) {
-	ctx := t.Context()
-	toCreate := validWorkout()
-	toCreate.Template = template.Template{TemplateName: "  Leg Day  "}
-
-	var gotWorkout workout.Workout
-	repo := &mockWorkoutRepository{
-		createWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error) {
-			gotWorkout = w
-			return w, true, nil
-		},
-	}
-
-	service := workout.NewWorkoutService(repo)
-
-	if _, _, err := service.CreateWorkout(ctx, 1, toCreate); err != nil {
-		t.Fatalf("CreateWorkout returned error: %v", err)
-	}
-
-	if gotWorkout.Template.TemplateName != "Leg Day" {
-		t.Errorf("expected repo to receive TemplateName %q, got %q", "Leg Day", gotWorkout.Template.TemplateName)
-	}
-}
-
-func TestWorkoutService_CreateWorkout_DefaultsCompletedAt(t *testing.T) {
-	ctx := t.Context()
-	toCreate := validWorkout()
-	toCreate.CompletedAt = time.Time{}
-
-	var gotWorkout workout.Workout
-	repo := &mockWorkoutRepository{
-		createWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error) {
-			gotWorkout = w
-			return w, true, nil
-		},
-	}
-
-	service := workout.NewWorkoutService(repo)
-
-	before := time.Now().UTC()
-	if _, _, err := service.CreateWorkout(ctx, 1, toCreate); err != nil {
-		t.Fatalf("CreateWorkout returned error: %v", err)
-	}
-	after := time.Now().UTC()
-
-	if gotWorkout.CompletedAt.Before(before) || gotWorkout.CompletedAt.After(after) {
-		t.Errorf("expected CompletedAt to default to now, got %v", gotWorkout.CompletedAt)
-	}
-}
-
 func TestWorkoutService_GetWorkout_RepoError(t *testing.T) {
 	ctx := t.Context()
 	wantErr := workout.ErrWorkoutNotFound
@@ -332,242 +105,102 @@ func TestWorkoutService_GetWorkout_RepoError(t *testing.T) {
 	}
 }
 
-func existingWorkout() workout.Workout {
-	return workout.Workout{
-		WorkoutId:   testutil.Id(42),
-		StartedAt:   time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC),
-		CompletedAt: time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
-		Template:    template.Template{TemplateId: testutil.Id(3), TemplateName: "Push Day"},
-		Sets:        []set.Set{{Reps: 5, WeightGrams: 50000}},
-	}
-}
-
-func TestWorkoutService_ModifyWorkout(t *testing.T) {
+func TestWorkoutService_PutWorkout(t *testing.T) {
 	ctx := t.Context()
 	const wantUserId = 1
+	toPut := validWorkout()
+	toPut.WorkoutId = testutil.Id(42)
 
-	existing := existingWorkout()
-	toModify := workout.Workout{
-		WorkoutId:   testutil.Id(42),
-		StartedAt:   time.Date(2024, 1, 16, 11, 0, 0, 0, time.UTC),
-		CompletedAt: time.Date(2024, 1, 16, 12, 0, 0, 0, time.UTC),
-		Sets:        []set.Set{{Reps: 8, WeightGrams: 60000}, {Reps: 6, WeightGrams: 65000}},
+	for _, created := range []bool{true, false} {
+		var gotUserId uint32
+		var gotWorkout workout.Workout
+		repo := &mockWorkoutRepository{
+			putWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error) {
+				gotUserId = userId
+				gotWorkout = w
+				return w, created, nil
+			},
+		}
+
+		service := workout.NewWorkoutService(repo)
+
+		got, gotCreated, err := service.PutWorkout(ctx, wantUserId, toPut)
+		if err != nil {
+			t.Fatalf("PutWorkout returned error: %v", err)
+		}
+
+		if gotUserId != wantUserId {
+			t.Errorf("expected repo to receive userId %d, got %d", wantUserId, gotUserId)
+		}
+		if gotWorkout.WorkoutId != toPut.WorkoutId || gotWorkout.Template != toPut.Template ||
+			!gotWorkout.StartedAt.Equal(toPut.StartedAt) || !gotWorkout.CompletedAt.Equal(toPut.CompletedAt) || len(gotWorkout.Sets) != 1 {
+			t.Errorf("expected repo to receive %+v unchanged, got %+v", toPut, gotWorkout)
+		}
+		if got.WorkoutId != toPut.WorkoutId || gotCreated != created {
+			t.Errorf("PutWorkout() = %v, created %v, want %v, created %v", got.WorkoutId, gotCreated, toPut.WorkoutId, created)
+		}
 	}
+}
 
-	var gotGetUserId, gotModifyUserId uint32
-	var gotGetWorkoutId uuid.UUID
+func TestWorkoutService_PutWorkout_TrimsTemplateName(t *testing.T) {
+	ctx := t.Context()
+
 	var gotWorkout workout.Workout
 	repo := &mockWorkoutRepository{
-		getWorkoutFunc: func(ctx context.Context, userId uint32, workoutId uuid.UUID) (workout.Workout, error) {
-			gotGetUserId = userId
-			gotGetWorkoutId = workoutId
-			return existing, nil
-		},
-		modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
-			gotModifyUserId = userId
+		putWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error) {
 			gotWorkout = w
-			return w, nil
+			return w, true, nil
 		},
 	}
 
 	service := workout.NewWorkoutService(repo)
 
-	got, err := service.ModifyWorkout(ctx, wantUserId, toModify)
-	if err != nil {
-		t.Fatalf("ModifyWorkout returned error: %v", err)
+	toPut := validWorkout()
+	toPut.WorkoutId = testutil.Id(42)
+	toPut.Template = template.Template{TemplateName: "  Leg Day  "}
+
+	if _, _, err := service.PutWorkout(ctx, 1, toPut); err != nil {
+		t.Fatalf("PutWorkout returned error: %v", err)
 	}
 
-	if gotGetUserId != wantUserId || gotGetWorkoutId != testutil.Id(42) {
-		t.Errorf("expected repo lookup for user %d / workout 42, got user %d / workout %v", wantUserId, gotGetUserId, gotGetWorkoutId)
-	}
-	if gotModifyUserId != wantUserId {
-		t.Errorf("expected repo to receive userId %d, got %d", wantUserId, gotModifyUserId)
-	}
-	if !gotWorkout.StartedAt.Equal(toModify.StartedAt) {
-		t.Errorf("expected repo to receive StartedAt %v, got %v", toModify.StartedAt, gotWorkout.StartedAt)
-	}
-	if !gotWorkout.CompletedAt.Equal(toModify.CompletedAt) {
-		t.Errorf("expected repo to receive CompletedAt %v, got %v", toModify.CompletedAt, gotWorkout.CompletedAt)
-	}
-	if len(gotWorkout.Sets) != 2 {
-		t.Errorf("expected repo to receive 2 sets, got %+v", gotWorkout.Sets)
-	}
-	if got.WorkoutId != testutil.Id(42) {
-		t.Errorf("expected WorkoutId 42, got %v", got.WorkoutId)
+	if gotWorkout.Template.TemplateName != "Leg Day" {
+		t.Errorf("expected repo to receive TemplateName %q, got %q", "Leg Day", gotWorkout.Template.TemplateName)
 	}
 }
 
-func TestWorkoutService_ModifyWorkout_KeepsExistingTemplate(t *testing.T) {
-	ctx := t.Context()
-	existing := existingWorkout()
-
-	var gotWorkout workout.Workout
-	repo := &mockWorkoutRepository{
-		getWorkoutFunc: func(ctx context.Context, userId uint32, workoutId uuid.UUID) (workout.Workout, error) {
-			return existing, nil
-		},
-		modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
-			gotWorkout = w
-			return w, nil
-		},
-	}
-
-	service := workout.NewWorkoutService(repo)
-
-	toModify := validWorkout()
-	toModify.WorkoutId = testutil.Id(42)
-	toModify.Template = template.Template{TemplateId: testutil.Id(99), TemplateName: "Sneaky Day"}
-
-	if _, err := service.ModifyWorkout(ctx, 1, toModify); err != nil {
-		t.Fatalf("ModifyWorkout returned error: %v", err)
-	}
-
-	if gotWorkout.Template != existing.Template {
-		t.Errorf("expected the existing template %+v to be kept, got %+v", existing.Template, gotWorkout.Template)
-	}
-}
-
-func TestWorkoutService_ModifyWorkout_KeepsExistingStartedAtWhenOmitted(t *testing.T) {
-	ctx := t.Context()
-	existing := existingWorkout()
-
-	var gotWorkout workout.Workout
-	repo := &mockWorkoutRepository{
-		getWorkoutFunc: func(ctx context.Context, userId uint32, workoutId uuid.UUID) (workout.Workout, error) {
-			return existing, nil
-		},
-		modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
-			gotWorkout = w
-			return w, nil
-		},
-	}
-
-	service := workout.NewWorkoutService(repo)
-
-	toModify := validWorkout()
-	toModify.WorkoutId = testutil.Id(42)
-	toModify.StartedAt = time.Time{}
-
-	if _, err := service.ModifyWorkout(ctx, 1, toModify); err != nil {
-		t.Fatalf("ModifyWorkout returned error: %v", err)
-	}
-
-	if !gotWorkout.StartedAt.Equal(existing.StartedAt) {
-		t.Errorf("expected the existing StartedAt %v to be kept, got %v", existing.StartedAt, gotWorkout.StartedAt)
-	}
-}
-
-// The ordering check must use the stored value for whichever time is omitted,
-// so a change to one time alone can't leave the workout ending before it began.
-func TestWorkoutService_ModifyWorkout_StartedAfterCompleted(t *testing.T) {
-	ctx := t.Context()
-	existing := existingWorkout()
-
-	tests := []struct {
-		name   string
-		modify func(*workout.Workout)
-	}{
-		{"both given", func(w *workout.Workout) {
-			w.StartedAt = w.CompletedAt.Add(time.Second)
-		}},
-		{"started at after existing completed at", func(w *workout.Workout) {
-			w.StartedAt = existing.CompletedAt.Add(time.Second)
-			w.CompletedAt = time.Time{}
-		}},
-		{"completed at before existing started at", func(w *workout.Workout) {
-			w.StartedAt = time.Time{}
-			w.CompletedAt = existing.StartedAt.Add(-time.Second)
-		}},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			repo := &mockWorkoutRepository{
-				getWorkoutFunc: func(ctx context.Context, userId uint32, workoutId uuid.UUID) (workout.Workout, error) {
-					return existing, nil
-				},
-				modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
-					t.Fatal("ModifyWorkout should not reach the repository when started_at is after completed_at")
-					return workout.Workout{}, nil
-				},
-			}
-
-			service := workout.NewWorkoutService(repo)
-
-			toModify := validWorkout()
-			toModify.WorkoutId = testutil.Id(42)
-			tt.modify(&toModify)
-
-			_, err := service.ModifyWorkout(ctx, 1, toModify)
-			if !errors.Is(err, workout.ErrStartedAfterCompleted) {
-				t.Fatalf("Expected ErrStartedAfterCompleted, got %v", err)
-			}
-		})
-	}
-}
-
-func TestWorkoutService_ModifyWorkout_KeepsExistingCompletedAtWhenOmitted(t *testing.T) {
-	ctx := t.Context()
-	existing := existingWorkout()
-
-	var gotWorkout workout.Workout
-	repo := &mockWorkoutRepository{
-		getWorkoutFunc: func(ctx context.Context, userId uint32, workoutId uuid.UUID) (workout.Workout, error) {
-			return existing, nil
-		},
-		modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
-			gotWorkout = w
-			return w, nil
-		},
-	}
-
-	service := workout.NewWorkoutService(repo)
-
-	toModify := validWorkout()
-	toModify.WorkoutId = testutil.Id(42)
-	toModify.CompletedAt = time.Time{}
-
-	if _, err := service.ModifyWorkout(ctx, 1, toModify); err != nil {
-		t.Fatalf("ModifyWorkout returned error: %v", err)
-	}
-
-	if !gotWorkout.CompletedAt.Equal(existing.CompletedAt) {
-		t.Errorf("expected the existing CompletedAt %v to be kept, got %v", existing.CompletedAt, gotWorkout.CompletedAt)
-	}
-}
-
-func TestWorkoutService_ModifyWorkout_ValidationErrors(t *testing.T) {
+// A PUT replaces the whole workout, so unlike a create it doesn't default an
+// omitted time.
+func TestWorkoutService_PutWorkout_ValidationErrors(t *testing.T) {
 	ctx := t.Context()
 
 	tests := []struct {
 		name    string
-		sets    []set.Set
+		modify  func(*workout.Workout)
 		wantErr error
 	}{
-		{"no sets", nil, workout.ErrSetsRequired},
-		{"set with zero reps", []set.Set{{Reps: 8}, {Reps: 0}}, workout.ErrRepsRequired},
+		{"no sets", func(w *workout.Workout) { w.Sets = nil }, workout.ErrSetsRequired},
+		{"set with zero reps", func(w *workout.Workout) { w.Sets = []set.Set{{Reps: 8}, {Reps: 0}} }, workout.ErrRepsRequired},
+		{"no started at", func(w *workout.Workout) { w.StartedAt = time.Time{} }, workout.ErrStartedAtRequired},
+		{"no completed at", func(w *workout.Workout) { w.CompletedAt = time.Time{} }, workout.ErrCompletedAtRequired},
+		{"started after completed", func(w *workout.Workout) { w.StartedAt = w.CompletedAt.Add(time.Second) }, workout.ErrStartedAfterCompleted},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := &mockWorkoutRepository{
-				getWorkoutFunc: func(ctx context.Context, userId uint32, workoutId uuid.UUID) (workout.Workout, error) {
-					t.Fatal("ModifyWorkout should not reach the repository for an invalid workout")
-					return workout.Workout{}, nil
-				},
-				modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
-					t.Fatal("ModifyWorkout should not reach the repository for an invalid workout")
-					return workout.Workout{}, nil
+				putWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error) {
+					t.Fatal("PutWorkout should not reach the repository for an invalid workout")
+					return workout.Workout{}, false, nil
 				},
 			}
 
 			service := workout.NewWorkoutService(repo)
 
-			toModify := validWorkout()
-			toModify.WorkoutId = testutil.Id(42)
-			toModify.Sets = tt.sets
+			toPut := validWorkout()
+			toPut.WorkoutId = testutil.Id(42)
+			tt.modify(&toPut)
 
-			_, err := service.ModifyWorkout(ctx, 1, toModify)
+			_, _, err := service.PutWorkout(ctx, 1, toPut)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("Expected %v, got %v", tt.wantErr, err)
 			}
@@ -575,47 +208,21 @@ func TestWorkoutService_ModifyWorkout_ValidationErrors(t *testing.T) {
 	}
 }
 
-func TestWorkoutService_ModifyWorkout_WorkoutNotFound(t *testing.T) {
+func TestWorkoutService_PutWorkout_RepositoryError(t *testing.T) {
 	ctx := t.Context()
+	wantErr := workout.ErrWorkoutIdTaken
 	repo := &mockWorkoutRepository{
-		getWorkoutFunc: func(ctx context.Context, userId uint32, workoutId uuid.UUID) (workout.Workout, error) {
-			return workout.Workout{}, workout.ErrWorkoutNotFound
-		},
-		modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
-			t.Fatal("ModifyWorkout should not be called for a workout that does not exist")
-			return workout.Workout{}, nil
+		putWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, bool, error) {
+			return workout.Workout{}, false, wantErr
 		},
 	}
 
 	service := workout.NewWorkoutService(repo)
 
-	toModify := validWorkout()
-	toModify.WorkoutId = testutil.Id(42)
+	toPut := validWorkout()
+	toPut.WorkoutId = testutil.Id(42)
 
-	_, err := service.ModifyWorkout(ctx, 1, toModify)
-	if !errors.Is(err, workout.ErrWorkoutNotFound) {
-		t.Fatalf("Expected ErrWorkoutNotFound, got %v", err)
-	}
-}
-
-func TestWorkoutService_ModifyWorkout_RepositoryError(t *testing.T) {
-	ctx := t.Context()
-	wantErr := errors.New("db exploded")
-	repo := &mockWorkoutRepository{
-		getWorkoutFunc: func(ctx context.Context, userId uint32, workoutId uuid.UUID) (workout.Workout, error) {
-			return existingWorkout(), nil
-		},
-		modifyWorkoutFunc: func(ctx context.Context, userId uint32, w workout.Workout) (workout.Workout, error) {
-			return workout.Workout{}, wantErr
-		},
-	}
-
-	service := workout.NewWorkoutService(repo)
-
-	toModify := validWorkout()
-	toModify.WorkoutId = testutil.Id(42)
-
-	_, err := service.ModifyWorkout(ctx, 1, toModify)
+	_, _, err := service.PutWorkout(ctx, 1, toPut)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Expected %v, got %v", wantErr, err)
 	}

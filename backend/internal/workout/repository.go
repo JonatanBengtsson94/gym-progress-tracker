@@ -126,58 +126,87 @@ func (r *PostgresWorkoutRepository) listWorkouts(ctx context.Context, query stri
 	return workouts, nil
 }
 
-// CreateWorkout stores workout under its own id, unless the user already has a
-// workout with that id. Then nothing is stored and that workout is returned
-// instead, with created false, so a retried create gets back what the first
-// one stored. An id taken by another user's workout is ErrWorkoutIdTaken.
-func (r *PostgresWorkoutRepository) CreateWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, bool, error) {
-	stored, found, err := r.findOwnWorkout(ctx, userId, workout.WorkoutId)
-	if err != nil || found {
-		return stored, false, err
-	}
+// errWorkoutCreatedConcurrently reports that another request created the
+// workout between PutWorkout finding no workout and inserting one.
+var errWorkoutCreatedConcurrently = errors.New("workout created concurrently")
 
-	created, err := r.insertWorkout(ctx, userId, workout)
-	if errors.Is(err, ErrWorkoutIdTaken) {
-		// A retry running alongside this create can store the workout first.
-		stored, found, findErr := r.findOwnWorkout(ctx, userId, workout.WorkoutId)
-		if findErr != nil || found {
-			return stored, false, findErr
-		}
+// PutWorkout replaces the times and all sets of the user's workout with
+// workout.WorkoutId, keeping its template, or creates the workout if there is
+// none, in one transaction either way. created reports which happened. An id
+// taken by another user's workout is ErrWorkoutIdTaken.
+func (r *PostgresWorkoutRepository) PutWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, bool, error) {
+	stored, created, err := r.putWorkout(ctx, userId, workout)
+	if errors.Is(err, errWorkoutCreatedConcurrently) {
+		// The workout exists now, so this attempt replaces it.
+		return r.putWorkout(ctx, userId, workout)
 	}
-	if err != nil {
-		return Workout{}, false, err
-	}
-
-	return created, true, nil
+	return stored, created, err
 }
 
-func (r *PostgresWorkoutRepository) findOwnWorkout(ctx context.Context, userId uint32, workoutId uuid.UUID) (Workout, bool, error) {
-	workout, err := r.GetWorkoutByUserIdAndWorkoutId(ctx, userId, workoutId)
-	if errors.Is(err, ErrWorkoutNotFound) {
-		return Workout{}, false, nil
-	}
-	if err != nil {
-		return Workout{}, false, err
-	}
-	return workout, true, nil
-}
-
-// insertWorkout stores workout and its sets in one transaction, creating its
-// template first when Template.TemplateId is unset.
-func (r *PostgresWorkoutRepository) insertWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, error) {
+func (r *PostgresWorkoutRepository) putWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, bool, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return Workout{}, fmt.Errorf("Begin transaction failed: %w", err)
+		return Workout{}, false, fmt.Errorf("Begin transaction failed: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
-	if workout.Template.TemplateId == uuid.Nil() {
-		workout.Template, err = createTemplate(ctx, tx, userId, workout.Template.TemplateName)
-	} else {
+	// Locking the workout makes concurrent puts of it take turns.
+	query := `
+		SELECT t.user_id, t.template_id, t.template_name
+		FROM workouts AS w
+		JOIN templates AS t ON t.template_id = w.template_id
+		WHERE w.workout_id = $1
+		FOR UPDATE OF w
+	`
+	var ownerId uint32
+	err = tx.QueryRow(ctx, query, workout.WorkoutId).Scan(&ownerId, &workout.Template.TemplateId, &workout.Template.TemplateName)
+	created := errors.Is(err, pgx.ErrNoRows)
+	switch {
+	case created:
+		err = insertWorkout(ctx, tx, userId, &workout)
+		if errors.Is(err, ErrWorkoutIdTaken) {
+			return Workout{}, false, errWorkoutCreatedConcurrently
+		}
+		if err != nil {
+			return Workout{}, false, err
+		}
+	case err != nil:
+		return Workout{}, false, fmt.Errorf("Get workout failed: %w", err)
+	case ownerId != userId:
+		return Workout{}, false, ErrWorkoutIdTaken
+	default:
+		workout.Template.UserId = userId
+		if err := replaceWorkout(ctx, tx, workout); err != nil {
+			return Workout{}, false, err
+		}
+	}
+
+	workout.Sets, err = insertSets(ctx, tx, userId, workout.WorkoutId, workout.Sets)
+	if err != nil {
+		return Workout{}, false, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Workout{}, false, fmt.Errorf("Commit transaction failed: %w", err)
+	}
+
+	return workout, created, nil
+}
+
+// insertWorkout stores workout without its sets, under its template or, when
+// Template.TemplateId is unset, a new one named Template.TemplateName.
+func insertWorkout(ctx context.Context, tx pgx.Tx, userId uint32, workout *Workout) error {
+	var err error
+	switch {
+	case workout.Template.TemplateId != uuid.Nil():
 		workout.Template, err = findTemplate(ctx, tx, userId, workout.Template.TemplateId)
+	case workout.Template.TemplateName != "":
+		workout.Template, err = createTemplate(ctx, tx, userId, workout.Template.TemplateName)
+	default:
+		err = template.ErrTemplateNameRequired
 	}
 	if err != nil {
-		return Workout{}, err
+		return err
 	}
 
 	query := `
@@ -186,63 +215,28 @@ func (r *PostgresWorkoutRepository) insertWorkout(ctx context.Context, userId ui
 	`
 	if _, err := tx.Exec(ctx, query, workout.WorkoutId, workout.Template.TemplateId, workout.StartedAt, workout.CompletedAt); err != nil {
 		if database.IsUniqueViolation(err) {
-			return Workout{}, ErrWorkoutIdTaken
+			return ErrWorkoutIdTaken
 		}
-		return Workout{}, fmt.Errorf("Create workout failed: %w", err)
+		return fmt.Errorf("Create workout failed: %w", err)
 	}
-
-	workout.Sets, err = insertSets(ctx, tx, userId, workout.WorkoutId, workout.Sets)
-	if err != nil {
-		return Workout{}, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return Workout{}, fmt.Errorf("Commit transaction failed: %w", err)
-	}
-
-	return workout, nil
+	return nil
 }
 
-// ModifyWorkout replaces the start and completion times and all sets of an existing
-// workout in one transaction, so a failure part-way leaves the old sets in
-// place. The workout's template is left as it is. Workouts belonging to other
-// users are reported as ErrWorkoutNotFound.
-func (r *PostgresWorkoutRepository) ModifyWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, error) {
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return Workout{}, fmt.Errorf("Begin transaction failed: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
+// replaceWorkout updates workout's times and deletes its sets, ready for the
+// new ones.
+func replaceWorkout(ctx context.Context, tx pgx.Tx, workout Workout) error {
 	query := `
-		UPDATE workouts AS w
+		UPDATE workouts
 		SET started_at = $1, completed_at = $2, updated_at = CURRENT_TIMESTAMP
-		FROM templates AS t
-		WHERE w.workout_id = $3 AND w.template_id = t.template_id AND t.user_id = $4
-		RETURNING t.template_id, t.template_name
+		WHERE workout_id = $3
 	`
-	err = tx.QueryRow(ctx, query, workout.StartedAt, workout.CompletedAt, workout.WorkoutId, userId).Scan(&workout.Template.TemplateId, &workout.Template.TemplateName)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return Workout{}, ErrWorkoutNotFound
-		}
-		return Workout{}, fmt.Errorf("Modify workout failed: %w", err)
+	if _, err := tx.Exec(ctx, query, workout.StartedAt, workout.CompletedAt, workout.WorkoutId); err != nil {
+		return fmt.Errorf("Modify workout failed: %w", err)
 	}
-
 	if _, err := tx.Exec(ctx, `DELETE FROM sets WHERE workout_id = $1`, workout.WorkoutId); err != nil {
-		return Workout{}, fmt.Errorf("Delete sets failed: %w", err)
+		return fmt.Errorf("Delete sets failed: %w", err)
 	}
-
-	workout.Sets, err = insertSets(ctx, tx, userId, workout.WorkoutId, workout.Sets)
-	if err != nil {
-		return Workout{}, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return Workout{}, fmt.Errorf("Commit transaction failed: %w", err)
-	}
-
-	return workout, nil
+	return nil
 }
 
 func createTemplate(ctx context.Context, tx pgx.Tx, userId uint32, templateName string) (template.Template, error) {

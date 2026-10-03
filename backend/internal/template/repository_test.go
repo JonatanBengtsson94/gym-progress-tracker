@@ -110,6 +110,30 @@ func TestTemplateRepository_CreateTemplate_ReturnsExistingTemplateWithSameName(t
 	}
 }
 
+// A retry must get back the template it created, even when its name now belongs
+// to another template, or the client would swap its id to the wrong one.
+func TestTemplateRepository_CreateTemplate_RetryWinsOverSameName(t *testing.T) {
+	ctx := t.Context()
+	repo := template.NewPostgresTemplateRepository(testPool)
+
+	// Stored after the template holding the name, so only the lookup's order can pick it.
+	first := template.Template{TemplateId: uuid.NewV7(), TemplateName: "Upper A", UserId: 1}
+	second := template.Template{TemplateId: uuid.NewV7(), TemplateName: "Upper B", UserId: 1}
+	for _, tmpl := range []template.Template{second, first} {
+		if _, _, err := repo.CreateTemplate(ctx, tmpl); err != nil {
+			t.Fatalf("CreateTemplate returned error: %v", err)
+		}
+	}
+
+	got, isNew, err := repo.CreateTemplate(ctx, template.Template{TemplateId: first.TemplateId, TemplateName: "upper b", UserId: 1})
+	if err != nil {
+		t.Fatalf("CreateTemplate returned error: %v", err)
+	}
+	if got != first || isNew {
+		t.Errorf("CreateTemplate() = %+v, %v, want the retried template %+v, false", got, isNew, first)
+	}
+}
+
 func TestTemplateRepository_CreateTemplate_IdOfAnotherUsersTemplate(t *testing.T) {
 	ctx := t.Context()
 	repo := template.NewPostgresTemplateRepository(testPool)

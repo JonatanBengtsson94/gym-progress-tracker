@@ -16,6 +16,7 @@ var ErrSetsRequired = errors.New("workout must contain at least one set")
 var ErrRepsRequired = errors.New("reps must be greater than zero")
 var ErrWeightGramsOutOfRange = errors.New("weight_grams is out of range")
 var ErrStartedAtRequired = errors.New("started_at is required")
+var ErrCompletedAtRequired = errors.New("completed_at is required")
 var ErrStartedAfterCompleted = errors.New("started_at must not be after completed_at")
 var ErrWorkoutIdTaken = errors.New("workout id is already in use")
 

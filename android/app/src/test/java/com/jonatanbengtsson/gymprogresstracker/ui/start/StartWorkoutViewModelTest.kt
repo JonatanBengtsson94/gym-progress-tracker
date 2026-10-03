@@ -4,11 +4,12 @@ import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.FakeActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeSessionRepository
+import com.jonatanbengtsson.gymprogresstracker.data.FakeTemplatesRepository
+import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionState
-import com.jonatanbengtsson.gymprogresstracker.data.TemplatesApi
-import com.jonatanbengtsson.gymprogresstracker.data.TemplatesResult
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
+import com.jonatanbengtsson.gymprogresstracker.data.testId
 import com.jonatanbengtsson.gymprogresstracker.ui.login.MainDispatcherRule
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
@@ -22,61 +23,70 @@ class StartWorkoutViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
-    /** Suspends each request until the test completes [response]. */
-    private class FakeTemplatesApi : TemplatesApi {
-        var response = CompletableDeferred<TemplatesResult>()
-        val calls = mutableListOf<String>()
-
-        override suspend fun getTemplates(sessionId: String): TemplatesResult {
-            calls += sessionId
-            return response.await()
-        }
-    }
-
     private val templates = listOf(
-        WorkoutTemplate(id = 1, name = "Push Day", latestWorkout = null),
-        WorkoutTemplate(id = 2, name = "Leg Day", latestWorkout = null)
+        WorkoutTemplate(id = testId(1), name = "Push Day", latestWorkout = null),
+        WorkoutTemplate(id = testId(2), name = "Leg Day", latestWorkout = null)
     )
 
-    private val squat = Exercise(1, "Squat (Barbell)")
+    private val squat = Exercise(testId(1), "Squat (Barbell)")
 
-    private val templatesApi = FakeTemplatesApi()
+    private val templatesRepository = FakeTemplatesRepository()
     private val activeWorkoutRepository = FakeActiveWorkoutRepository()
     private val sessionRepository = FakeSessionRepository(SessionState.LoggedIn("session-123"))
 
-    // Created lazily so each test can set up the fakes before the view model loads on init.
-    private val viewModel by lazy { StartWorkoutViewModel(templatesApi, activeWorkoutRepository, sessionRepository, "session-123") }
+    // Created lazily so each test can set up the fakes before the view model refreshes on init.
+    private val viewModel by lazy { StartWorkoutViewModel(templatesRepository, activeWorkoutRepository, sessionRepository, "session-123") }
 
     @Test
-    fun `loads templates with the session id on creation`() {
+    fun `refreshes the templates with the session id on creation`() {
         viewModel
 
-        assertEquals(listOf("session-123"), templatesApi.calls)
+        assertEquals(listOf("session-123"), templatesRepository.refreshes)
         assertEquals(StartWorkoutUiState(isLoading = true), viewModel.uiState)
     }
 
     @Test
-    fun `success exposes the templates in order`() {
+    fun `stored templates show while they're being refreshed`() {
+        templatesRepository.templates.value = templates
+
+        assertEquals(StartWorkoutUiState(isLoading = true, templates = templates), viewModel.uiState)
+    }
+
+    @Test
+    fun `refreshed templates replace the stored ones`() {
+        templatesRepository.templates.value = templates.take(1)
         viewModel
-        templatesApi.response.complete(TemplatesResult.Success(templates))
+
+        templatesRepository.templates.value = templates
+        templatesRepository.refreshResult.complete(RefreshResult.Success)
 
         assertEquals(StartWorkoutUiState(templates = templates), viewModel.uiState)
     }
 
     @Test
     fun `network error shows network error`() {
-        assertErrorFor(TemplatesResult.NetworkError, R.string.start_workout_error_network)
+        assertErrorFor(RefreshResult.NetworkError, R.string.start_workout_error_network)
     }
 
     @Test
     fun `server error shows server error`() {
-        assertErrorFor(TemplatesResult.ServerError, R.string.start_workout_error_server)
+        assertErrorFor(RefreshResult.ServerError, R.string.start_workout_error_server)
+    }
+
+    @Test
+    fun `a failed refresh keeps showing the stored templates`() {
+        templatesRepository.templates.value = templates
+        viewModel
+
+        templatesRepository.refreshResult.complete(RefreshResult.NetworkError)
+
+        assertEquals(StartWorkoutUiState(templates = templates, errorMessage = R.string.start_workout_error_network), viewModel.uiState)
     }
 
     @Test
     fun `an expired session is ended`() {
         viewModel
-        templatesApi.response.complete(TemplatesResult.SessionExpired)
+        templatesRepository.refreshResult.complete(RefreshResult.SessionExpired)
 
         assertEquals(SessionState.LoggedOut, sessionRepository.session.value)
         assertEquals(StartWorkoutUiState(), viewModel.uiState)
@@ -93,24 +103,25 @@ class StartWorkoutViewModelTest {
     }
 
     @Test
-    fun `reload is ignored while a request is in flight`() {
+    fun `reload is ignored while a refresh is in flight`() {
         viewModel.loadTemplates()
 
-        assertEquals(listOf("session-123"), templatesApi.calls)
+        assertEquals(listOf("session-123"), templatesRepository.refreshes)
     }
 
     @Test
-    fun `retrying after an error clears the error and loads again`() {
+    fun `retrying after an error clears the error and refreshes again`() {
         viewModel
-        templatesApi.response.complete(TemplatesResult.NetworkError)
-        templatesApi.response = CompletableDeferred()
+        templatesRepository.refreshResult.complete(RefreshResult.NetworkError)
+        templatesRepository.refreshResult = CompletableDeferred()
 
         viewModel.loadTemplates()
 
         assertEquals(StartWorkoutUiState(isLoading = true), viewModel.uiState)
-        templatesApi.response.complete(TemplatesResult.Success(templates))
+        templatesRepository.templates.value = templates
+        templatesRepository.refreshResult.complete(RefreshResult.Success)
         assertEquals(StartWorkoutUiState(templates = templates), viewModel.uiState)
-        assertEquals(listOf("session-123", "session-123"), templatesApi.calls)
+        assertEquals(listOf("session-123", "session-123"), templatesRepository.refreshes)
     }
 
     @Test
@@ -134,7 +145,8 @@ class StartWorkoutViewModelTest {
         activeWorkoutRepository.exercises.value = listOf(WorkoutExerciseEntry(squat))
         viewModel
 
-        templatesApi.response.complete(TemplatesResult.Success(templates))
+        templatesRepository.templates.value = templates
+        templatesRepository.refreshResult.complete(RefreshResult.Success)
 
         assertEquals(StartWorkoutUiState(templates = templates, workoutInProgress = true), viewModel.uiState)
     }
@@ -149,9 +161,9 @@ class StartWorkoutViewModelTest {
         assertFalse(viewModel.uiState.workoutInProgress)
     }
 
-    private fun assertErrorFor(result: TemplatesResult, expectedMessage: Int) {
+    private fun assertErrorFor(result: RefreshResult, expectedMessage: Int) {
         viewModel
-        templatesApi.response.complete(result)
+        templatesRepository.refreshResult.complete(result)
 
         assertEquals(StartWorkoutUiState(errorMessage = expectedMessage), viewModel.uiState)
     }

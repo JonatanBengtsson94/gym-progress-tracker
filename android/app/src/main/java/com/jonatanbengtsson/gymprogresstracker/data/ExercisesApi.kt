@@ -8,8 +8,9 @@ import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.uuid.Uuid
 
-data class Exercise(val id: Long, val name: String)
+data class Exercise(val id: Uuid, val name: String)
 
 sealed interface ExercisesResult {
     data class Success(val exercises: List<Exercise>) : ExercisesResult
@@ -47,6 +48,9 @@ class HttpExercisesApi(private val baseUrl: String) : ExercisesApi {
         } catch (e: JSONException) {
             Log.w(TAG, "Unexpected exercises response", e)
             ExercisesResult.ServerError
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Unexpected exercise id in exercises response", e)
+            ExercisesResult.ServerError
         } finally {
             connection.disconnect()
         }
@@ -56,7 +60,7 @@ class HttpExercisesApi(private val baseUrl: String) : ExercisesApi {
         val exercises = json.getJSONArray("exercises")
         return List(exercises.length()) {
             val exercise = exercises.getJSONObject(it)
-            Exercise(id = exercise.getLong("exercise_id"), name = exercise.getString("exercise_name"))
+            Exercise(id = Uuid.parse(exercise.getString("exercise_id")), name = exercise.getString("exercise_name"))
         }
     }
 

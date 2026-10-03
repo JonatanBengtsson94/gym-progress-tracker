@@ -9,26 +9,30 @@ import androidx.lifecycle.viewModelScope
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
-import com.jonatanbengtsson.gymprogresstracker.data.ExercisesApi
-import com.jonatanbengtsson.gymprogresstracker.data.ExercisesResult
+import com.jonatanbengtsson.gymprogresstracker.data.ExercisesRepository
+import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import kotlin.uuid.Uuid
 
 data class WorkoutUiState(
     /** True until the saved workout has been read from disk. */
     val isLoadingWorkout: Boolean = false,
     /** The exercises added to the workout, in the order they were added. */
     val workoutExercises: List<WorkoutExerciseEntry> = emptyList(),
+    /** True while the exercises to pick from are being fetched from the server. */
     val isLoadingExercises: Boolean = false,
+    /** The exercises stored on the device, shown even while they're being fetched or when that fails. */
     val exercises: List<Exercise> = emptyList(),
+    /** Why fetching the exercises failed last time. */
     @StringRes val exercisesErrorMessage: Int? = null
 )
 
 class WorkoutViewModel(
-    private val exercisesApi: ExercisesApi,
+    private val exercisesRepository: ExercisesRepository,
     private val activeWorkoutRepository: ActiveWorkoutRepository,
     private val sessionRepository: SessionRepository,
     private val sessionId: String
@@ -45,7 +49,10 @@ class WorkoutViewModel(
                 uiState = uiState.copy(isLoadingWorkout = false, workoutExercises = exercises)
             }
         }
-        // Loaded up front so the list is ready by the time the user adds an exercise.
+        viewModelScope.launch {
+            exercisesRepository.exercises.collect { exercises -> uiState = uiState.copy(exercises = exercises) }
+        }
+        // Fetched up front so the list is current by the time the user adds an exercise.
         loadExercises()
     }
 
@@ -54,33 +61,33 @@ class WorkoutViewModel(
         if (exercises.any { it.exercise.id == exercise.id }) exercises else exercises + WorkoutExerciseEntry(exercise)
     }
 
-    fun removeExercise(exerciseId: Long) = activeWorkoutRepository.update { exercises ->
+    fun removeExercise(exerciseId: Uuid) = activeWorkoutRepository.update { exercises ->
         exercises.filter { it.exercise.id != exerciseId }
     }
 
     /** Adds an uncompleted set to the exercise, prefilled with its last set's weight and reps. */
-    fun addSet(exerciseId: Long) = updateSets(exerciseId) { sets ->
+    fun addSet(exerciseId: Uuid) = updateSets(exerciseId) { sets ->
         val id = (sets.maxOfOrNull { it.id } ?: -1) + 1
         sets + (sets.lastOrNull()?.copy(completed = false, id = id) ?: SetEntry(id = id))
     }
 
     /** Toggles whether the set is completed. Ignored for a set that [SetEntry.canComplete] rules out. */
-    fun toggleSetCompleted(exerciseId: Long, setIndex: Int) = updateSet(exerciseId, setIndex) { set ->
+    fun toggleSetCompleted(exerciseId: Uuid, setIndex: Int) = updateSet(exerciseId, setIndex) { set ->
         if (set.completed || set.canComplete) set.copy(completed = !set.completed) else set
     }
 
-    fun removeSet(exerciseId: Long, setIndex: Int) = updateSets(exerciseId) { sets ->
+    fun removeSet(exerciseId: Uuid, setIndex: Int) = updateSets(exerciseId) { sets ->
         sets.filterIndexed { index, _ -> index != setIndex }
     }
 
     /** Ignores input that isn't a weight in kg with at most two decimals. */
-    fun updateWeight(exerciseId: Long, setIndex: Int, weightKg: String) {
+    fun updateWeight(exerciseId: Uuid, setIndex: Int, weightKg: String) {
         if (!WEIGHT_INPUT.matches(weightKg)) return
         updateSet(exerciseId, setIndex) { it.copy(weightKg = weightKg) }
     }
 
     /** Ignores input that isn't a whole number of reps. Reps that no longer allow completion un-complete the set. */
-    fun updateReps(exerciseId: Long, setIndex: Int, reps: String) {
+    fun updateReps(exerciseId: Uuid, setIndex: Int, reps: String) {
         if (!REPS_INPUT.matches(reps)) return
         updateSet(exerciseId, setIndex) { set ->
             val updated = set.copy(reps = reps)
@@ -88,32 +95,34 @@ class WorkoutViewModel(
         }
     }
 
-    private fun updateSet(exerciseId: Long, setIndex: Int, transform: (SetEntry) -> SetEntry) =
+    private fun updateSet(exerciseId: Uuid, setIndex: Int, transform: (SetEntry) -> SetEntry) =
         updateSets(exerciseId) { sets ->
             sets.mapIndexed { index, set -> if (index == setIndex) transform(set) else set }
         }
 
-    private fun updateSets(exerciseId: Long, transform: (List<SetEntry>) -> List<SetEntry>) =
+    private fun updateSets(exerciseId: Uuid, transform: (List<SetEntry>) -> List<SetEntry>) =
         activeWorkoutRepository.update { exercises ->
             exercises.map { entry ->
                 if (entry.exercise.id == exerciseId) entry.copy(sets = transform(entry.sets)) else entry
             }
         }
 
+    /** Fetches the exercises from the server, replacing the stored ones. */
     fun loadExercises() {
         if (uiState.isLoadingExercises) return
         uiState = uiState.copy(isLoadingExercises = true, exercisesErrorMessage = null)
 
         viewModelScope.launch {
-            uiState = when (val result = exercisesApi.getExercises(sessionId)) {
-                is ExercisesResult.Success -> uiState.copy(isLoadingExercises = false, exercises = result.exercises)
-                ExercisesResult.SessionExpired -> {
-                    sessionRepository.endSession(sessionId)
-                    uiState.copy(isLoadingExercises = false)
+            val result = exercisesRepository.refresh(sessionId)
+            if (result == RefreshResult.SessionExpired) sessionRepository.endSession(sessionId)
+            uiState = uiState.copy(
+                isLoadingExercises = false,
+                exercisesErrorMessage = when (result) {
+                    RefreshResult.NetworkError -> R.string.workout_exercises_error_network
+                    RefreshResult.ServerError -> R.string.workout_exercises_error_server
+                    RefreshResult.Success, RefreshResult.SessionExpired -> null
                 }
-                ExercisesResult.NetworkError -> uiState.copy(isLoadingExercises = false, exercisesErrorMessage = R.string.workout_exercises_error_network)
-                ExercisesResult.ServerError -> uiState.copy(isLoadingExercises = false, exercisesErrorMessage = R.string.workout_exercises_error_server)
-            }
+            )
         }
     }
 

@@ -8,6 +8,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import java.time.Instant
+import kotlin.uuid.Uuid
 
 class HttpTemplatesApiTest {
 
@@ -40,46 +41,34 @@ class HttpTemplatesApiTest {
 
     @Test
     fun `200 parses templates with and without a latest workout in order`() = runTest {
-        server.enqueue(
-            MockResponse().setBody(
-                """
-                {"templates": [
-                  {"template_id": 1, "template_name": "Push Day",
-                   "latest_workout": {
-                     "workout_id": 7,
-                     "started_at": "2024-05-08T09:00:00Z",
-                     "completed_at": "2024-05-08T10:00:00Z",
-                     "exercises": [
-                       {"exercise_id": 1, "exercise_name": "Bench Press (Barbell)",
-                        "sets": [{"reps": 8, "weight_grams": 60000}, {"reps": 6, "weight_grams": 65000}]},
-                       {"exercise_id": 2, "exercise_name": "Overhead Press (Barbell)",
-                        "sets": [{"reps": 10, "weight_grams": 30000}]}
-                     ]}},
-                  {"template_id": 2, "template_name": "Leg Day", "latest_workout": null}
-                ]}
-                """.trimIndent()
-            )
-        )
+        server.enqueue(MockResponse().setBody(contract("get_templates.response.json")))
 
+        val benchPressId = Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d01")
         val expected = TemplatesResult.Success(
             listOf(
                 WorkoutTemplate(
-                    id = 1,
+                    id = Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d10"),
                     name = "Push Day",
                     latestWorkout = LatestWorkout(
-                        workoutId = 7,
-                        startedAt = Instant.parse("2024-05-08T09:00:00Z"),
-                        completedAt = Instant.parse("2024-05-08T10:00:00Z"),
+                        workoutId = Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d20"),
+                        startedAt = Instant.parse("2026-09-30T17:00:00Z"),
+                        completedAt = Instant.parse("2026-09-30T18:00:00Z"),
                         exercises = listOf(
-                            WorkoutExercise(1, "Bench Press (Barbell)", listOf(WorkoutSet(8, 60000), WorkoutSet(6, 65000))),
-                            WorkoutExercise(2, "Overhead Press (Barbell)", listOf(WorkoutSet(10, 30000)))
+                            WorkoutExercise(benchPressId, "Bench Press (Barbell)", listOf(WorkoutSet(8, 60000), WorkoutSet(6, 62500)))
                         )
                     )
                 ),
-                WorkoutTemplate(id = 2, name = "Leg Day", latestWorkout = null)
+                WorkoutTemplate(id = Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d11"), name = "Leg Day", latestWorkout = null)
             )
         )
         assertEquals(expected, api.getTemplates("session-123"))
+    }
+
+    @Test
+    fun `200 with an id that isn't a UUID returns ServerError`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"templates": [{"template_id": 1, "template_name": "Push Day", "latest_workout": null}]}"""))
+
+        assertEquals(TemplatesResult.ServerError, api.getTemplates("session-123"))
     }
 
     @Test
@@ -87,8 +76,8 @@ class HttpTemplatesApiTest {
         server.enqueue(
             MockResponse().setBody(
                 """
-                {"templates": [{"template_id": 1, "template_name": "Push Day",
-                  "latest_workout": {"workout_id": 7,
+                {"templates": [{"template_id": "0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d10", "template_name": "Push Day",
+                  "latest_workout": {"workout_id": "0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d20",
                     "started_at": "2024-05-08T09:00:00.123456789Z",
                     "completed_at": "2024-05-08T12:00:00+02:00",
                     "exercises": []}}]}
@@ -136,8 +125,8 @@ class HttpTemplatesApiTest {
         server.enqueue(
             MockResponse().setBody(
                 """
-                {"templates": [{"template_id": 1, "template_name": "Push Day",
-                  "latest_workout": {"workout_id": 7, "started_at": "yesterday",
+                {"templates": [{"template_id": "0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d10", "template_name": "Push Day",
+                  "latest_workout": {"workout_id": "0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d20", "started_at": "yesterday",
                     "completed_at": "2024-05-08T10:00:00Z", "exercises": []}}]}
                 """.trimIndent()
             )

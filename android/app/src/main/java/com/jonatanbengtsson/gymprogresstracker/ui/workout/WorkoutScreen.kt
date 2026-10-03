@@ -69,14 +69,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.jonatanbengtsson.gymprogresstracker.BuildConfig
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
-import com.jonatanbengtsson.gymprogresstracker.data.HttpExercisesApi
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
+import kotlin.uuid.Uuid
 
 @Composable
 fun WorkoutScreen(
@@ -86,7 +85,7 @@ fun WorkoutScreen(
         factory = viewModelFactory {
             initializer {
                 WorkoutViewModel(
-                    HttpExercisesApi(BuildConfig.BASE_URL),
+                    appContainer.exercisesRepository,
                     appContainer.activeWorkoutRepository,
                     appContainer.sessionRepository,
                     sessionId
@@ -114,16 +113,17 @@ fun WorkoutContent(
     uiState: WorkoutUiState,
     onRetryExercises: () -> Unit,
     onExerciseSelected: (Exercise) -> Unit,
-    onRemoveExercise: (exerciseId: Long) -> Unit,
-    onAddSet: (exerciseId: Long) -> Unit,
-    onRemoveSet: (exerciseId: Long, setIndex: Int) -> Unit,
-    onToggleSetCompleted: (exerciseId: Long, setIndex: Int) -> Unit,
-    onWeightChange: (exerciseId: Long, setIndex: Int, weightKg: String) -> Unit,
-    onRepsChange: (exerciseId: Long, setIndex: Int, reps: String) -> Unit,
+    onRemoveExercise: (exerciseId: Uuid) -> Unit,
+    onAddSet: (exerciseId: Uuid) -> Unit,
+    onRemoveSet: (exerciseId: Uuid, setIndex: Int) -> Unit,
+    onToggleSetCompleted: (exerciseId: Uuid, setIndex: Int) -> Unit,
+    onWeightChange: (exerciseId: Uuid, setIndex: Int, weightKg: String) -> Unit,
+    onRepsChange: (exerciseId: Uuid, setIndex: Int, reps: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showExercisePicker by rememberSaveable { mutableStateOf(false) }
-    var exerciseIdToConfirmRemoval by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Kept as text, since a Uuid can't be saved in instance state.
+    var exerciseIdToConfirmRemoval by rememberSaveable { mutableStateOf<String?>(null) }
 
     if (showExercisePicker) {
         // Added after the navigation's back handling, so system back closes the picker before the screen.
@@ -159,12 +159,13 @@ fun WorkoutContent(
                 }
             }
         } else {
-            items(uiState.workoutExercises, key = { it.exercise.id }) { entry ->
+            // Keys must be saveable in instance state, which a Uuid isn't.
+            items(uiState.workoutExercises, key = { it.exercise.id.toString() }) { entry ->
                 val exerciseId = entry.exercise.id
                 WorkoutExerciseCard(
                     entry = entry,
                     onRemove = {
-                        if (entry.hasEnteredSets) exerciseIdToConfirmRemoval = exerciseId else onRemoveExercise(exerciseId)
+                        if (entry.hasEnteredSets) exerciseIdToConfirmRemoval = exerciseId.toString() else onRemoveExercise(exerciseId)
                     },
                     onAddSet = { onAddSet(exerciseId) },
                     onRemoveSet = { onRemoveSet(exerciseId, it) },
@@ -181,7 +182,7 @@ fun WorkoutContent(
         }
     }
 
-    uiState.workoutExercises.find { it.exercise.id == exerciseIdToConfirmRemoval }?.let { entry ->
+    uiState.workoutExercises.find { it.exercise.id.toString() == exerciseIdToConfirmRemoval }?.let { entry ->
         AlertDialog(
             onDismissRequest = { exerciseIdToConfirmRemoval = null },
             title = { Text(stringResource(R.string.workout_remove_exercise_title, entry.exercise.name)) },
@@ -441,13 +442,14 @@ private fun ExercisePicker(
             modifier = Modifier.weight(1f).imePadding(),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
+            // Stored exercises show even while they're being fetched, or when that fails.
             when {
-                uiState.isLoadingExercises -> item {
+                uiState.exercises.isEmpty() && uiState.isLoadingExercises -> item {
                     Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
                     }
                 }
-                uiState.exercisesErrorMessage != null -> item {
+                uiState.exercises.isEmpty() && uiState.exercisesErrorMessage != null -> item {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(24.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -471,7 +473,7 @@ private fun ExercisePicker(
                         modifier = Modifier.padding(24.dp)
                     )
                 }
-                else -> items(matchingExercises, key = { it.id }) { exercise ->
+                else -> items(matchingExercises, key = { it.id.toString() }) { exercise ->
                     ExercisePickerRow(
                         exercise = exercise,
                         added = uiState.workoutExercises.any { it.exercise.id == exercise.id },
@@ -529,14 +531,14 @@ fun WorkoutContentPreview() {
             uiState = WorkoutUiState(
                 workoutExercises = listOf(
                     WorkoutExerciseEntry(
-                        exercise = Exercise(1, "Bench Press (Barbell)"),
+                        exercise = Exercise(Uuid.fromLongs(0, 1), "Bench Press (Barbell)"),
                         sets = listOf(
                             SetEntry(weightKg = "60", reps = "8", completed = true),
                             SetEntry(weightKg = "62,5", reps = "6", id = 1)
                         )
                     )
                 ),
-                exercises = listOf(Exercise(1, "Bench Press (Barbell)"), Exercise(2, "Squat (Barbell)"))
+                exercises = listOf(Exercise(Uuid.fromLongs(0, 1), "Bench Press (Barbell)"), Exercise(Uuid.fromLongs(0, 2), "Squat (Barbell)"))
             ),
             onRetryExercises = {},
             onExerciseSelected = {},

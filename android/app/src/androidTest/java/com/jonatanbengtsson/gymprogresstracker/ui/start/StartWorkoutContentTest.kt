@@ -18,6 +18,7 @@ import com.jonatanbengtsson.gymprogresstracker.data.LatestWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExercise
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutSet
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
+import com.jonatanbengtsson.gymprogresstracker.data.testId
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -35,34 +36,34 @@ class StartWorkoutContentTest {
     val composeRule = createComposeRule()
 
     private val pushDay = WorkoutTemplate(
-        id = 1,
+        id = testId(1),
         name = "Push Day",
         latestWorkout = LatestWorkout(
-            workoutId = 7,
+            workoutId = testId(7),
             startedAt = Instant.parse("2024-05-08T09:00:00Z"),
             completedAt = Instant.parse("2024-05-08T10:00:00Z"),
             exercises = listOf(
-                WorkoutExercise(1, "Bench Press (Barbell)", listOf(WorkoutSet(8, 60000))),
-                WorkoutExercise(2, "Overhead Press (Barbell)", listOf(WorkoutSet(10, 30000)))
+                WorkoutExercise(testId(1), "Bench Press (Barbell)", listOf(WorkoutSet(8, 60000))),
+                WorkoutExercise(testId(2), "Overhead Press (Barbell)", listOf(WorkoutSet(10, 30000)))
             )
         )
     )
-    private val legDay = WorkoutTemplate(id = 2, name = "Leg Day", latestWorkout = null)
+    private val legDay = WorkoutTemplate(id = testId(2), name = "Leg Day", latestWorkout = null)
     private val pullDay = WorkoutTemplate(
-        id = 3,
+        id = testId(3),
         name = "Pull Day",
         latestWorkout = LatestWorkout(
-            workoutId = 8,
+            workoutId = testId(8),
             startedAt = Instant.parse("2024-05-09T09:00:00Z"),
             completedAt = Instant.parse("2024-05-09T10:00:00Z"),
-            exercises = listOf(WorkoutExercise(3, "Deadlift (Barbell)", listOf(WorkoutSet(5, 100000))))
+            exercises = listOf(WorkoutExercise(testId(3), "Deadlift (Barbell)", listOf(WorkoutSet(5, 100000))))
         )
     )
     private val emptyDay = WorkoutTemplate(
-        id = 4,
+        id = testId(4),
         name = "Empty Day",
         latestWorkout = LatestWorkout(
-            workoutId = 9,
+            workoutId = testId(9),
             startedAt = Instant.parse("2024-05-10T09:00:00Z"),
             completedAt = Instant.parse("2024-05-10T10:00:00Z"),
             exercises = emptyList()
@@ -248,6 +249,22 @@ class StartWorkoutContentTest {
         composeRule.onNodeWithText(str(R.string.start_workout_new)).performClick()
 
         assertEquals(1, newWorkoutClicks)
+    }
+
+    @Test
+    fun storedTemplatesShowWhileTheyAreFetched() {
+        setContent(StartWorkoutUiState(isLoading = true, templates = listOf(pushDay)))
+
+        composeRule.onNodeWithText(pushDay.name).assertIsDisplayed()
+        composeRule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertDoesNotExist()
+    }
+
+    @Test
+    fun storedTemplatesShowWhenFetchingThemFails() {
+        setContent(StartWorkoutUiState(templates = listOf(pushDay), errorMessage = R.string.start_workout_error_network))
+
+        composeRule.onNodeWithText(pushDay.name).assertIsDisplayed()
+        composeRule.onNodeWithText(str(R.string.start_workout_error_network)).assertDoesNotExist()
     }
 
     @Test

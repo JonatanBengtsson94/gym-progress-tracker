@@ -36,8 +36,8 @@ class RoomActiveWorkoutRepositoryTest {
         override suspend fun insertSets(sets: List<ActiveWorkoutSetEntity>) = error("Replaced as a whole by replaceWorkout")
     }
 
-    private val squat = Exercise(1, "Squat (Barbell)")
-    private val benchPress = Exercise(2, "Bench Press (Barbell)")
+    private val squat = Exercise(testId(1), "Squat (Barbell)")
+    private val benchPress = Exercise(testId(2), "Bench Press (Barbell)")
 
     private val workout = listOf(
         WorkoutExerciseEntry(squat, listOf(SetEntry("100", "5", completed = true), SetEntry("102,5", "3", id = 1))),
@@ -86,14 +86,14 @@ class RoomActiveWorkoutRepositoryTest {
         runCurrent()
 
         assertEquals(
-            listOf(ActiveWorkoutExerciseEntity(1, "Squat (Barbell)", 0), ActiveWorkoutExerciseEntity(2, "Bench Press (Barbell)", 1)),
+            listOf(ActiveWorkoutExerciseEntity(testId(1), "Squat (Barbell)", 0), ActiveWorkoutExerciseEntity(testId(2), "Bench Press (Barbell)", 1)),
             dao.exercises
         )
         assertEquals(
             listOf(
-                ActiveWorkoutSetEntity(1, 0, "100", "5", completed = true),
-                ActiveWorkoutSetEntity(1, 1, "102,5", "3", completed = false),
-                ActiveWorkoutSetEntity(2, 0, "", "", completed = false)
+                ActiveWorkoutSetEntity(testId(1), 0, "100", "5", completed = true),
+                ActiveWorkoutSetEntity(testId(1), 1, "102,5", "3", completed = false),
+                ActiveWorkoutSetEntity(testId(2), 0, "", "", completed = false)
             ),
             dao.sets
         )
@@ -111,7 +111,7 @@ class RoomActiveWorkoutRepositoryTest {
         runCurrent()
 
         assertEquals(savesBefore + 1, dao.saves)
-        assertEquals(listOf(ActiveWorkoutExerciseEntity(2, "Bench Press (Barbell)", 0)), dao.exercises)
+        assertEquals(listOf(ActiveWorkoutExerciseEntity(testId(2), "Bench Press (Barbell)", 0)), dao.exercises)
     }
 
     @Test

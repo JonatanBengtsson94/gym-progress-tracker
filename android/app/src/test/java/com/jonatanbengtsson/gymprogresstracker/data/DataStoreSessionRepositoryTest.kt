@@ -23,7 +23,7 @@ class DataStoreSessionRepositoryTest {
     @get:Rule
     val folder = TemporaryFolder()
 
-    private val squat = Exercise(1, "Squat (Barbell)")
+    private val squat = Exercise(testId(1), "Squat (Barbell)")
     private val workout = listOf(WorkoutExerciseEntry(squat))
     private val activeWorkoutRepository = FakeActiveWorkoutRepository(workout)
 

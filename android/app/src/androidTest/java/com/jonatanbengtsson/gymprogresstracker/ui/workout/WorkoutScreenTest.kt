@@ -16,13 +16,14 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
-import com.jonatanbengtsson.gymprogresstracker.data.ExercisesApi
-import com.jonatanbengtsson.gymprogresstracker.data.ExercisesResult
+import com.jonatanbengtsson.gymprogresstracker.data.ExercisesRepository
+import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.SessionState
-import com.jonatanbengtsson.gymprogresstracker.data.TemplatesApi
-import com.jonatanbengtsson.gymprogresstracker.data.TemplatesResult
+import com.jonatanbengtsson.gymprogresstracker.data.TemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
+import com.jonatanbengtsson.gymprogresstracker.data.testId
 import com.jonatanbengtsson.gymprogresstracker.ui.navigation.Screen
 import com.jonatanbengtsson.gymprogresstracker.ui.start.StartWorkoutScreen
 import com.jonatanbengtsson.gymprogresstracker.ui.start.StartWorkoutViewModel
@@ -62,7 +63,7 @@ class WorkoutScreenTest {
     }
 
     private val sessionId = "session-123"
-    private val squat = Exercise(1, "Squat (Barbell)")
+    private val squat = Exercise(testId(1), "Squat (Barbell)")
 
     private lateinit var workoutViewModel: WorkoutViewModel
 
@@ -70,18 +71,20 @@ class WorkoutScreenTest {
     fun setUp() {
         val activeWorkoutRepository = FakeActiveWorkoutRepository()
         val sessionRepository = FakeSessionRepository(sessionId)
-        val templatesApi = object : TemplatesApi {
-            override suspend fun getTemplates(sessionId: String) = TemplatesResult.Success(emptyList())
+        val templatesRepository = object : TemplatesRepository {
+            override val templates = MutableStateFlow(emptyList<WorkoutTemplate>())
+            override suspend fun refresh(sessionId: String) = RefreshResult.Success
         }
-        val exercisesApi = object : ExercisesApi {
-            override suspend fun getExercises(sessionId: String) = ExercisesResult.Success(emptyList())
+        val exercisesRepository = object : ExercisesRepository {
+            override val exercises = MutableStateFlow(emptyList<Exercise>())
+            override suspend fun refresh(sessionId: String) = RefreshResult.Success
         }
         // On the main thread, like viewModel() would, since both update their state as they start.
         val startWorkoutViewModel = composeRule.runOnUiThread {
-            StartWorkoutViewModel(templatesApi, activeWorkoutRepository, sessionRepository, sessionId)
+            StartWorkoutViewModel(templatesRepository, activeWorkoutRepository, sessionRepository, sessionId)
         }
         workoutViewModel = composeRule.runOnUiThread {
-            WorkoutViewModel(exercisesApi, activeWorkoutRepository, sessionRepository, sessionId)
+            WorkoutViewModel(exercisesRepository, activeWorkoutRepository, sessionRepository, sessionId)
         }
 
         composeRule.setContent {

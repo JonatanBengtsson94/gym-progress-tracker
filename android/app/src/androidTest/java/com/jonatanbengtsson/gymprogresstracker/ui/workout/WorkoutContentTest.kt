@@ -25,6 +25,7 @@ import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
+import com.jonatanbengtsson.gymprogresstracker.data.testId
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -37,8 +38,8 @@ class WorkoutContentTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    private val benchPress = Exercise(1, "Bench Press (Barbell)")
-    private val squat = Exercise(2, "Squat (Barbell)")
+    private val benchPress = Exercise(testId(1), "Bench Press (Barbell)")
+    private val squat = Exercise(testId(2), "Squat (Barbell)")
 
     private var retryClicks = 0
     private val selectedExercises = mutableListOf<Exercise>()
@@ -311,6 +312,24 @@ class WorkoutContentTest {
         openExercisePicker()
 
         composeRule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertIsDisplayed()
+    }
+
+    @Test
+    fun storedExercisesShowWhileTheyAreFetched() {
+        setContent(WorkoutUiState(isLoadingExercises = true, exercises = listOf(benchPress, squat)))
+        openExercisePicker()
+
+        composeRule.onNodeWithText(benchPress.name).assertIsDisplayed()
+        composeRule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertDoesNotExist()
+    }
+
+    @Test
+    fun storedExercisesShowWhenFetchingThemFails() {
+        setContent(WorkoutUiState(exercises = listOf(benchPress, squat), exercisesErrorMessage = R.string.workout_exercises_error_network))
+        openExercisePicker()
+
+        composeRule.onNodeWithText(benchPress.name).assertIsDisplayed()
+        composeRule.onNodeWithText(str(R.string.workout_exercises_error_network)).assertDoesNotExist()
     }
 
     @Test

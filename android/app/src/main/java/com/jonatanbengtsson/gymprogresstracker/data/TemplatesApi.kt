@@ -12,20 +12,21 @@ import java.net.URL
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.format.DateTimeParseException
+import kotlin.uuid.Uuid
 
 data class WorkoutSet(val reps: Int, val weightGrams: Int)
 
-data class WorkoutExercise(val exerciseId: Long, val name: String, val sets: List<WorkoutSet>)
+data class WorkoutExercise(val exerciseId: Uuid, val name: String, val sets: List<WorkoutSet>)
 
 data class LatestWorkout(
-    val workoutId: Long,
+    val workoutId: Uuid,
     val startedAt: Instant,
     val completedAt: Instant,
     val exercises: List<WorkoutExercise>
 )
 
 /** [latestWorkout] is null when no workout has been logged under the template yet. */
-data class WorkoutTemplate(val id: Long, val name: String, val latestWorkout: LatestWorkout?)
+data class WorkoutTemplate(val id: Uuid, val name: String, val latestWorkout: LatestWorkout?)
 
 sealed interface TemplatesResult {
     data class Success(val templates: List<WorkoutTemplate>) : TemplatesResult
@@ -66,6 +67,9 @@ class HttpTemplatesApi(private val baseUrl: String) : TemplatesApi {
         } catch (e: DateTimeParseException) {
             Log.w(TAG, "Unexpected timestamp in templates response", e)
             TemplatesResult.ServerError
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Unexpected id in templates response", e)
+            TemplatesResult.ServerError
         } finally {
             connection.disconnect()
         }
@@ -74,19 +78,19 @@ class HttpTemplatesApi(private val baseUrl: String) : TemplatesApi {
     private fun parseTemplates(json: JSONObject): List<WorkoutTemplate> =
         json.getJSONArray("templates").objects().map { template ->
             WorkoutTemplate(
-                id = template.getLong("template_id"),
+                id = Uuid.parse(template.getString("template_id")),
                 name = template.getString("template_name"),
                 latestWorkout = template.optJSONObject("latest_workout")?.let(::parseLatestWorkout)
             )
         }
 
     private fun parseLatestWorkout(json: JSONObject) = LatestWorkout(
-        workoutId = json.getLong("workout_id"),
+        workoutId = Uuid.parse(json.getString("workout_id")),
         startedAt = parseTimestamp(json.getString("started_at")),
         completedAt = parseTimestamp(json.getString("completed_at")),
         exercises = json.getJSONArray("exercises").objects().map { exercise ->
             WorkoutExercise(
-                exerciseId = exercise.getLong("exercise_id"),
+                exerciseId = Uuid.parse(exercise.getString("exercise_id")),
                 name = exercise.getString("exercise_name"),
                 sets = exercise.getJSONArray("sets").objects().map { set ->
                     WorkoutSet(reps = set.getInt("reps"), weightGrams = set.getInt("weight_grams"))

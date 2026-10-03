@@ -8,22 +8,25 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
+import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
-import com.jonatanbengtsson.gymprogresstracker.data.TemplatesApi
-import com.jonatanbengtsson.gymprogresstracker.data.TemplatesResult
+import com.jonatanbengtsson.gymprogresstracker.data.TemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
 import kotlinx.coroutines.launch
 
 data class StartWorkoutUiState(
+    /** True while the templates are being fetched from the server. */
     val isLoading: Boolean = false,
+    /** The templates stored on the device, shown even while they're being fetched or when that fails. */
     val templates: List<WorkoutTemplate> = emptyList(),
+    /** Why fetching the templates failed last time. */
     @StringRes val errorMessage: Int? = null,
     /** A workout is in progress once it has an exercise; opening an empty one doesn't count. */
     val workoutInProgress: Boolean = false
 )
 
 class StartWorkoutViewModel(
-    private val templatesApi: TemplatesApi,
+    private val templatesRepository: TemplatesRepository,
     private val activeWorkoutRepository: ActiveWorkoutRepository,
     private val sessionRepository: SessionRepository,
     private val sessionId: String
@@ -38,23 +41,28 @@ class StartWorkoutViewModel(
                 uiState = uiState.copy(workoutInProgress = !exercises.isNullOrEmpty())
             }
         }
+        viewModelScope.launch {
+            templatesRepository.templates.collect { templates -> uiState = uiState.copy(templates = templates) }
+        }
         loadTemplates()
     }
 
+    /** Fetches the templates from the server, replacing the stored ones. */
     fun loadTemplates() {
         if (uiState.isLoading) return
         uiState = uiState.copy(isLoading = true, errorMessage = null)
 
         viewModelScope.launch {
-            uiState = when (val result = templatesApi.getTemplates(sessionId)) {
-                is TemplatesResult.Success -> uiState.copy(isLoading = false, templates = result.templates)
-                TemplatesResult.SessionExpired -> {
-                    sessionRepository.endSession(sessionId)
-                    uiState.copy(isLoading = false)
+            val result = templatesRepository.refresh(sessionId)
+            if (result == RefreshResult.SessionExpired) sessionRepository.endSession(sessionId)
+            uiState = uiState.copy(
+                isLoading = false,
+                errorMessage = when (result) {
+                    RefreshResult.NetworkError -> R.string.start_workout_error_network
+                    RefreshResult.ServerError -> R.string.start_workout_error_server
+                    RefreshResult.Success, RefreshResult.SessionExpired -> null
                 }
-                TemplatesResult.NetworkError -> uiState.copy(isLoading = false, errorMessage = R.string.start_workout_error_network)
-                TemplatesResult.ServerError -> uiState.copy(isLoading = false, errorMessage = R.string.start_workout_error_server)
-            }
+            )
         }
     }
 

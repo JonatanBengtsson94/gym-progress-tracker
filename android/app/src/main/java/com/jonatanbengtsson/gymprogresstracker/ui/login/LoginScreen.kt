@@ -30,10 +30,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.jonatanbengtsson.gymprogresstracker.BuildConfig
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.appContainer
-import com.jonatanbengtsson.gymprogresstracker.data.HttpAuthApi
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
 
 @Composable
@@ -41,7 +39,7 @@ fun LoginScreen(
     modifier: Modifier = Modifier,
     viewModel: LoginViewModel = viewModel(
         factory = viewModelFactory {
-            initializer { LoginViewModel(HttpAuthApi(BuildConfig.BASE_URL), appContainer.sessionRepository) }
+            initializer { LoginViewModel(appContainer.authApi, appContainer.sessionRepository) }
         }
     )
 ) {

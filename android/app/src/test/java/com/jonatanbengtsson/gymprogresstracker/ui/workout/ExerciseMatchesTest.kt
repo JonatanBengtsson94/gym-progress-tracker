@@ -1,13 +1,14 @@
 package com.jonatanbengtsson.gymprogresstracker.ui.workout
 
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
+import com.jonatanbengtsson.gymprogresstracker.data.testId
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExerciseMatchesTest {
 
-    private val inclineDumbbell = Exercise(1, "Incline Bench Press (Dumbbell)")
+    private val inclineDumbbell = Exercise(testId(1), "Incline Bench Press (Dumbbell)")
 
     @Test
     fun `blank query matches everything`() {

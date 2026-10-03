@@ -43,10 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.jonatanbengtsson.gymprogresstracker.BuildConfig
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.appContainer
-import com.jonatanbengtsson.gymprogresstracker.data.HttpTemplatesApi
 import com.jonatanbengtsson.gymprogresstracker.data.LatestWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExercise
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutSet
@@ -56,6 +54,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
+import kotlin.uuid.Uuid
 
 @Composable
 fun StartWorkoutScreen(
@@ -68,7 +67,7 @@ fun StartWorkoutScreen(
         factory = viewModelFactory {
             initializer {
                 StartWorkoutViewModel(
-                    HttpTemplatesApi(BuildConfig.BASE_URL),
+                    appContainer.templatesRepository,
                     appContainer.activeWorkoutRepository,
                     appContainer.sessionRepository,
                     sessionId
@@ -149,7 +148,15 @@ fun StartWorkoutContent(
             )
         }
 
+        // Stored templates show even while they're being fetched, or when that fails. Keys must be
+        // saveable in instance state, which a Uuid isn't.
         when {
+            uiState.templates.isNotEmpty() -> itemsIndexed(uiState.templates, key = { _, template -> template.id.toString() }) { index, template ->
+                Column {
+                    if (index > 0) HorizontalDivider(modifier = Modifier.padding(bottom = 12.dp))
+                    TemplateRow(template = template, onClick = { onStartFromTemplate(template) })
+                }
+            }
             uiState.isLoading -> item {
                 Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
@@ -171,18 +178,12 @@ fun StartWorkoutContent(
                     }
                 }
             }
-            uiState.templates.isEmpty() -> item {
+            else -> item {
                 Text(
                     text = stringResource(R.string.start_workout_no_templates),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-            else -> itemsIndexed(uiState.templates, key = { _, template -> template.id }) { index, template ->
-                Column {
-                    if (index > 0) HorizontalDivider(modifier = Modifier.padding(bottom = 12.dp))
-                    TemplateRow(template = template, onClick = { onStartFromTemplate(template) })
-                }
             }
         }
     }
@@ -278,19 +279,19 @@ private fun TemplateRow(template: WorkoutTemplate, onClick: () -> Unit) {
 
 private val previewTemplates = listOf(
     WorkoutTemplate(
-        id = 1,
+        id = Uuid.fromLongs(0, 1),
         name = "Push Day",
         latestWorkout = LatestWorkout(
-            workoutId = 7,
+            workoutId = Uuid.fromLongs(0, 7),
             startedAt = Instant.parse("2026-09-30T17:00:00Z"),
             completedAt = Instant.parse("2026-09-30T18:00:00Z"),
             exercises = listOf(
-                WorkoutExercise(1, "Bench Press (Barbell)", listOf(WorkoutSet(8, 60000))),
-                WorkoutExercise(2, "Overhead Press (Barbell)", listOf(WorkoutSet(10, 30000)))
+                WorkoutExercise(Uuid.fromLongs(0, 1), "Bench Press (Barbell)", listOf(WorkoutSet(8, 60000))),
+                WorkoutExercise(Uuid.fromLongs(0, 2), "Overhead Press (Barbell)", listOf(WorkoutSet(10, 30000)))
             )
         )
     ),
-    WorkoutTemplate(id = 2, name = "Leg Day", latestWorkout = null)
+    WorkoutTemplate(id = Uuid.fromLongs(0, 2), name = "Leg Day", latestWorkout = null)
 )
 
 @Preview(showBackground = true)

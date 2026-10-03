@@ -6,10 +6,11 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
 import androidx.room.Relation
+import kotlin.uuid.Uuid
 
 @Entity(tableName = "active_workout_exercise")
 data class ActiveWorkoutExerciseEntity(
-    @PrimaryKey @ColumnInfo(name = "exercise_id") val exerciseId: Long,
+    @PrimaryKey @ColumnInfo(name = "exercise_id") val exerciseId: Uuid,
     val name: String,
     /** Where the exercise comes in the workout, counting from 0. */
     val position: Int
@@ -28,7 +29,7 @@ data class ActiveWorkoutExerciseEntity(
     ]
 )
 data class ActiveWorkoutSetEntity(
-    @ColumnInfo(name = "exercise_id") val exerciseId: Long,
+    @ColumnInfo(name = "exercise_id") val exerciseId: Uuid,
     /** Where the set comes in its exercise, counting from 0. */
     val position: Int,
     @ColumnInfo(name = "weight_kg") val weightKg: String,

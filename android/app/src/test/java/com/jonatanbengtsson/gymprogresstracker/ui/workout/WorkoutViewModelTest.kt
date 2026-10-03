@@ -2,13 +2,14 @@ package com.jonatanbengtsson.gymprogresstracker.ui.workout
 
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
-import com.jonatanbengtsson.gymprogresstracker.data.ExercisesApi
-import com.jonatanbengtsson.gymprogresstracker.data.ExercisesResult
 import com.jonatanbengtsson.gymprogresstracker.data.FakeActiveWorkoutRepository
+import com.jonatanbengtsson.gymprogresstracker.data.FakeExercisesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeSessionRepository
+import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionState
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
+import com.jonatanbengtsson.gymprogresstracker.data.testId
 import com.jonatanbengtsson.gymprogresstracker.ui.login.MainDispatcherRule
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
@@ -22,82 +23,95 @@ class WorkoutViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
-    /** Suspends each request until the test completes [response]. */
-    private class FakeExercisesApi : ExercisesApi {
-        var response = CompletableDeferred<ExercisesResult>()
-        val calls = mutableListOf<String>()
+    private val benchPress = Exercise(testId(2), "Bench Press (Barbell)")
+    private val deadlift = Exercise(testId(3), "Deadlift")
+    private val squat = Exercise(testId(1), "Squat (Barbell)")
 
-        override suspend fun getExercises(sessionId: String): ExercisesResult {
-            calls += sessionId
-            return response.await()
-        }
-    }
-
-    private val benchPress = Exercise(2, "Bench Press (Barbell)")
-    private val deadlift = Exercise(3, "Deadlift")
-    private val squat = Exercise(1, "Squat (Barbell)")
-
-    private val exercisesApi = FakeExercisesApi()
+    private val exercisesRepository = FakeExercisesRepository()
     private val activeWorkoutRepository = FakeActiveWorkoutRepository()
     private val sessionRepository = FakeSessionRepository(SessionState.LoggedIn("session-123"))
 
-    // Created lazily so each test can set up the fakes before the view model loads on init.
-    private val viewModel by lazy { WorkoutViewModel(exercisesApi, activeWorkoutRepository, sessionRepository, "session-123") }
+    // Created lazily so each test can set up the fakes before the view model refreshes on init.
+    private val viewModel by lazy { WorkoutViewModel(exercisesRepository, activeWorkoutRepository, sessionRepository, "session-123") }
 
     @Test
-    fun `loads exercises with the session id on creation`() {
+    fun `refreshes the exercises with the session id on creation`() {
         viewModel
 
-        assertEquals(listOf("session-123"), exercisesApi.calls)
+        assertEquals(listOf("session-123"), exercisesRepository.refreshes)
         assertEquals(WorkoutUiState(isLoadingExercises = true), viewModel.uiState)
     }
 
     @Test
-    fun `success exposes the exercises in order`() {
+    fun `stored exercises show while they're being refreshed`() {
+        exercisesRepository.exercises.value = listOf(benchPress, squat)
+
+        assertEquals(WorkoutUiState(isLoadingExercises = true, exercises = listOf(benchPress, squat)), viewModel.uiState)
+    }
+
+    @Test
+    fun `refreshed exercises replace the stored ones`() {
+        exercisesRepository.exercises.value = listOf(squat)
         viewModel
-        exercisesApi.response.complete(ExercisesResult.Success(listOf(benchPress, squat)))
+
+        exercisesRepository.exercises.value = listOf(benchPress, squat)
+        exercisesRepository.refreshResult.complete(RefreshResult.Success)
 
         assertEquals(WorkoutUiState(exercises = listOf(benchPress, squat)), viewModel.uiState)
     }
 
     @Test
     fun `network error shows network error`() {
-        assertErrorFor(ExercisesResult.NetworkError, R.string.workout_exercises_error_network)
+        assertErrorFor(RefreshResult.NetworkError, R.string.workout_exercises_error_network)
     }
 
     @Test
     fun `server error shows server error`() {
-        assertErrorFor(ExercisesResult.ServerError, R.string.workout_exercises_error_server)
+        assertErrorFor(RefreshResult.ServerError, R.string.workout_exercises_error_server)
+    }
+
+    @Test
+    fun `a failed refresh keeps showing the stored exercises`() {
+        exercisesRepository.exercises.value = listOf(benchPress, squat)
+        viewModel
+
+        exercisesRepository.refreshResult.complete(RefreshResult.NetworkError)
+
+        assertEquals(
+            WorkoutUiState(exercises = listOf(benchPress, squat), exercisesErrorMessage = R.string.workout_exercises_error_network),
+            viewModel.uiState
+        )
     }
 
     @Test
     fun `an expired session is ended`() {
         viewModel
-        exercisesApi.response.complete(ExercisesResult.SessionExpired)
+        exercisesRepository.refreshResult.complete(RefreshResult.SessionExpired)
 
         assertEquals(SessionState.LoggedOut, sessionRepository.session.value)
         assertEquals(WorkoutUiState(), viewModel.uiState)
     }
 
     @Test
-    fun `reload is ignored while a request is in flight`() {
+    fun `reload is ignored while a refresh is in flight`() {
         viewModel.loadExercises()
 
-        assertEquals(listOf("session-123"), exercisesApi.calls)
+        assertEquals(listOf("session-123"), exercisesRepository.refreshes)
     }
 
     @Test
-    fun `retrying after an error clears the error and loads again`() {
+    fun `retrying after an error clears the error and refreshes again`() {
         viewModel
-        exercisesApi.response.complete(ExercisesResult.NetworkError)
-        exercisesApi.response = CompletableDeferred()
+        exercisesRepository.refreshResult.complete(RefreshResult.NetworkError)
+        exercisesRepository.refreshResult = CompletableDeferred()
 
         viewModel.loadExercises()
 
         assertEquals(WorkoutUiState(isLoadingExercises = true), viewModel.uiState)
-        exercisesApi.response.complete(ExercisesResult.Success(listOf(squat)))
+        exercisesRepository.exercises.value = listOf(squat)
+        exercisesRepository.refreshResult.complete(RefreshResult.Success)
         assertEquals(WorkoutUiState(exercises = listOf(squat)), viewModel.uiState)
-        assertEquals(listOf("session-123", "session-123"), exercisesApi.calls)
+        assertEquals(listOf("session-123", "session-123"), exercisesRepository.refreshes)
     }
 
     @Test
@@ -120,11 +134,12 @@ class WorkoutViewModelTest {
     @Test
     fun `added exercises survive reloading the exercise list`() {
         viewModel.addExercise(squat)
-        exercisesApi.response.complete(ExercisesResult.NetworkError)
-        exercisesApi.response = CompletableDeferred()
+        exercisesRepository.refreshResult.complete(RefreshResult.NetworkError)
+        exercisesRepository.refreshResult = CompletableDeferred()
 
         viewModel.loadExercises()
-        exercisesApi.response.complete(ExercisesResult.Success(listOf(benchPress, squat)))
+        exercisesRepository.exercises.value = listOf(benchPress, squat)
+        exercisesRepository.refreshResult.complete(RefreshResult.Success)
 
         assertEquals(listOf(squat), workoutExercises())
     }
@@ -181,7 +196,8 @@ class WorkoutViewModelTest {
 
     @Test
     fun `a workout discarded elsewhere is gone, but the exercises to pick from are kept`() {
-        exercisesApi.response.complete(ExercisesResult.Success(listOf(benchPress, squat)))
+        exercisesRepository.exercises.value = listOf(benchPress, squat)
+        exercisesRepository.refreshResult.complete(RefreshResult.Success)
         viewModel.addExercise(squat)
         viewModel.updateReps(squat.id, 0, "5")
 
@@ -367,9 +383,9 @@ class WorkoutViewModelTest {
     private fun setsOf(exercise: Exercise) =
         viewModel.uiState.workoutExercises.single { it.exercise == exercise }.sets
 
-    private fun assertErrorFor(result: ExercisesResult, expectedMessage: Int) {
+    private fun assertErrorFor(result: RefreshResult, expectedMessage: Int) {
         viewModel
-        exercisesApi.response.complete(result)
+        exercisesRepository.refreshResult.complete(result)
 
         assertEquals(WorkoutUiState(exercisesErrorMessage = expectedMessage), viewModel.uiState)
     }

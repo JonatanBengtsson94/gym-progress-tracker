@@ -7,6 +7,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
+import kotlin.uuid.Uuid
 
 class HttpExercisesApiTest {
 
@@ -39,21 +40,22 @@ class HttpExercisesApiTest {
 
     @Test
     fun `200 parses exercises in response order`() = runTest {
-        server.enqueue(
-            MockResponse().setBody(
-                """
-                {"exercises": [
-                  {"exercise_id": 2, "exercise_name": "Squat (Barbell)"},
-                  {"exercise_id": 1, "exercise_name": "Bench Press (Barbell)"}
-                ]}
-                """.trimIndent()
-            )
-        )
+        server.enqueue(MockResponse().setBody(contract("get_exercises.response.json")))
 
         val expected = ExercisesResult.Success(
-            listOf(Exercise(2, "Squat (Barbell)"), Exercise(1, "Bench Press (Barbell)"))
+            listOf(
+                Exercise(Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d01"), "Bench Press (Barbell)"),
+                Exercise(Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d02"), "Zercher Squat")
+            )
         )
         assertEquals(expected, api.getExercises("session-123"))
+    }
+
+    @Test
+    fun `200 with an exercise id that isn't a UUID returns ServerError`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"exercises": [{"exercise_id": 1, "exercise_name": "Squat (Barbell)"}]}"""))
+
+        assertEquals(ExercisesResult.ServerError, api.getExercises("session-123"))
     }
 
     @Test

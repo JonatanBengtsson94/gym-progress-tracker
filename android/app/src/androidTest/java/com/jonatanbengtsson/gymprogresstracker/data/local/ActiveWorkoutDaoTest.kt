@@ -3,6 +3,7 @@ package com.jonatanbengtsson.gymprogresstracker.data.local
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.jonatanbengtsson.gymprogresstracker.data.testId
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -16,13 +17,13 @@ class ActiveWorkoutDaoTest {
     private lateinit var database: GymDatabase
     private lateinit var dao: ActiveWorkoutDao
 
-    private val squat = ActiveWorkoutExerciseEntity(exerciseId = 1, name = "Squat (Barbell)", position = 0)
-    private val benchPress = ActiveWorkoutExerciseEntity(exerciseId = 2, name = "Bench Press (Barbell)", position = 1)
+    private val squat = ActiveWorkoutExerciseEntity(exerciseId = testId(1), name = "Squat (Barbell)", position = 0)
+    private val benchPress = ActiveWorkoutExerciseEntity(exerciseId = testId(2), name = "Bench Press (Barbell)", position = 1)
     private val squatSets = listOf(
-        ActiveWorkoutSetEntity(exerciseId = 1, position = 0, weightKg = "100", reps = "5", completed = true),
-        ActiveWorkoutSetEntity(exerciseId = 1, position = 1, weightKg = "102,5", reps = "3", completed = false)
+        ActiveWorkoutSetEntity(exerciseId = testId(1), position = 0, weightKg = "100", reps = "5", completed = true),
+        ActiveWorkoutSetEntity(exerciseId = testId(1), position = 1, weightKg = "102,5", reps = "3", completed = false)
     )
-    private val benchPressSet = ActiveWorkoutSetEntity(exerciseId = 2, position = 0, weightKg = "60", reps = "8", completed = false)
+    private val benchPressSet = ActiveWorkoutSetEntity(exerciseId = testId(2), position = 0, weightKg = "60", reps = "8", completed = false)
 
     @Before
     fun setUp() {

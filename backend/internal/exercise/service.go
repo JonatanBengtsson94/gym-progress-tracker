@@ -5,11 +5,12 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"uuid"
 )
 
 type ExerciseRepository interface {
 	GetExercisesByUserId(context.Context, uint32) ([]Exercise, error)
-	CreateExercise(context.Context, Exercise) (Exercise, error)
+	CreateExercise(context.Context, Exercise) (exercise Exercise, created bool, err error)
 	ModifyExercise(context.Context, Exercise) (Exercise, error)
 }
 
@@ -30,15 +31,21 @@ func (s *ExerciseServiceImpl) GetExercises(ctx context.Context, userId uint32) (
 	slices.SortFunc(exercises, func(a, b Exercise) int {
 		return cmp.Or(
 			strings.Compare(strings.ToLower(a.ExerciseName), strings.ToLower(b.ExerciseName)),
-			cmp.Compare(a.ExerciseId, b.ExerciseId),
+			a.ExerciseId.Compare(b.ExerciseId),
 		)
 	})
 	return exercises, nil
 }
 
-func (s *ExerciseServiceImpl) CreateExercise(ctx context.Context, exercise Exercise) (Exercise, error) {
+// CreateExercise stores exercise under the id the client chose for it, or a new one if it chose
+// none. When the user can already see an exercise with that id or name, that one is returned
+// instead, with created false.
+func (s *ExerciseServiceImpl) CreateExercise(ctx context.Context, exercise Exercise) (Exercise, bool, error) {
 	if strings.TrimSpace(exercise.ExerciseName) == "" {
-		return Exercise{}, ErrExerciseNameRequired
+		return Exercise{}, false, ErrExerciseNameRequired
+	}
+	if exercise.ExerciseId == uuid.Nil() {
+		exercise.ExerciseId = uuid.NewV7()
 	}
 	return s.repo.CreateExercise(ctx, exercise)
 }

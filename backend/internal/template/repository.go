@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"uuid"
 
-	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/database"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/exercise"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/set"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -54,9 +54,9 @@ func (r *PostgresTemplateRepository) GetTemplatesByUserId(ctx context.Context, u
 	templates := make([]TemplateWithLatestWorkout, 0)
 	for rows.Next() {
 		var (
-			templateId             uint32
+			templateId             uuid.UUID
 			templateName           string
-			workoutId, exerciseId  *uint32
+			workoutId, exerciseId  *uuid.UUID
 			startedAt, completedAt *time.Time
 			exerciseName           *string
 			reps                   *uint8
@@ -101,19 +101,66 @@ func (r *PostgresTemplateRepository) GetTemplatesByUserId(ctx context.Context, u
 	return templates, nil
 }
 
-func (r *PostgresTemplateRepository) CreateTemplate(ctx context.Context, template Template) (Template, error) {
+// CreateTemplate stores template under its own id, unless the user already has a template with
+// that id or with the same name, ignoring case. Then nothing is stored and that template is
+// returned instead, with created false: a retried create gets back what the first one stored, and
+// a client that created the template offline learns the one it should use. An id taken by another
+// user's template is ErrTemplateIdTaken.
+func (r *PostgresTemplateRepository) CreateTemplate(ctx context.Context, template Template) (Template, bool, error) {
 	query := `
-		INSERT INTO templates (user_id, template_name)
-		VALUES ($1, $2)
-		RETURNING template_id
+		INSERT INTO templates (template_id, user_id, template_name)
+		VALUES ($1, $2, $3)
+		ON CONFLICT DO NOTHING
 	`
-	err := r.db.QueryRow(ctx, query, template.UserId, template.TemplateName).Scan(&template.TemplateId)
+	tag, err := r.db.Exec(ctx, query, template.TemplateId, template.UserId, template.TemplateName)
 	if err != nil {
-		if database.IsUniqueViolation(err) {
-			return Template{}, ErrTemplateAlreadyExists
-		}
-		return Template{}, fmt.Errorf("Create template failed: %w", err)
+		return Template{}, false, fmt.Errorf("Create template failed: %w", err)
+	}
+	if tag.RowsAffected() == 1 {
+		return template, true, nil
 	}
 
-	return template, nil
+	existing, err := r.findMatchingTemplate(ctx, template)
+	if err != nil {
+		return Template{}, false, err
+	}
+	return existing, false, nil
+}
+
+// findMatchingTemplate returns the template that kept template from being created: the user's
+// own with its id, or else the user's own with its name.
+func (r *PostgresTemplateRepository) findMatchingTemplate(ctx context.Context, template Template) (Template, error) {
+	query := `
+		SELECT template_id, user_id, template_name
+		FROM templates
+		WHERE template_id = $1 OR (user_id = $2 AND lower(template_name) = lower($3))
+		ORDER BY template_id = $1 DESC
+	`
+	rows, err := r.db.Query(ctx, query, template.TemplateId, template.UserId, template.TemplateName)
+	if err != nil {
+		return Template{}, fmt.Errorf("Find matching template failed: %w", err)
+	}
+	defer rows.Close()
+
+	idTaken := false
+	for rows.Next() {
+		var match Template
+		if err := rows.Scan(&match.TemplateId, &match.UserId, &match.TemplateName); err != nil {
+			return Template{}, fmt.Errorf("Scan template failed: %w", err)
+		}
+		// Only the row matching by id can belong to another user.
+		if match.UserId != template.UserId {
+			idTaken = true
+			continue
+		}
+		return match, nil
+	}
+	if err := rows.Err(); err != nil {
+		return Template{}, fmt.Errorf("Rows iteration failed: %w", err)
+	}
+
+	if idTaken {
+		return Template{}, ErrTemplateIdTaken
+	}
+	return Template{}, fmt.Errorf("Create template failed: no template matches %s", template.TemplateId)
 }

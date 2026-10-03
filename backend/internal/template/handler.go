@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"time"
+	"uuid"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/httpx"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/identity"
@@ -13,7 +14,7 @@ import (
 
 type TemplateService interface {
 	GetTemplates(context.Context, uint32) ([]TemplateWithLatestWorkout, error)
-	CreateTemplate(context.Context, Template) (Template, error)
+	CreateTemplate(context.Context, Template) (stored Template, created bool, err error)
 }
 
 type TemplateHandler struct {
@@ -25,23 +26,24 @@ func NewTemplateHandler(service TemplateService) *TemplateHandler {
 }
 
 type createTemplateRequest struct {
-	TemplateName string `json:"template_name"`
+	TemplateId   uuid.UUID `json:"template_id"`
+	TemplateName string    `json:"template_name"`
 }
 
 type TemplateResponse struct {
-	TemplateId   uint32 `json:"template_id"`
-	TemplateName string `json:"template_name"`
+	TemplateId   uuid.UUID `json:"template_id"`
+	TemplateName string    `json:"template_name"`
 }
 
 type LatestWorkoutResponse struct {
-	WorkoutId   uint32                     `json:"workout_id"`
+	WorkoutId   uuid.UUID                  `json:"workout_id"`
 	StartedAt   time.Time                  `json:"started_at"`
 	CompletedAt time.Time                  `json:"completed_at"`
 	Exercises   []set.ExerciseSetsResponse `json:"exercises"`
 }
 
 type TemplateWithLatestWorkoutResponse struct {
-	TemplateId    uint32                 `json:"template_id"`
+	TemplateId    uuid.UUID              `json:"template_id"`
 	TemplateName  string                 `json:"template_name"`
 	LatestWorkout *LatestWorkoutResponse `json:"latest_workout"`
 }
@@ -88,6 +90,13 @@ func (h *TemplateHandler) GetTemplates(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, TemplatesResponse{Templates: templatesResponse})
 }
 
+// CreateTemplate creates a template for the user, under the template_id the client sends or a new
+// one if it sends none, and responds 201 Created. It never makes a second template with the same
+// id or name: if the user already has the template_id, or a template with the name, ignoring case,
+// nothing is created and that template is returned with 200 OK. So retrying a create is safe, and
+// a client that created the template offline gets back the existing one, whose template_id it
+// should use in place of its own. A template_id belonging to another user's template is
+// 409 Conflict.
 func (h *TemplateHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 	userId, ok := identity.RequireUserId(w, r)
 	if !ok {
@@ -99,20 +108,24 @@ func (h *TemplateHandler) CreateTemplate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	template := Template{TemplateName: req.TemplateName, UserId: userId}
+	template := Template{TemplateId: req.TemplateId, TemplateName: req.TemplateName, UserId: userId}
 
-	createdTemplate, err := h.service.CreateTemplate(r.Context(), template)
+	stored, created, err := h.service.CreateTemplate(r.Context(), template)
 	switch {
 	case errors.Is(err, ErrTemplateNameRequired):
 		http.Error(w, "template_name is required", http.StatusBadRequest)
 		return
-	case errors.Is(err, ErrTemplateAlreadyExists):
-		http.Error(w, "Template already exists", http.StatusConflict)
+	case errors.Is(err, ErrTemplateIdTaken):
+		http.Error(w, "template_id is already in use", http.StatusConflict)
 		return
 	case err != nil:
 		httpx.InternalError(w, err)
 		return
 	}
 
-	httpx.WriteJSON(w, http.StatusCreated, TemplateResponse{TemplateId: createdTemplate.TemplateId, TemplateName: createdTemplate.TemplateName})
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	httpx.WriteJSON(w, status, TemplateResponse{TemplateId: stored.TemplateId, TemplateName: stored.TemplateName})
 }

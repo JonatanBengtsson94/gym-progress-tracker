@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"uuid"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/exercise"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/testutil"
 )
 
 type mockExerciseRepository struct {
 	getExerciseFunc    func(ctx context.Context, userId uint32) ([]exercise.Exercise, error)
-	createExerciseFunc func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error)
+	createExerciseFunc func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error)
 	modifyExerciseFunc func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error)
 }
 
@@ -22,7 +24,7 @@ func (m *mockExerciseRepository) ModifyExercise(ctx context.Context, ex exercise
 	return m.modifyExerciseFunc(ctx, ex)
 }
 
-func (m *mockExerciseRepository) CreateExercise(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
+func (m *mockExerciseRepository) CreateExercise(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
 	return m.createExerciseFunc(ctx, ex)
 }
 
@@ -31,11 +33,11 @@ func TestExerciseService_GetExercises(t *testing.T) {
 	const wantUserId = 42
 	expected := []exercise.Exercise{
 		{
-			ExerciseId:   1,
+			ExerciseId:   testutil.Id(1),
 			ExerciseName: "Test Exercise 1",
 		},
 		{
-			ExerciseId:   2,
+			ExerciseId:   testutil.Id(2),
 			ExerciseName: "Test Exercise 2",
 		},
 	}
@@ -75,10 +77,10 @@ func TestExerciseService_GetExercises_SortsByNameIgnoringCase(t *testing.T) {
 	repo := &mockExerciseRepository{
 		getExerciseFunc: func(ctx context.Context, userId uint32) ([]exercise.Exercise, error) {
 			return []exercise.Exercise{
-				{ExerciseId: 1, ExerciseName: "Squat (Barbell)"},
-				{ExerciseId: 4, ExerciseName: "bench press"},
-				{ExerciseId: 2, ExerciseName: "Deadlift (Barbell)"},
-				{ExerciseId: 3, ExerciseName: "Bench Press"},
+				{ExerciseId: testutil.Id(1), ExerciseName: "Squat (Barbell)"},
+				{ExerciseId: testutil.Id(4), ExerciseName: "bench press"},
+				{ExerciseId: testutil.Id(2), ExerciseName: "Deadlift (Barbell)"},
+				{ExerciseId: testutil.Id(3), ExerciseName: "Bench Press"},
 			}, nil
 		},
 	}
@@ -91,13 +93,13 @@ func TestExerciseService_GetExercises_SortsByNameIgnoringCase(t *testing.T) {
 	}
 
 	// Names equal apart from case fall back to id so the order is stable.
-	wantIds := []uint32{3, 4, 2, 1}
+	wantIds := []uuid.UUID{testutil.Id(3), testutil.Id(4), testutil.Id(2), testutil.Id(1)}
 	if len(got) != len(wantIds) {
 		t.Fatalf("Expected %d exercises, got %d", len(wantIds), len(got))
 	}
 	for i, ex := range got {
 		if ex.ExerciseId != wantIds[i] {
-			t.Errorf("exercise %d: got id %d (%q), want id %d", i, ex.ExerciseId, ex.ExerciseName, wantIds[i])
+			t.Errorf("exercise %d: got id %v (%q), want id %v", i, ex.ExerciseId, ex.ExerciseName, wantIds[i])
 		}
 	}
 }
@@ -126,30 +128,73 @@ func TestExerciseService_GetExercises_RepoError(t *testing.T) {
 
 func TestExerciseService_CreateExercise(t *testing.T) {
 	ctx := t.Context()
-	input := exercise.Exercise{ExerciseName: "Lunge", UserId: 42}
-	created := exercise.Exercise{ExerciseId: 1, ExerciseName: "Lunge", UserId: 42}
+	input := exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "Lunge", UserId: 42}
 
 	var got exercise.Exercise
 	repo := &mockExerciseRepository{
-		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
 			got = ex
-			return created, nil
+			return ex, true, nil
 		},
 	}
 
 	service := exercise.NewExerciseService(repo)
 
-	result, err := service.CreateExercise(ctx, input)
+	result, created, err := service.CreateExercise(ctx, input)
 	if err != nil {
 		t.Fatalf("CreateExercise returned error: %v", err)
 	}
 
 	if got != input {
-		t.Errorf("expected repo to receive %+v, got %+v", input, got)
+		t.Errorf("expected repo to receive the exercise with its id unchanged, %+v, got %+v", input, got)
+	}
+	if result != input || !created {
+		t.Errorf("CreateExercise() = %+v, %v, want %+v, true", result, created, input)
+	}
+}
+
+func TestExerciseService_CreateExercise_GeneratesIdWhenOmitted(t *testing.T) {
+	ctx := t.Context()
+
+	var got []uuid.UUID
+	repo := &mockExerciseRepository{
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
+			got = append(got, ex.ExerciseId)
+			return ex, true, nil
+		},
 	}
 
-	if result != created {
-		t.Errorf("CreateExercise() = %+v, want %+v", result, created)
+	service := exercise.NewExerciseService(repo)
+
+	for range 2 {
+		if _, _, err := service.CreateExercise(ctx, exercise.Exercise{ExerciseName: "Lunge", UserId: 42}); err != nil {
+			t.Fatalf("CreateExercise returned error: %v", err)
+		}
+	}
+
+	if got[0] == uuid.Nil() || got[0] == got[1] {
+		t.Errorf("expected each create without an id to get a new one, got %v", got)
+	}
+}
+
+func TestExerciseService_CreateExercise_ReturnsExistingExercise(t *testing.T) {
+	ctx := t.Context()
+	existing := exercise.Exercise{ExerciseId: testutil.Id(2), ExerciseName: "Lunge", UserId: 42}
+
+	repo := &mockExerciseRepository{
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
+			return existing, false, nil
+		},
+	}
+
+	service := exercise.NewExerciseService(repo)
+
+	result, created, err := service.CreateExercise(ctx, exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "lunge", UserId: 42})
+	if err != nil {
+		t.Fatalf("CreateExercise returned error: %v", err)
+	}
+	if result != existing || created {
+		t.Errorf("CreateExercise() = %+v, %v, want %+v, false", result, created, existing)
 	}
 }
 
@@ -157,15 +202,15 @@ func TestExerciseService_CreateExercise_NameRequired(t *testing.T) {
 	ctx := t.Context()
 
 	repo := &mockExerciseRepository{
-		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
 			t.Fatal("CreateExercise should not be called for an empty exercise_name")
-			return exercise.Exercise{}, nil
+			return exercise.Exercise{}, false, nil
 		},
 	}
 
 	service := exercise.NewExerciseService(repo)
 
-	_, err := service.CreateExercise(ctx, exercise.Exercise{ExerciseName: "   ", UserId: 42})
+	_, _, err := service.CreateExercise(ctx, exercise.Exercise{ExerciseName: "   ", UserId: 42})
 	if !errors.Is(err, exercise.ErrExerciseNameRequired) {
 		t.Fatalf("Expected ErrExerciseNameRequired, got %v", err)
 	}
@@ -173,17 +218,17 @@ func TestExerciseService_CreateExercise_NameRequired(t *testing.T) {
 
 func TestExerciseService_CreateExercise_RepoError(t *testing.T) {
 	ctx := t.Context()
-	wantErr := exercise.ErrExerciseAlreadyExists
+	wantErr := exercise.ErrExerciseIdTaken
 
 	repo := &mockExerciseRepository{
-		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
-			return exercise.Exercise{}, wantErr
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
+			return exercise.Exercise{}, false, wantErr
 		},
 	}
 
 	service := exercise.NewExerciseService(repo)
 
-	_, err := service.CreateExercise(ctx, exercise.Exercise{ExerciseName: "Lunge", UserId: 42})
+	_, _, err := service.CreateExercise(ctx, exercise.Exercise{ExerciseName: "Lunge", UserId: 42})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Expected error to wrap %v, got %v", wantErr, err)
 	}
@@ -191,8 +236,8 @@ func TestExerciseService_CreateExercise_RepoError(t *testing.T) {
 
 func TestExerciseService_ModifyExercise(t *testing.T) {
 	ctx := t.Context()
-	input := exercise.Exercise{ExerciseId: 1, ExerciseName: "Romanian Deadlift", UserId: 42}
-	modified := exercise.Exercise{ExerciseId: 1, ExerciseName: "Romanian Deadlift", UserId: 42}
+	input := exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "Romanian Deadlift", UserId: 42}
+	modified := exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "Romanian Deadlift", UserId: 42}
 
 	var got exercise.Exercise
 	repo := &mockExerciseRepository{
@@ -230,7 +275,7 @@ func TestExerciseService_ModifyExercise_NameRequired(t *testing.T) {
 
 	service := exercise.NewExerciseService(repo)
 
-	_, err := service.ModifyExercise(ctx, exercise.Exercise{ExerciseId: 1, ExerciseName: "   ", UserId: 42})
+	_, err := service.ModifyExercise(ctx, exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "   ", UserId: 42})
 	if !errors.Is(err, exercise.ErrExerciseNameRequired) {
 		t.Fatalf("Expected ErrExerciseNameRequired, got %v", err)
 	}
@@ -248,7 +293,7 @@ func TestExerciseService_ModifyExercise_RepoError(t *testing.T) {
 
 	service := exercise.NewExerciseService(repo)
 
-	_, err := service.ModifyExercise(ctx, exercise.Exercise{ExerciseId: 1, ExerciseName: "Lunge", UserId: 42})
+	_, err := service.ModifyExercise(ctx, exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "Lunge", UserId: 42})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Expected error to wrap %v, got %v", wantErr, err)
 	}

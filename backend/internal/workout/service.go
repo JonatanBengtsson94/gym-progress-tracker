@@ -4,16 +4,17 @@ import (
 	"context"
 	"strings"
 	"time"
+	"uuid"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/set"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/template"
 )
 
 type WorkoutRepository interface {
-	GetWorkoutByUserIdAndWorkoutId(context.Context, uint32, uint32) (Workout, error)
+	GetWorkoutByUserIdAndWorkoutId(context.Context, uint32, uuid.UUID) (Workout, error)
 	GetWorkoutsByUserId(context.Context, uint32) ([]Workout, error)
-	GetWorkoutsByUserIdAndTemplateId(context.Context, uint32, uint32) ([]Workout, error)
-	CreateWorkout(context.Context, uint32, Workout) (Workout, error)
+	GetWorkoutsByUserIdAndTemplateId(context.Context, uint32, uuid.UUID) ([]Workout, error)
+	CreateWorkout(context.Context, uint32, Workout) (stored Workout, created bool, err error)
 	ModifyWorkout(context.Context, uint32, Workout) (Workout, error)
 }
 
@@ -25,7 +26,7 @@ func NewWorkoutService(repo WorkoutRepository) *WorkoutServiceImpl {
 	return &WorkoutServiceImpl{repo: repo}
 }
 
-func (s *WorkoutServiceImpl) GetWorkout(ctx context.Context, userId uint32, workoutId uint32) (Workout, error) {
+func (s *WorkoutServiceImpl) GetWorkout(ctx context.Context, userId uint32, workoutId uuid.UUID) (Workout, error) {
 	return s.repo.GetWorkoutByUserIdAndWorkoutId(ctx, userId, workoutId)
 }
 
@@ -33,30 +34,37 @@ func (s *WorkoutServiceImpl) GetWorkouts(ctx context.Context, userId uint32) ([]
 	return s.repo.GetWorkoutsByUserId(ctx, userId)
 }
 
-func (s *WorkoutServiceImpl) GetWorkoutsByTemplate(ctx context.Context, userId uint32, templateId uint32) ([]Workout, error) {
+func (s *WorkoutServiceImpl) GetWorkoutsByTemplate(ctx context.Context, userId uint32, templateId uuid.UUID) ([]Workout, error) {
 	return s.repo.GetWorkoutsByUserIdAndTemplateId(ctx, userId, templateId)
 }
 
-func (s *WorkoutServiceImpl) CreateWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, error) {
+// CreateWorkout stores workout under the id the client chose for it, or a new one if it chose
+// none. When the user already has a workout with that id, that one is returned instead, with
+// created false.
+func (s *WorkoutServiceImpl) CreateWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, bool, error) {
 	if err := validateSets(workout.Sets); err != nil {
-		return Workout{}, err
+		return Workout{}, false, err
 	}
 
-	if workout.Template.TemplateId == 0 {
+	if workout.Template.TemplateId == uuid.Nil() {
 		workout.Template.TemplateName = strings.TrimSpace(workout.Template.TemplateName)
 		if workout.Template.TemplateName == "" {
-			return Workout{}, template.ErrTemplateNameRequired
+			return Workout{}, false, template.ErrTemplateNameRequired
 		}
 	}
 
 	if workout.StartedAt.IsZero() {
-		return Workout{}, ErrStartedAtRequired
+		return Workout{}, false, ErrStartedAtRequired
 	}
 	if workout.CompletedAt.IsZero() {
 		workout.CompletedAt = time.Now().UTC()
 	}
 	if workout.StartedAt.After(workout.CompletedAt) {
-		return Workout{}, ErrStartedAfterCompleted
+		return Workout{}, false, ErrStartedAfterCompleted
+	}
+
+	if workout.WorkoutId == uuid.Nil() {
+		workout.WorkoutId = uuid.NewV7()
 	}
 
 	return s.repo.CreateWorkout(ctx, userId, workout)

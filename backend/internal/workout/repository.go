@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"uuid"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/database"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/set"
@@ -13,9 +14,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// maxInt4 is the largest value the int4 columns backing ids, reps and
-// weights can hold. Values beyond it can neither be stored nor match an
-// existing row, so they are rejected before reaching the driver, which would
+// maxInt4 is the largest value the int4 column backing weights can hold.
+// Weights beyond it are rejected before reaching the driver, which would
 // otherwise fail to encode them and surface as an internal error.
 const maxInt4 = math.MaxInt32
 
@@ -27,11 +27,7 @@ func NewPostgresWorkoutRepository(db *pgxpool.Pool) *PostgresWorkoutRepository {
 	return &PostgresWorkoutRepository{db: db}
 }
 
-func (r *PostgresWorkoutRepository) GetWorkoutByUserIdAndWorkoutId(ctx context.Context, userId uint32, workoutId uint32) (Workout, error) {
-	if workoutId > maxInt4 {
-		return Workout{}, ErrWorkoutNotFound
-	}
-
+func (r *PostgresWorkoutRepository) GetWorkoutByUserIdAndWorkoutId(ctx context.Context, userId uint32, workoutId uuid.UUID) (Workout, error) {
 	query := `SELECT w.started_at, w.completed_at, t.template_id, t.template_name, s.reps, s.weight_grams, e.exercise_id, e.exercise_name
 		FROM workouts AS w
 		JOIN templates AS t ON w.template_id = t.template_id
@@ -84,7 +80,7 @@ func (r *PostgresWorkoutRepository) GetWorkoutsByUserId(ctx context.Context, use
 // user's templates, newest first. A template that doesn't exist or belongs to
 // another user is reported as ErrTemplateNotFound, so it can be told apart
 // from a template that simply has no workouts yet.
-func (r *PostgresWorkoutRepository) GetWorkoutsByUserIdAndTemplateId(ctx context.Context, userId uint32, templateId uint32) ([]Workout, error) {
+func (r *PostgresWorkoutRepository) GetWorkoutsByUserIdAndTemplateId(ctx context.Context, userId uint32, templateId uuid.UUID) ([]Workout, error) {
 	if _, err := findTemplate(ctx, r.db, userId, templateId); err != nil {
 		return nil, err
 	}
@@ -130,14 +126,52 @@ func (r *PostgresWorkoutRepository) listWorkouts(ctx context.Context, query stri
 	return workouts, nil
 }
 
-func (r *PostgresWorkoutRepository) CreateWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, error) {
+// CreateWorkout stores workout under its own id, unless the user already has a
+// workout with that id. Then nothing is stored and that workout is returned
+// instead, with created false, so a retried create gets back what the first
+// one stored. An id taken by another user's workout is ErrWorkoutIdTaken.
+func (r *PostgresWorkoutRepository) CreateWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, bool, error) {
+	stored, found, err := r.findOwnWorkout(ctx, userId, workout.WorkoutId)
+	if err != nil || found {
+		return stored, false, err
+	}
+
+	created, err := r.insertWorkout(ctx, userId, workout)
+	if errors.Is(err, ErrWorkoutIdTaken) {
+		// A retry running alongside this create can store the workout first.
+		stored, found, findErr := r.findOwnWorkout(ctx, userId, workout.WorkoutId)
+		if findErr != nil || found {
+			return stored, false, findErr
+		}
+	}
+	if err != nil {
+		return Workout{}, false, err
+	}
+
+	return created, true, nil
+}
+
+func (r *PostgresWorkoutRepository) findOwnWorkout(ctx context.Context, userId uint32, workoutId uuid.UUID) (Workout, bool, error) {
+	workout, err := r.GetWorkoutByUserIdAndWorkoutId(ctx, userId, workoutId)
+	if errors.Is(err, ErrWorkoutNotFound) {
+		return Workout{}, false, nil
+	}
+	if err != nil {
+		return Workout{}, false, err
+	}
+	return workout, true, nil
+}
+
+// insertWorkout stores workout and its sets in one transaction, creating its
+// template first when Template.TemplateId is unset.
+func (r *PostgresWorkoutRepository) insertWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return Workout{}, fmt.Errorf("Begin transaction failed: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
-	if workout.Template.TemplateId == 0 {
+	if workout.Template.TemplateId == uuid.Nil() {
 		workout.Template, err = createTemplate(ctx, tx, userId, workout.Template.TemplateName)
 	} else {
 		workout.Template, err = findTemplate(ctx, tx, userId, workout.Template.TemplateId)
@@ -147,11 +181,13 @@ func (r *PostgresWorkoutRepository) CreateWorkout(ctx context.Context, userId ui
 	}
 
 	query := `
-		INSERT INTO workouts (template_id, started_at, completed_at)
-		VALUES ($1, $2, $3)
-		RETURNING workout_id
+		INSERT INTO workouts (workout_id, template_id, started_at, completed_at)
+		VALUES ($1, $2, $3, $4)
 	`
-	if err := tx.QueryRow(ctx, query, workout.Template.TemplateId, workout.StartedAt, workout.CompletedAt).Scan(&workout.WorkoutId); err != nil {
+	if _, err := tx.Exec(ctx, query, workout.WorkoutId, workout.Template.TemplateId, workout.StartedAt, workout.CompletedAt); err != nil {
+		if database.IsUniqueViolation(err) {
+			return Workout{}, ErrWorkoutIdTaken
+		}
 		return Workout{}, fmt.Errorf("Create workout failed: %w", err)
 	}
 
@@ -172,10 +208,6 @@ func (r *PostgresWorkoutRepository) CreateWorkout(ctx context.Context, userId ui
 // place. The workout's template is left as it is. Workouts belonging to other
 // users are reported as ErrWorkoutNotFound.
 func (r *PostgresWorkoutRepository) ModifyWorkout(ctx context.Context, userId uint32, workout Workout) (Workout, error) {
-	if workout.WorkoutId > maxInt4 {
-		return Workout{}, ErrWorkoutNotFound
-	}
-
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return Workout{}, fmt.Errorf("Begin transaction failed: %w", err)
@@ -236,16 +268,12 @@ type queryRower interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
-func findTemplate(ctx context.Context, db queryRower, userId uint32, templateId uint32) (template.Template, error) {
+func findTemplate(ctx context.Context, db queryRower, userId uint32, templateId uuid.UUID) (template.Template, error) {
 	query := `
 		SELECT template_name
 		FROM templates
 		WHERE template_id = $1 AND user_id = $2
 	`
-	if templateId > maxInt4 {
-		return template.Template{}, ErrTemplateNotFound
-	}
-
 	found := template.Template{UserId: userId, TemplateId: templateId}
 	if err := db.QueryRow(ctx, query, templateId, userId).Scan(&found.TemplateName); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -260,14 +288,11 @@ func findTemplate(ctx context.Context, db queryRower, userId uint32, templateId 
 // insertSets stores sets against workoutId, returning them with their
 // exercise names resolved. Sets referencing an exercise that is neither
 // global nor owned by userId are rejected with ErrExerciseNotFound.
-func insertSets(ctx context.Context, tx pgx.Tx, userId uint32, workoutId uint32, sets []set.Set) ([]set.Set, error) {
-	exerciseIds := make([]uint32, len(sets))
+func insertSets(ctx context.Context, tx pgx.Tx, userId uint32, workoutId uuid.UUID, sets []set.Set) ([]set.Set, error) {
+	exerciseIds := make([]uuid.UUID, len(sets))
 	for i, s := range sets {
 		if s.WeightGrams > maxInt4 {
 			return nil, ErrWeightGramsOutOfRange
-		}
-		if s.Exercise.ExerciseId > maxInt4 {
-			return nil, ErrExerciseNotFound
 		}
 		exerciseIds[i] = s.Exercise.ExerciseId
 	}
@@ -300,7 +325,7 @@ func insertSets(ctx context.Context, tx pgx.Tx, userId uint32, workoutId uint32,
 	return inserted, nil
 }
 
-func exerciseNames(ctx context.Context, tx pgx.Tx, userId uint32, exerciseIds []uint32) (map[uint32]string, error) {
+func exerciseNames(ctx context.Context, tx pgx.Tx, userId uint32, exerciseIds []uuid.UUID) (map[uuid.UUID]string, error) {
 	query := `
 		SELECT exercise_id, exercise_name
 		FROM exercises
@@ -312,9 +337,9 @@ func exerciseNames(ctx context.Context, tx pgx.Tx, userId uint32, exerciseIds []
 	}
 	defer rows.Close()
 
-	names := make(map[uint32]string, len(exerciseIds))
+	names := make(map[uuid.UUID]string, len(exerciseIds))
 	for rows.Next() {
-		var exerciseId uint32
+		var exerciseId uuid.UUID
 		var exerciseName string
 		if err := rows.Scan(&exerciseId, &exerciseName); err != nil {
 			return nil, fmt.Errorf("Scan exercise failed: %w", err)

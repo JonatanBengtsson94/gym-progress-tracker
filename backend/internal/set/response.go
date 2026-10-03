@@ -1,12 +1,14 @@
 package set
 
+import "uuid"
+
 type SetResponse struct {
 	Reps        uint8  `json:"reps"`
 	WeightGrams uint32 `json:"weight_grams"`
 }
 
 type ExerciseSetsResponse struct {
-	ExerciseId   uint32        `json:"exercise_id"`
+	ExerciseId   uuid.UUID     `json:"exercise_id"`
 	ExerciseName string        `json:"exercise_name"`
 	Sets         []SetResponse `json:"sets"`
 }
@@ -17,7 +19,7 @@ type ExerciseSetsResponse struct {
 // so no sets serializes as an empty array.
 func GroupByExercise(sets []Set) []ExerciseSetsResponse {
 	exercises := make([]ExerciseSetsResponse, 0, len(sets))
-	indexByExerciseId := make(map[uint32]int, len(sets))
+	indexByExerciseId := make(map[uuid.UUID]int, len(sets))
 
 	for _, s := range sets {
 		i, ok := indexByExerciseId[s.Exercise.ExerciseId]

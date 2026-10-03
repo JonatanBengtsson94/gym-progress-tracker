@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strconv"
+	"uuid"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/httpx"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/identity"
@@ -12,7 +12,7 @@ import (
 
 type ExerciseService interface {
 	GetExercises(context.Context, uint32) ([]Exercise, error)
-	CreateExercise(context.Context, Exercise) (Exercise, error)
+	CreateExercise(context.Context, Exercise) (exercise Exercise, created bool, err error)
 	ModifyExercise(context.Context, Exercise) (Exercise, error)
 }
 
@@ -25,7 +25,8 @@ func NewExerciseHandler(service ExerciseService) *ExerciseHandler {
 }
 
 type createExerciseRequest struct {
-	ExerciseName string `json:"exercise_name"`
+	ExerciseId   uuid.UUID `json:"exercise_id"`
+	ExerciseName string    `json:"exercise_name"`
 }
 
 type modifyExerciseRequest struct {
@@ -33,8 +34,8 @@ type modifyExerciseRequest struct {
 }
 
 type ExerciseResponse struct {
-	ExerciseId   uint32 `json:"exercise_id"`
-	ExerciseName string `json:"exercise_name"`
+	ExerciseId   uuid.UUID `json:"exercise_id"`
+	ExerciseName string    `json:"exercise_name"`
 }
 
 type ExercisesResponse struct {
@@ -61,6 +62,13 @@ func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, ExercisesResponse{Exercises: exercisesResponse})
 }
 
+// CreateExercise creates one of the user's own exercises, under the exercise_id the client sends
+// or a new one if it sends none, and responds 201 Created. It never makes a second exercise with
+// the same id or name: if the user already has the exercise_id, or the user or a global exercise
+// already has the name, ignoring case, nothing is created and that exercise is returned with
+// 200 OK. So retrying a create is safe, and a client that created the exercise offline gets back
+// the existing one, whose exercise_id it should use in place of its own. An exercise_id belonging
+// to another user's exercise is 409 Conflict.
 func (h *ExerciseHandler) CreateExercise(w http.ResponseWriter, r *http.Request) {
 	userId, ok := identity.RequireUserId(w, r)
 	if !ok {
@@ -72,22 +80,26 @@ func (h *ExerciseHandler) CreateExercise(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	exercise := Exercise{ExerciseName: req.ExerciseName, UserId: userId}
+	exercise := Exercise{ExerciseId: req.ExerciseId, ExerciseName: req.ExerciseName, UserId: userId}
 
-	createdExercise, err := h.service.CreateExercise(r.Context(), exercise)
+	stored, created, err := h.service.CreateExercise(r.Context(), exercise)
 	switch {
 	case errors.Is(err, ErrExerciseNameRequired):
 		http.Error(w, "exercise_name is required", http.StatusBadRequest)
 		return
-	case errors.Is(err, ErrExerciseAlreadyExists):
-		http.Error(w, "Exercise already exists", http.StatusConflict)
+	case errors.Is(err, ErrExerciseIdTaken):
+		http.Error(w, "exercise_id is already in use", http.StatusConflict)
 		return
 	case err != nil:
 		httpx.InternalError(w, err)
 		return
 	}
 
-	httpx.WriteJSON(w, http.StatusCreated, ExerciseResponse{ExerciseId: createdExercise.ExerciseId, ExerciseName: createdExercise.ExerciseName})
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	httpx.WriteJSON(w, status, ExerciseResponse{ExerciseId: stored.ExerciseId, ExerciseName: stored.ExerciseName})
 }
 
 func (h *ExerciseHandler) ModifyExercise(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +108,7 @@ func (h *ExerciseHandler) ModifyExercise(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	exerciseId, err := strconv.ParseUint(r.PathValue("exerciseId"), 10, 32)
+	exerciseId, err := uuid.Parse(r.PathValue("exerciseId"))
 	if err != nil {
 		http.Error(w, "Invalid exercise_id", http.StatusBadRequest)
 		return
@@ -107,7 +119,7 @@ func (h *ExerciseHandler) ModifyExercise(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	exercise := Exercise{ExerciseName: req.ExerciseName, ExerciseId: uint32(exerciseId), UserId: userId}
+	exercise := Exercise{ExerciseName: req.ExerciseName, ExerciseId: exerciseId, UserId: userId}
 
 	modifiedExercise, err := h.service.ModifyExercise(r.Context(), exercise)
 	switch {

@@ -10,40 +10,42 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/exercise"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/identity"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/set"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/template"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/testutil"
 )
 
 type mockTemplateService struct {
 	getTemplatesFunc   func(ctx context.Context, userId uint32) ([]template.TemplateWithLatestWorkout, error)
-	createTemplateFunc func(ctx context.Context, tmpl template.Template) (template.Template, error)
+	createTemplateFunc func(ctx context.Context, tmpl template.Template) (template.Template, bool, error)
 }
 
 func (m *mockTemplateService) GetTemplates(ctx context.Context, userId uint32) ([]template.TemplateWithLatestWorkout, error) {
 	return m.getTemplatesFunc(ctx, userId)
 }
 
-func (m *mockTemplateService) CreateTemplate(ctx context.Context, tmpl template.Template) (template.Template, error) {
+func (m *mockTemplateService) CreateTemplate(ctx context.Context, tmpl template.Template) (template.Template, bool, error) {
 	return m.createTemplateFunc(ctx, tmpl)
 }
 
 func TestTemplateHandler_CreateTemplate_Success(t *testing.T) {
-	created := template.Template{TemplateId: 1, TemplateName: "Pull Day", UserId: 1}
+	created := template.Template{TemplateId: testutil.Id(1), TemplateName: "Pull Day", UserId: 1}
 
 	var got template.Template
 	service := &mockTemplateService{
-		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, error) {
+		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, bool, error) {
 			got = tmpl
-			return created, nil
+			return created, true, nil
 		},
 	}
 
 	handler := template.NewTemplateHandler(service)
 
-	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_name":"Pull Day"}`))
+	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_id":"00000000-0000-0000-0000-000000000001","template_name":"Pull Day"}`))
 	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
@@ -58,25 +60,109 @@ func TestTemplateHandler_CreateTemplate_Success(t *testing.T) {
 	if ct := res.Header.Get("Content-Type"); ct != "application/json" {
 		t.Errorf("Expected Content-Type application/json, got %q", ct)
 	}
-	if got.TemplateName != "Pull Day" || got.UserId != 1 {
-		t.Errorf("expected service called with {Pull Day, UserId:1}, got %+v", got)
+	if got != created {
+		t.Errorf("expected service called with %+v, got %+v", created, got)
 	}
 
 	var body template.TemplateResponse
 	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
 		t.Fatalf("Failed to decode response body: %v", err)
 	}
-	want := template.TemplateResponse{TemplateId: 1, TemplateName: "Pull Day"}
+	want := template.TemplateResponse{TemplateId: testutil.Id(1), TemplateName: "Pull Day"}
 	if body != want {
 		t.Errorf("CreateTemplate() response = %+v, want %+v", body, want)
 	}
 }
 
-func TestTemplateHandler_CreateTemplate_ResponseContainsOnlyExpectedFields(t *testing.T) {
-	created := template.Template{TemplateId: 1, TemplateName: "Pull Day", UserId: 1}
+func TestTemplateHandler_CreateTemplate_WithoutTemplateId(t *testing.T) {
+	var got template.Template
 	service := &mockTemplateService{
-		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, error) {
-			return created, nil
+		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, bool, error) {
+			got = tmpl
+			return template.Template{TemplateId: testutil.Id(1), TemplateName: tmpl.TemplateName, UserId: tmpl.UserId}, true, nil
+		},
+	}
+
+	handler := template.NewTemplateHandler(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_name":"Pull Day"}`))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+	rec := httptest.NewRecorder()
+
+	handler.CreateTemplate(rec, req)
+
+	if rec.Result().StatusCode != http.StatusCreated {
+		t.Fatalf("Expected status 201, got %d", rec.Result().StatusCode)
+	}
+	if got.TemplateId != uuid.Nil() {
+		t.Errorf("expected the service to receive no id, leaving it to pick one, got %v", got.TemplateId)
+	}
+}
+
+func TestTemplateHandler_CreateTemplate_ExistingTemplate(t *testing.T) {
+	existing := template.Template{TemplateId: testutil.Id(2), TemplateName: "Pull Day", UserId: 1}
+	service := &mockTemplateService{
+		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, bool, error) {
+			return existing, false, nil
+		},
+	}
+
+	handler := template.NewTemplateHandler(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(`{"template_id":"00000000-0000-0000-0000-000000000001","template_name":"pull day"}`))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+	rec := httptest.NewRecorder()
+
+	handler.CreateTemplate(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", res.StatusCode)
+	}
+
+	var body template.TemplateResponse
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatalf("Failed to decode response body: %v", err)
+	}
+	want := template.TemplateResponse{TemplateId: testutil.Id(2), TemplateName: "Pull Day"}
+	if body != want {
+		t.Errorf("CreateTemplate() response = %+v, want the existing template %+v", body, want)
+	}
+}
+
+func TestTemplateHandler_CreateTemplate_InvalidTemplateId(t *testing.T) {
+	for _, templateId := range []string{`"abc"`, `""`, `1`} {
+		t.Run(templateId, func(t *testing.T) {
+			service := &mockTemplateService{
+				createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, bool, error) {
+					t.Fatal("CreateTemplate should not be called for an invalid template_id")
+					return template.Template{}, false, nil
+				},
+			}
+
+			handler := template.NewTemplateHandler(service)
+
+			body := `{"template_id":` + templateId + `,"template_name":"Pull Day"}`
+			req := httptest.NewRequest(http.MethodPost, "/templates", strings.NewReader(body))
+			req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+			rec := httptest.NewRecorder()
+
+			handler.CreateTemplate(rec, req)
+
+			if rec.Result().StatusCode != http.StatusBadRequest {
+				t.Fatalf("Expected status 400, got %d", rec.Result().StatusCode)
+			}
+		})
+	}
+}
+
+func TestTemplateHandler_CreateTemplate_ResponseContainsOnlyExpectedFields(t *testing.T) {
+	created := template.Template{TemplateId: testutil.Id(1), TemplateName: "Pull Day", UserId: 1}
+	service := &mockTemplateService{
+		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, bool, error) {
+			return created, true, nil
 		},
 	}
 
@@ -97,7 +183,7 @@ func TestTemplateHandler_CreateTemplate_ResponseContainsOnlyExpectedFields(t *te
 	}
 
 	want := map[string]any{
-		"template_id":   float64(1),
+		"template_id":   "00000000-0000-0000-0000-000000000001",
 		"template_name": "Pull Day",
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -107,9 +193,9 @@ func TestTemplateHandler_CreateTemplate_ResponseContainsOnlyExpectedFields(t *te
 
 func TestTemplateHandler_CreateTemplate_Unauthorized(t *testing.T) {
 	service := &mockTemplateService{
-		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, error) {
+		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, bool, error) {
 			t.Fatal("CreateTemplate should not be called without an authenticated user")
-			return template.Template{}, nil
+			return template.Template{}, false, nil
 		},
 	}
 
@@ -127,9 +213,9 @@ func TestTemplateHandler_CreateTemplate_Unauthorized(t *testing.T) {
 
 func TestTemplateHandler_CreateTemplate_MalformedBody(t *testing.T) {
 	service := &mockTemplateService{
-		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, error) {
+		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, bool, error) {
 			t.Fatal("CreateTemplate should not be called for a malformed request body")
-			return template.Template{}, nil
+			return template.Template{}, false, nil
 		},
 	}
 
@@ -148,8 +234,8 @@ func TestTemplateHandler_CreateTemplate_MalformedBody(t *testing.T) {
 
 func TestTemplateHandler_CreateTemplate_NameRequired(t *testing.T) {
 	service := &mockTemplateService{
-		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, error) {
-			return template.Template{}, template.ErrTemplateNameRequired
+		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, bool, error) {
+			return template.Template{}, false, template.ErrTemplateNameRequired
 		},
 	}
 
@@ -166,10 +252,10 @@ func TestTemplateHandler_CreateTemplate_NameRequired(t *testing.T) {
 	}
 }
 
-func TestTemplateHandler_CreateTemplate_AlreadyExists(t *testing.T) {
+func TestTemplateHandler_CreateTemplate_IdTaken(t *testing.T) {
 	service := &mockTemplateService{
-		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, error) {
-			return template.Template{}, template.ErrTemplateAlreadyExists
+		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, bool, error) {
+			return template.Template{}, false, template.ErrTemplateIdTaken
 		},
 	}
 
@@ -188,8 +274,8 @@ func TestTemplateHandler_CreateTemplate_AlreadyExists(t *testing.T) {
 
 func TestTemplateHandler_CreateTemplate_ServiceError(t *testing.T) {
 	service := &mockTemplateService{
-		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, error) {
-			return template.Template{}, errors.New("db exploded")
+		createTemplateFunc: func(ctx context.Context, tmpl template.Template) (template.Template, bool, error) {
+			return template.Template{}, false, errors.New("db exploded")
 		},
 	}
 
@@ -218,17 +304,17 @@ func TestTemplateHandler_GetTemplates_Success(t *testing.T) {
 	startedAt := time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC)
 	completedAt := time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC)
 	serviceTemplates := []template.TemplateWithLatestWorkout{
-		{Template: template.Template{TemplateId: 2, TemplateName: "Pull Day", UserId: 1}},
+		{Template: template.Template{TemplateId: testutil.Id(2), TemplateName: "Pull Day", UserId: 1}},
 		{
-			Template: template.Template{TemplateId: 1, TemplateName: "Push Day", UserId: 1},
+			Template: template.Template{TemplateId: testutil.Id(1), TemplateName: "Push Day", UserId: 1},
 			LatestWorkout: &template.LatestWorkout{
-				WorkoutId:   7,
+				WorkoutId:   testutil.Id(7),
 				StartedAt:   startedAt,
 				CompletedAt: completedAt,
 				Sets: []set.Set{
-					{Exercise: exercise.Exercise{ExerciseId: 1, ExerciseName: "Bench Press"}, Reps: 8, WeightGrams: 60000},
-					{Exercise: exercise.Exercise{ExerciseId: 2, ExerciseName: "Overhead Press"}, Reps: 10, WeightGrams: 30000},
-					{Exercise: exercise.Exercise{ExerciseId: 1, ExerciseName: "Bench Press"}, Reps: 6, WeightGrams: 65000},
+					{Exercise: exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "Bench Press"}, Reps: 8, WeightGrams: 60000},
+					{Exercise: exercise.Exercise{ExerciseId: testutil.Id(2), ExerciseName: "Overhead Press"}, Reps: 10, WeightGrams: 30000},
+					{Exercise: exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "Bench Press"}, Reps: 6, WeightGrams: 65000},
 				},
 			},
 		},
@@ -265,17 +351,17 @@ func TestTemplateHandler_GetTemplates_Success(t *testing.T) {
 		t.Fatalf("Failed to decode response body: %v", err)
 	}
 	want := template.TemplatesResponse{Templates: []template.TemplateWithLatestWorkoutResponse{
-		{TemplateId: 2, TemplateName: "Pull Day"},
+		{TemplateId: testutil.Id(2), TemplateName: "Pull Day"},
 		{
-			TemplateId:   1,
+			TemplateId:   testutil.Id(1),
 			TemplateName: "Push Day",
 			LatestWorkout: &template.LatestWorkoutResponse{
-				WorkoutId:   7,
+				WorkoutId:   testutil.Id(7),
 				StartedAt:   startedAt,
 				CompletedAt: completedAt,
 				Exercises: []set.ExerciseSetsResponse{
-					{ExerciseId: 1, ExerciseName: "Bench Press", Sets: []set.SetResponse{{Reps: 8, WeightGrams: 60000}, {Reps: 6, WeightGrams: 65000}}},
-					{ExerciseId: 2, ExerciseName: "Overhead Press", Sets: []set.SetResponse{{Reps: 10, WeightGrams: 30000}}},
+					{ExerciseId: testutil.Id(1), ExerciseName: "Bench Press", Sets: []set.SetResponse{{Reps: 8, WeightGrams: 60000}, {Reps: 6, WeightGrams: 65000}}},
+					{ExerciseId: testutil.Id(2), ExerciseName: "Overhead Press", Sets: []set.SetResponse{{Reps: 10, WeightGrams: 30000}}},
 				},
 			},
 		},
@@ -290,17 +376,17 @@ func TestTemplateHandler_GetTemplates_ResponseContainsOnlyExpectedFields(t *test
 		getTemplatesFunc: func(ctx context.Context, userId uint32) ([]template.TemplateWithLatestWorkout, error) {
 			return []template.TemplateWithLatestWorkout{
 				{
-					Template: template.Template{TemplateId: 1, TemplateName: "Push Day", UserId: 1},
+					Template: template.Template{TemplateId: testutil.Id(1), TemplateName: "Push Day", UserId: 1},
 					LatestWorkout: &template.LatestWorkout{
-						WorkoutId:   7,
+						WorkoutId:   testutil.Id(7),
 						StartedAt:   time.Date(2024, 1, 15, 9, 0, 0, 0, time.UTC),
 						CompletedAt: time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC),
 						Sets: []set.Set{
-							{Exercise: exercise.Exercise{ExerciseId: 1, ExerciseName: "Bench Press", UserId: 1}, Reps: 8, WeightGrams: 60000, WorkoutId: 7},
+							{Exercise: exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "Bench Press", UserId: 1}, Reps: 8, WeightGrams: 60000, WorkoutId: testutil.Id(7)},
 						},
 					},
 				},
-				{Template: template.Template{TemplateId: 2, TemplateName: "Pull Day", UserId: 1}},
+				{Template: template.Template{TemplateId: testutil.Id(2), TemplateName: "Pull Day", UserId: 1}},
 			}, nil
 		},
 	}
@@ -321,15 +407,15 @@ func TestTemplateHandler_GetTemplates_ResponseContainsOnlyExpectedFields(t *test
 	want := map[string]any{
 		"templates": []any{
 			map[string]any{
-				"template_id":   float64(1),
+				"template_id":   "00000000-0000-0000-0000-000000000001",
 				"template_name": "Push Day",
 				"latest_workout": map[string]any{
-					"workout_id":   float64(7),
+					"workout_id":   "00000000-0000-0000-0000-000000000007",
 					"started_at":   "2024-01-15T09:00:00Z",
 					"completed_at": "2024-01-15T10:00:00Z",
 					"exercises": []any{
 						map[string]any{
-							"exercise_id":   float64(1),
+							"exercise_id":   "00000000-0000-0000-0000-000000000001",
 							"exercise_name": "Bench Press",
 							"sets": []any{
 								map[string]any{"reps": float64(8), "weight_grams": float64(60000)},
@@ -339,7 +425,7 @@ func TestTemplateHandler_GetTemplates_ResponseContainsOnlyExpectedFields(t *test
 				},
 			},
 			map[string]any{
-				"template_id":    float64(2),
+				"template_id":    "00000000-0000-0000-0000-000000000002",
 				"template_name":  "Pull Day",
 				"latest_workout": nil,
 			},

@@ -3,6 +3,7 @@ package workout
 import (
 	"errors"
 	"time"
+	"uuid"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/set"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/template"
@@ -16,11 +17,12 @@ var ErrRepsRequired = errors.New("reps must be greater than zero")
 var ErrWeightGramsOutOfRange = errors.New("weight_grams is out of range")
 var ErrStartedAtRequired = errors.New("started_at is required")
 var ErrStartedAfterCompleted = errors.New("started_at must not be after completed_at")
+var ErrWorkoutIdTaken = errors.New("workout id is already in use")
 
 // A Workout with Template.TemplateId unset is stored under a newly created
 // template named Template.TemplateName.
 type Workout struct {
-	WorkoutId   uint32
+	WorkoutId   uuid.UUID
 	StartedAt   time.Time
 	CompletedAt time.Time
 	Template    template.Template

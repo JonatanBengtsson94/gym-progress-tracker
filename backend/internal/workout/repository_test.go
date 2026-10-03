@@ -7,8 +7,10 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/exercise"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/set"
@@ -19,6 +21,9 @@ import (
 )
 
 var testPool *pgxpool.Pool
+
+// The ids of the global exercises the tests log sets for.
+var benchPressId, dumbbellBenchPressId, smithBenchPressId uuid.UUID
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -33,6 +38,16 @@ func TestMain(m *testing.M) {
 	}
 	testPool = pool
 
+	for id, name := range map[*uuid.UUID]string{
+		&benchPressId:         "Bench Press (Barbell)",
+		&dumbbellBenchPressId: "Bench Press (Dumbbell)",
+		&smithBenchPressId:    "Bench Press (Smith Machine)",
+	} {
+		if *id, err = testutil.GlobalExerciseId(ctx, pool, name); err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	code := m.Run()
 
 	teardown()
@@ -43,13 +58,13 @@ func TestWorkoutRepository_GetWorkout(t *testing.T) {
 	ctx := t.Context()
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
-	got, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, 1)
+	got, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, testutil.Id(1))
 	if err != nil {
 		t.Fatalf("GetWorkoutByUserIdAndWorkoutId returned error: %v", err)
 	}
 
-	if got.WorkoutId != 1 {
-		t.Errorf("expected WorkoutId 1, got %d", got.WorkoutId)
+	if got.WorkoutId != testutil.Id(1) {
+		t.Errorf("expected WorkoutId 1, got %v", got.WorkoutId)
 	}
 	if got.Template.TemplateName != "Push Day" {
 		t.Errorf("expected TemplateName %q, got %q", "Push Day", got.Template.TemplateName)
@@ -93,23 +108,25 @@ func TestWorkoutRepository_CreateWorkout_ExistingTemplate(t *testing.T) {
 
 	startedAt := time.Date(2024, 2, 1, 8, 15, 0, 0, time.UTC)
 	completedAt := time.Date(2024, 2, 1, 9, 30, 0, 0, time.UTC)
-	created, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+	workoutId := uuid.NewV7()
+	created, isNew, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		WorkoutId:   workoutId,
 		StartedAt:   startedAt,
 		CompletedAt: completedAt,
-		Template:    template.Template{TemplateId: 1},
+		Template:    template.Template{TemplateId: testutil.Id(1)},
 		Sets: []set.Set{
-			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 8, WeightGrams: 60000},
-			{Exercise: exercise.Exercise{ExerciseId: 2}, Reps: 5, WeightGrams: 100000},
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 8, WeightGrams: 60000},
+			{Exercise: exercise.Exercise{ExerciseId: dumbbellBenchPressId}, Reps: 5, WeightGrams: 100000},
 		},
 	})
 	if err != nil {
 		t.Fatalf("CreateWorkout returned error: %v", err)
 	}
 
-	if created.WorkoutId == 0 {
-		t.Error("expected CreateWorkout to return a generated WorkoutId")
+	if created.WorkoutId != workoutId || !isNew {
+		t.Errorf("expected workout %v to be created, got %v, created %v", workoutId, created.WorkoutId, isNew)
 	}
-	if created.Template.TemplateId != 1 || created.Template.TemplateName != "Push Day" {
+	if created.Template.TemplateId != testutil.Id(1) || created.Template.TemplateName != "Push Day" {
 		t.Errorf("expected the existing template to be reused, got %+v", created.Template)
 	}
 	if len(created.Sets) != 2 {
@@ -138,19 +155,20 @@ func TestWorkoutRepository_CreateWorkout_GeneratesTemplate(t *testing.T) {
 	ctx := t.Context()
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
-	created, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+	created, _, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		WorkoutId:   uuid.NewV7(),
 		StartedAt:   time.Date(2024, 2, 2, 8, 30, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 2, 2, 9, 30, 0, 0, time.UTC),
 		Template:    template.Template{TemplateName: "Generated Leg Day"},
 		Sets: []set.Set{
-			{Exercise: exercise.Exercise{ExerciseId: 2}, Reps: 5, WeightGrams: 100000},
+			{Exercise: exercise.Exercise{ExerciseId: dumbbellBenchPressId}, Reps: 5, WeightGrams: 100000},
 		},
 	})
 	if err != nil {
 		t.Fatalf("CreateWorkout returned error: %v", err)
 	}
 
-	if created.Template.TemplateId == 0 {
+	if created.Template.TemplateId == uuid.Nil() {
 		t.Fatal("expected CreateWorkout to return a generated TemplateId")
 	}
 
@@ -168,12 +186,13 @@ func TestWorkoutRepository_CreateWorkout_DuplicateTemplateName(t *testing.T) {
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
 	// "Push Day" already exists for user 1.
-	_, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+	_, _, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		WorkoutId:   uuid.NewV7(),
 		StartedAt:   time.Date(2024, 2, 3, 8, 30, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 2, 3, 9, 30, 0, 0, time.UTC),
 		Template:    template.Template{TemplateName: "push day"},
 		Sets: []set.Set{
-			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 8, WeightGrams: 60000},
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 8, WeightGrams: 60000},
 		},
 	})
 	if !errors.Is(err, template.ErrTemplateAlreadyExists) {
@@ -185,19 +204,19 @@ func TestWorkoutRepository_CreateWorkout_TemplateNotFound(t *testing.T) {
 	ctx := t.Context()
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
-	// Template 2 belongs to user 2, and the last id is beyond what the int4
-	// column can hold, so no such template can exist either.
-	for _, templateId := range []uint32{2, 999999, math.MaxInt32 + 1} {
-		_, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+	// Template 2 belongs to user 2, and the other doesn't exist.
+	for _, templateId := range []uuid.UUID{testutil.Id(2), uuid.NewV7()} {
+		_, _, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+			WorkoutId:   uuid.NewV7(),
 			StartedAt:   time.Date(2024, 2, 4, 8, 30, 0, 0, time.UTC),
 			CompletedAt: time.Date(2024, 2, 4, 9, 30, 0, 0, time.UTC),
 			Template:    template.Template{TemplateId: templateId},
 			Sets: []set.Set{
-				{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 8, WeightGrams: 60000},
+				{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 8, WeightGrams: 60000},
 			},
 		})
 		if !errors.Is(err, workout.ErrTemplateNotFound) {
-			t.Errorf("template %d: expected ErrTemplateNotFound, got %v", templateId, err)
+			t.Errorf("template %v: expected ErrTemplateNotFound, got %v", templateId, err)
 		}
 	}
 }
@@ -206,19 +225,19 @@ func TestWorkoutRepository_CreateWorkout_ExerciseNotFound(t *testing.T) {
 	ctx := t.Context()
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
-	// Exercise 100 is a custom exercise owned by user 2, and the last id is
-	// beyond what the int4 column can hold.
-	for _, exerciseId := range []uint32{100, 999999, math.MaxInt32 + 1} {
-		_, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+	// Exercise 100 is a custom exercise owned by user 2, and the other doesn't exist.
+	for _, exerciseId := range []uuid.UUID{testutil.Id(100), uuid.NewV7()} {
+		_, _, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+			WorkoutId:   uuid.NewV7(),
 			StartedAt:   time.Date(2024, 2, 5, 8, 30, 0, 0, time.UTC),
 			CompletedAt: time.Date(2024, 2, 5, 9, 30, 0, 0, time.UTC),
-			Template:    template.Template{TemplateId: 1},
+			Template:    template.Template{TemplateId: testutil.Id(1)},
 			Sets: []set.Set{
 				{Exercise: exercise.Exercise{ExerciseId: exerciseId}, Reps: 8, WeightGrams: 60000},
 			},
 		})
 		if !errors.Is(err, workout.ErrExerciseNotFound) {
-			t.Errorf("exercise %d: expected ErrExerciseNotFound, got %v", exerciseId, err)
+			t.Errorf("exercise %v: expected ErrExerciseNotFound, got %v", exerciseId, err)
 		}
 	}
 }
@@ -227,12 +246,13 @@ func TestWorkoutRepository_CreateWorkout_WeightGramsOutOfRange(t *testing.T) {
 	ctx := t.Context()
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
-	_, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+	_, _, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		WorkoutId:   uuid.NewV7(),
 		StartedAt:   time.Date(2024, 2, 7, 8, 30, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 2, 7, 9, 30, 0, 0, time.UTC),
-		Template:    template.Template{TemplateId: 1},
+		Template:    template.Template{TemplateId: testutil.Id(1)},
 		Sets: []set.Set{
-			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 8, WeightGrams: math.MaxInt32 + 1},
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 8, WeightGrams: math.MaxInt32 + 1},
 		},
 	})
 	if !errors.Is(err, workout.ErrWeightGramsOutOfRange) {
@@ -244,12 +264,13 @@ func TestWorkoutRepository_CreateWorkout_RollsBackGeneratedTemplate(t *testing.T
 	ctx := t.Context()
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
-	_, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+	_, _, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		WorkoutId:   uuid.NewV7(),
 		StartedAt:   time.Date(2024, 2, 6, 8, 30, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 2, 6, 9, 30, 0, 0, time.UTC),
 		Template:    template.Template{TemplateName: "Rolled Back Day"},
 		Sets: []set.Set{
-			{Exercise: exercise.Exercise{ExerciseId: 999999}, Reps: 8, WeightGrams: 60000},
+			{Exercise: exercise.Exercise{ExerciseId: uuid.NewV7()}, Reps: 8, WeightGrams: 60000},
 		},
 	})
 	if !errors.Is(err, workout.ErrExerciseNotFound) {
@@ -267,11 +288,170 @@ func TestWorkoutRepository_CreateWorkout_RollsBackGeneratedTemplate(t *testing.T
 	}
 }
 
+func TestWorkoutRepository_CreateWorkout_Retried(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	original, _, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		WorkoutId:   uuid.NewV7(),
+		StartedAt:   time.Date(2024, 2, 8, 8, 30, 0, 0, time.UTC),
+		CompletedAt: time.Date(2024, 2, 8, 9, 30, 0, 0, time.UTC),
+		Template:    template.Template{TemplateId: testutil.Id(1)},
+		Sets: []set.Set{
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 8, WeightGrams: 60000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorkout returned error: %v", err)
+	}
+
+	// A retry gets back what the first attempt stored, even if the workout has changed since.
+	retried, isNew, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		WorkoutId:   original.WorkoutId,
+		StartedAt:   time.Date(2024, 2, 8, 8, 30, 0, 0, time.UTC),
+		CompletedAt: time.Date(2024, 2, 8, 10, 0, 0, 0, time.UTC),
+		Template:    template.Template{TemplateId: testutil.Id(1)},
+		Sets: []set.Set{
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 5, WeightGrams: 70000},
+			{Exercise: exercise.Exercise{ExerciseId: dumbbellBenchPressId}, Reps: 5, WeightGrams: 100000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorkout returned error: %v", err)
+	}
+	if isNew || retried.WorkoutId != original.WorkoutId || !retried.CompletedAt.Equal(original.CompletedAt) || len(retried.Sets) != 1 {
+		t.Errorf("expected the retry to return the stored workout %+v, got %+v, created %v", original, retried, isNew)
+	}
+
+	got, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, original.WorkoutId)
+	if err != nil {
+		t.Fatalf("GetWorkoutByUserIdAndWorkoutId returned error: %v", err)
+	}
+	if len(got.Sets) != 1 || got.Sets[0].Reps != 8 || !got.CompletedAt.Equal(original.CompletedAt) {
+		t.Errorf("expected the retry to leave the stored workout untouched, got %+v", got)
+	}
+}
+
+func TestWorkoutRepository_CreateWorkout_RetriedWithGeneratedTemplate(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	// The first attempt creates the template, so a retry must not trip over its name.
+	toCreate := workout.Workout{
+		WorkoutId:   uuid.NewV7(),
+		StartedAt:   time.Date(2024, 2, 9, 8, 30, 0, 0, time.UTC),
+		CompletedAt: time.Date(2024, 2, 9, 9, 30, 0, 0, time.UTC),
+		Template:    template.Template{TemplateName: "Retried Template Day"},
+		Sets: []set.Set{
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 8, WeightGrams: 60000},
+		},
+	}
+	first, _, err := repo.CreateWorkout(ctx, 1, toCreate)
+	if err != nil {
+		t.Fatalf("CreateWorkout returned error: %v", err)
+	}
+
+	retried, isNew, err := repo.CreateWorkout(ctx, 1, toCreate)
+	if err != nil {
+		t.Fatalf("retried CreateWorkout returned error: %v", err)
+	}
+	if isNew || retried.WorkoutId != first.WorkoutId || retried.Template.TemplateId != first.Template.TemplateId {
+		t.Errorf("expected the retry to return the stored workout %+v, got %+v, created %v", first, retried, isNew)
+	}
+}
+
+func TestWorkoutRepository_CreateWorkout_ConcurrentRetries(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	toCreate := workout.Workout{
+		WorkoutId:   uuid.NewV7(),
+		StartedAt:   time.Date(2024, 2, 11, 8, 30, 0, 0, time.UTC),
+		CompletedAt: time.Date(2024, 2, 11, 9, 30, 0, 0, time.UTC),
+		Template:    template.Template{TemplateId: testutil.Id(1)},
+		Sets: []set.Set{
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 8, WeightGrams: 60000},
+		},
+	}
+
+	const attempts = 8
+	results := make(chan bool, attempts)
+	var wg sync.WaitGroup
+	for range attempts {
+		wg.Go(func() {
+			stored, isNew, err := repo.CreateWorkout(ctx, 1, toCreate)
+			if err != nil {
+				t.Errorf("CreateWorkout returned error: %v", err)
+				return
+			}
+			if stored.WorkoutId != toCreate.WorkoutId {
+				t.Errorf("expected workout %v, got %v", toCreate.WorkoutId, stored.WorkoutId)
+			}
+			results <- isNew
+		})
+	}
+	wg.Wait()
+	close(results)
+
+	created := 0
+	for isNew := range results {
+		if isNew {
+			created++
+		}
+	}
+	if created != 1 {
+		t.Errorf("expected exactly one attempt to create the workout, got %d", created)
+	}
+}
+
+func TestWorkoutRepository_CreateWorkout_IdTaken(t *testing.T) {
+	ctx := t.Context()
+	repo := workout.NewPostgresWorkoutRepository(testPool)
+
+	tests := []struct {
+		name         string
+		workoutId    uuid.UUID
+		templateName string
+	}{
+		// Workout 2 belongs to user 2.
+		{"other user's workout", testutil.Id(2), "Taken Id Day"},
+		// Workout 3 is user 1's own, but has no sets to return.
+		{"own workout without sets", testutil.Id(3), "Taken Empty Id Day"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+				WorkoutId:   tt.workoutId,
+				StartedAt:   time.Date(2024, 2, 10, 8, 30, 0, 0, time.UTC),
+				CompletedAt: time.Date(2024, 2, 10, 9, 30, 0, 0, time.UTC),
+				Template:    template.Template{TemplateName: tt.templateName},
+				Sets: []set.Set{
+					{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 8, WeightGrams: 60000},
+				},
+			})
+			if !errors.Is(err, workout.ErrWorkoutIdTaken) {
+				t.Fatalf("Expected ErrWorkoutIdTaken, got %v", err)
+			}
+
+			var templates int
+			if err := testPool.QueryRow(ctx,
+				`SELECT count(*) FROM templates WHERE user_id = 1 AND template_name = $1`, tt.templateName,
+			).Scan(&templates); err != nil {
+				t.Fatalf("failed to count templates: %v", err)
+			}
+			if templates != 0 {
+				t.Errorf("expected the generated template to be rolled back, found %d", templates)
+			}
+		})
+	}
+}
+
 func TestWorkoutRepository_GetWorkout_NotFound(t *testing.T) {
 	ctx := t.Context()
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
-	_, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, 999999)
+	_, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, uuid.NewV7())
 	if !errors.Is(err, workout.ErrWorkoutNotFound) {
 		t.Fatalf("Expected ErrWorkoutNotFound, got %v", err)
 	}
@@ -282,7 +462,7 @@ func TestWorkoutRepository_GetWorkout_NoSets(t *testing.T) {
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
 	// Workout 3 exists but has no sets recorded, so it should look not found.
-	_, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, 3)
+	_, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, testutil.Id(3))
 	if !errors.Is(err, workout.ErrWorkoutNotFound) {
 		t.Fatalf("Expected ErrWorkoutNotFound, got %v", err)
 	}
@@ -293,7 +473,7 @@ func TestWorkoutRepository_GetWorkout_WrongUser(t *testing.T) {
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
 	// Workout 2 belongs to user 2, so it should look not found to user 1.
-	_, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, 2)
+	_, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, testutil.Id(2))
 	if !errors.Is(err, workout.ErrWorkoutNotFound) {
 		t.Fatalf("Expected ErrWorkoutNotFound, got %v", err)
 	}
@@ -303,7 +483,7 @@ func TestWorkoutRepository_GetWorkout_UserSeesOwnWorkout(t *testing.T) {
 	ctx := t.Context()
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
-	got, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 2, 2)
+	got, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 2, testutil.Id(2))
 	if err != nil {
 		t.Fatalf("GetWorkoutByUserIdAndWorkoutId returned error: %v", err)
 	}
@@ -324,13 +504,14 @@ func TestWorkoutRepository_GetWorkout_UserSeesOwnWorkout(t *testing.T) {
 func createModifiableWorkout(t *testing.T, repo *workout.PostgresWorkoutRepository) workout.Workout {
 	t.Helper()
 
-	created, err := repo.CreateWorkout(t.Context(), 1, workout.Workout{
+	created, _, err := repo.CreateWorkout(t.Context(), 1, workout.Workout{
+		WorkoutId:   uuid.NewV7(),
 		StartedAt:   time.Date(2024, 3, 1, 17, 0, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 3, 1, 18, 0, 0, 0, time.UTC),
-		Template:    template.Template{TemplateId: 1},
+		Template:    template.Template{TemplateId: testutil.Id(1)},
 		Sets: []set.Set{
-			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 8, WeightGrams: 60000},
-			{Exercise: exercise.Exercise{ExerciseId: 2}, Reps: 5, WeightGrams: 100000},
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 8, WeightGrams: 60000},
+			{Exercise: exercise.Exercise{ExerciseId: dumbbellBenchPressId}, Reps: 5, WeightGrams: 100000},
 		},
 	})
 	if err != nil {
@@ -351,9 +532,9 @@ func TestWorkoutRepository_ModifyWorkout(t *testing.T) {
 		StartedAt:   startedAt,
 		CompletedAt: completedAt,
 		Sets: []set.Set{
-			{Exercise: exercise.Exercise{ExerciseId: 3}, Reps: 10, WeightGrams: 40000},
-			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 6, WeightGrams: 70000},
-			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 4, WeightGrams: 75000},
+			{Exercise: exercise.Exercise{ExerciseId: smithBenchPressId}, Reps: 10, WeightGrams: 40000},
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 6, WeightGrams: 70000},
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 4, WeightGrams: 75000},
 		},
 	})
 	if err != nil {
@@ -361,9 +542,9 @@ func TestWorkoutRepository_ModifyWorkout(t *testing.T) {
 	}
 
 	if modified.WorkoutId != created.WorkoutId {
-		t.Errorf("expected WorkoutId %d, got %d", created.WorkoutId, modified.WorkoutId)
+		t.Errorf("expected WorkoutId %v, got %v", created.WorkoutId, modified.WorkoutId)
 	}
-	if modified.Template.TemplateId != 1 || modified.Template.TemplateName != "Push Day" {
+	if modified.Template.TemplateId != testutil.Id(1) || modified.Template.TemplateName != "Push Day" {
 		t.Errorf("expected the template to be returned unchanged, got %+v", modified.Template)
 	}
 	if len(modified.Sets) != 3 || modified.Sets[1].Exercise.ExerciseName != "Bench Press (Barbell)" {
@@ -380,7 +561,7 @@ func TestWorkoutRepository_ModifyWorkout(t *testing.T) {
 	if !got.CompletedAt.Equal(completedAt) {
 		t.Errorf("expected CompletedAt %v, got %v", completedAt, got.CompletedAt)
 	}
-	if got.Template.TemplateId != 1 {
+	if got.Template.TemplateId != testutil.Id(1) {
 		t.Errorf("expected the template to be unchanged, got %+v", got.Template)
 	}
 	if len(got.Sets) != 3 {
@@ -404,7 +585,7 @@ func TestWorkoutRepository_ModifyWorkout_IsIdempotent(t *testing.T) {
 		StartedAt:   time.Date(2024, 3, 2, 18, 15, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC),
 		Sets: []set.Set{
-			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 6, WeightGrams: 70000},
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 6, WeightGrams: 70000},
 		},
 	}
 
@@ -427,19 +608,16 @@ func TestWorkoutRepository_ModifyWorkout_NotFound(t *testing.T) {
 	ctx := t.Context()
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
-	// The last id is beyond what the int4 column can hold.
-	for _, workoutId := range []uint32{999999, math.MaxInt32 + 1} {
-		_, err := repo.ModifyWorkout(ctx, 1, workout.Workout{
-			WorkoutId:   workoutId,
-			StartedAt:   time.Date(2024, 3, 2, 18, 15, 0, 0, time.UTC),
-			CompletedAt: time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC),
-			Sets: []set.Set{
-				{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 6, WeightGrams: 70000},
-			},
-		})
-		if !errors.Is(err, workout.ErrWorkoutNotFound) {
-			t.Errorf("workout %d: expected ErrWorkoutNotFound, got %v", workoutId, err)
-		}
+	_, err := repo.ModifyWorkout(ctx, 1, workout.Workout{
+		WorkoutId:   uuid.NewV7(),
+		StartedAt:   time.Date(2024, 3, 2, 18, 15, 0, 0, time.UTC),
+		CompletedAt: time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC),
+		Sets: []set.Set{
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 6, WeightGrams: 70000},
+		},
+	})
+	if !errors.Is(err, workout.ErrWorkoutNotFound) {
+		t.Errorf("expected ErrWorkoutNotFound, got %v", err)
 	}
 }
 
@@ -454,7 +632,7 @@ func TestWorkoutRepository_ModifyWorkout_WrongUser(t *testing.T) {
 		StartedAt:   time.Date(2024, 3, 2, 18, 15, 0, 0, time.UTC),
 		CompletedAt: time.Date(2024, 3, 2, 19, 15, 0, 0, time.UTC),
 		Sets: []set.Set{
-			{Exercise: exercise.Exercise{ExerciseId: 3}, Reps: 1, WeightGrams: 1000},
+			{Exercise: exercise.Exercise{ExerciseId: smithBenchPressId}, Reps: 1, WeightGrams: 1000},
 		},
 	})
 	if !errors.Is(err, workout.ErrWorkoutNotFound) {
@@ -480,9 +658,9 @@ func TestWorkoutRepository_ModifyWorkout_RollsBackOnInvalidSets(t *testing.T) {
 		wantErr error
 	}{
 		// Exercise 100 is a custom exercise owned by user 2.
-		{"other user's exercise", set.Set{Exercise: exercise.Exercise{ExerciseId: 100}, Reps: 8, WeightGrams: 60000}, workout.ErrExerciseNotFound},
-		{"unknown exercise", set.Set{Exercise: exercise.Exercise{ExerciseId: 999999}, Reps: 8, WeightGrams: 60000}, workout.ErrExerciseNotFound},
-		{"weight out of range", set.Set{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 8, WeightGrams: math.MaxInt32 + 1}, workout.ErrWeightGramsOutOfRange},
+		{"other user's exercise", set.Set{Exercise: exercise.Exercise{ExerciseId: testutil.Id(100)}, Reps: 8, WeightGrams: 60000}, workout.ErrExerciseNotFound},
+		{"unknown exercise", set.Set{Exercise: exercise.Exercise{ExerciseId: uuid.NewV7()}, Reps: 8, WeightGrams: 60000}, workout.ErrExerciseNotFound},
+		{"weight out of range", set.Set{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 8, WeightGrams: math.MaxInt32 + 1}, workout.ErrWeightGramsOutOfRange},
 	}
 
 	for _, tt := range tests {
@@ -510,27 +688,18 @@ func TestWorkoutRepository_ModifyWorkout_RollsBackOnInvalidSets(t *testing.T) {
 	}
 }
 
-func TestWorkoutRepository_GetWorkout_IdOutOfRange(t *testing.T) {
-	ctx := t.Context()
-	repo := workout.NewPostgresWorkoutRepository(testPool)
-
-	_, err := repo.GetWorkoutByUserIdAndWorkoutId(ctx, 1, math.MaxInt32+1)
-	if !errors.Is(err, workout.ErrWorkoutNotFound) {
-		t.Fatalf("Expected ErrWorkoutNotFound, got %v", err)
-	}
-}
-
 // createWorkoutCompletedAt stores a one-hour, one-set workout for user 1
 // under template 1.
 func createWorkoutCompletedAt(t *testing.T, repo *workout.PostgresWorkoutRepository, completedAt time.Time) workout.Workout {
 	t.Helper()
 
-	created, err := repo.CreateWorkout(t.Context(), 1, workout.Workout{
+	created, _, err := repo.CreateWorkout(t.Context(), 1, workout.Workout{
+		WorkoutId:   uuid.NewV7(),
 		StartedAt:   completedAt.Add(-time.Hour),
 		CompletedAt: completedAt,
-		Template:    template.Template{TemplateId: 1},
+		Template:    template.Template{TemplateId: testutil.Id(1)},
 		Sets: []set.Set{
-			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 8, WeightGrams: 60000},
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 8, WeightGrams: 60000},
 		},
 	})
 	if err != nil {
@@ -539,7 +708,7 @@ func createWorkoutCompletedAt(t *testing.T, repo *workout.PostgresWorkoutReposit
 	return created
 }
 
-func workoutIndex(workouts []workout.Workout, workoutId uint32) int {
+func workoutIndex(workouts []workout.Workout, workoutId uuid.UUID) int {
 	for i, w := range workouts {
 		if w.WorkoutId == workoutId {
 			return i
@@ -562,10 +731,10 @@ func TestWorkoutRepository_GetWorkouts(t *testing.T) {
 		t.Fatalf("expected 1 workout, got %d: %+v", len(got), got)
 	}
 	w := got[0]
-	if w.WorkoutId != 2 {
-		t.Errorf("expected WorkoutId 2, got %d", w.WorkoutId)
+	if w.WorkoutId != testutil.Id(2) {
+		t.Errorf("expected WorkoutId 2, got %v", w.WorkoutId)
 	}
-	if w.Template.TemplateId != 2 || w.Template.TemplateName != "Pull Day" {
+	if w.Template.TemplateId != testutil.Id(2) || w.Template.TemplateName != "Pull Day" {
 		t.Errorf("expected template {2 Pull Day}, got %+v", w.Template)
 	}
 	if want := time.Date(2024, 1, 16, 10, 0, 0, 0, time.UTC); !w.StartedAt.Equal(want) {
@@ -588,7 +757,7 @@ func TestWorkoutRepository_GetWorkouts_OnlyOwnWorkouts(t *testing.T) {
 		t.Fatalf("GetWorkoutsByUserId returned error: %v", err)
 	}
 
-	i := workoutIndex(got, 1)
+	i := workoutIndex(got, testutil.Id(1))
 	if i == -1 {
 		t.Fatalf("expected user 1's seeded workout 1 to be listed, got %+v", got)
 	}
@@ -596,7 +765,7 @@ func TestWorkoutRepository_GetWorkouts_OnlyOwnWorkouts(t *testing.T) {
 		t.Errorf("expected TemplateName %q, got %q", "Push Day", got[i].Template.TemplateName)
 	}
 	// Workout 2 belongs to user 2.
-	if workoutIndex(got, 2) != -1 {
+	if workoutIndex(got, testutil.Id(2)) != -1 {
 		t.Errorf("expected user 2's workout to be hidden from user 1, got %+v", got)
 	}
 }
@@ -624,7 +793,7 @@ func TestWorkoutRepository_GetWorkouts_NewestFirst(t *testing.T) {
 	// The whole list must be ordered, not just the workouts created here.
 	for i := 1; i < len(got); i++ {
 		if got[i].CompletedAt.After(got[i-1].CompletedAt) {
-			t.Errorf("workout %d (%v) is listed after older workout %d (%v)",
+			t.Errorf("workout %v (%v) is listed after older workout %v (%v)",
 				got[i].WorkoutId, got[i].CompletedAt, got[i-1].WorkoutId, got[i-1].CompletedAt)
 		}
 	}
@@ -672,7 +841,7 @@ func TestWorkoutRepository_GetWorkoutsByTemplate(t *testing.T) {
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
 	// User 2 only has seeded workout 2 under template 2, so the whole list can be asserted.
-	got, err := repo.GetWorkoutsByUserIdAndTemplateId(ctx, 2, 2)
+	got, err := repo.GetWorkoutsByUserIdAndTemplateId(ctx, 2, testutil.Id(2))
 	if err != nil {
 		t.Fatalf("GetWorkoutsByUserIdAndTemplateId returned error: %v", err)
 	}
@@ -681,10 +850,10 @@ func TestWorkoutRepository_GetWorkoutsByTemplate(t *testing.T) {
 		t.Fatalf("expected 1 workout, got %d: %+v", len(got), got)
 	}
 	w := got[0]
-	if w.WorkoutId != 2 {
-		t.Errorf("expected WorkoutId 2, got %d", w.WorkoutId)
+	if w.WorkoutId != testutil.Id(2) {
+		t.Errorf("expected WorkoutId 2, got %v", w.WorkoutId)
 	}
-	if w.Template.TemplateId != 2 || w.Template.TemplateName != "Pull Day" {
+	if w.Template.TemplateId != testutil.Id(2) || w.Template.TemplateName != "Pull Day" {
 		t.Errorf("expected template {2 Pull Day}, got %+v", w.Template)
 	}
 	if want := time.Date(2024, 1, 16, 10, 0, 0, 0, time.UTC); !w.StartedAt.Equal(want) {
@@ -703,12 +872,13 @@ func TestWorkoutRepository_GetWorkoutsByTemplate_OnlyThatTemplate(t *testing.T) 
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
 	// A workout under a second template of user 1 must not show up under template 1.
-	other, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+	other, _, err := repo.CreateWorkout(ctx, 1, workout.Workout{
+		WorkoutId:   uuid.NewV7(),
 		StartedAt:   time.Date(2035, 1, 1, 9, 0, 0, 0, time.UTC),
 		CompletedAt: time.Date(2035, 1, 1, 10, 0, 0, 0, time.UTC),
 		Template:    template.Template{TemplateName: "Leg Day By Template Test"},
 		Sets: []set.Set{
-			{Exercise: exercise.Exercise{ExerciseId: 1}, Reps: 8, WeightGrams: 60000},
+			{Exercise: exercise.Exercise{ExerciseId: benchPressId}, Reps: 8, WeightGrams: 60000},
 		},
 	})
 	if err != nil {
@@ -716,19 +886,19 @@ func TestWorkoutRepository_GetWorkoutsByTemplate_OnlyThatTemplate(t *testing.T) 
 	}
 	own := createWorkoutCompletedAt(t, repo, time.Date(2035, 1, 2, 10, 0, 0, 0, time.UTC))
 
-	got, err := repo.GetWorkoutsByUserIdAndTemplateId(ctx, 1, 1)
+	got, err := repo.GetWorkoutsByUserIdAndTemplateId(ctx, 1, testutil.Id(1))
 	if err != nil {
 		t.Fatalf("GetWorkoutsByUserIdAndTemplateId returned error: %v", err)
 	}
 
-	if workoutIndex(got, own.WorkoutId) == -1 || workoutIndex(got, 1) == -1 {
+	if workoutIndex(got, own.WorkoutId) == -1 || workoutIndex(got, testutil.Id(1)) == -1 {
 		t.Errorf("expected template 1's workouts to be listed, got %+v", got)
 	}
 	if workoutIndex(got, other.WorkoutId) != -1 {
 		t.Errorf("expected the workout under another template to be excluded, got %+v", got)
 	}
 	for _, w := range got {
-		if w.Template.TemplateId != 1 || w.Template.TemplateName != "Push Day" {
+		if w.Template.TemplateId != testutil.Id(1) || w.Template.TemplateName != "Push Day" {
 			t.Errorf("expected only template {1 Push Day}, got %+v", w)
 		}
 	}
@@ -738,7 +908,7 @@ func TestWorkoutRepository_GetWorkoutsByTemplate_OnlyThatTemplate(t *testing.T) 
 		t.Fatalf("GetWorkoutsByUserIdAndTemplateId returned error: %v", err)
 	}
 	if len(otherList) != 1 || otherList[0].WorkoutId != other.WorkoutId {
-		t.Errorf("expected only workout %d under the new template, got %+v", other.WorkoutId, otherList)
+		t.Errorf("expected only workout %v under the new template, got %+v", other.WorkoutId, otherList)
 	}
 }
 
@@ -751,7 +921,7 @@ func TestWorkoutRepository_GetWorkoutsByTemplate_NewestFirst(t *testing.T) {
 	first := createWorkoutCompletedAt(t, repo, completedAt)
 	second := createWorkoutCompletedAt(t, repo, completedAt)
 
-	got, err := repo.GetWorkoutsByUserIdAndTemplateId(ctx, 1, 1)
+	got, err := repo.GetWorkoutsByUserIdAndTemplateId(ctx, 1, testutil.Id(1))
 	if err != nil {
 		t.Fatalf("GetWorkoutsByUserIdAndTemplateId returned error: %v", err)
 	}
@@ -767,7 +937,7 @@ func TestWorkoutRepository_GetWorkoutsByTemplate_NewestFirst(t *testing.T) {
 
 	for i := 1; i < len(got); i++ {
 		if got[i].CompletedAt.After(got[i-1].CompletedAt) {
-			t.Errorf("workout %d (%v) is listed after older workout %d (%v)",
+			t.Errorf("workout %v (%v) is listed after older workout %v (%v)",
 				got[i].WorkoutId, got[i].CompletedAt, got[i-1].WorkoutId, got[i-1].CompletedAt)
 		}
 	}
@@ -777,7 +947,7 @@ func TestWorkoutRepository_GetWorkoutsByTemplate_NoWorkouts(t *testing.T) {
 	ctx := t.Context()
 	repo := workout.NewPostgresWorkoutRepository(testPool)
 
-	var templateId uint32
+	var templateId uuid.UUID
 	if err := testPool.QueryRow(ctx,
 		`INSERT INTO templates (user_id, template_name) VALUES (1, 'Unused Template') RETURNING template_id`,
 	).Scan(&templateId); err != nil {
@@ -802,11 +972,10 @@ func TestWorkoutRepository_GetWorkoutsByTemplate_TemplateNotFound(t *testing.T) 
 	tests := []struct {
 		name       string
 		userId     uint32
-		templateId uint32
+		templateId uuid.UUID
 	}{
-		{"unknown template", 1, 9999},
-		{"other user's template", 1, 2},
-		{"id out of range", 1, math.MaxUint32},
+		{"unknown template", 1, uuid.NewV7()},
+		{"other user's template", 1, testutil.Id(2)},
 	}
 
 	for _, tt := range tests {

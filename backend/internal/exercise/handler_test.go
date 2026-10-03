@@ -9,14 +9,16 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"uuid"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/exercise"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/identity"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/testutil"
 )
 
 type mockExerciseService struct {
 	getExercisesFunc   func(ctx context.Context, userId uint32) ([]exercise.Exercise, error)
-	createExerciseFunc func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error)
+	createExerciseFunc func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error)
 	modifyExerciseFunc func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error)
 }
 
@@ -24,7 +26,7 @@ func (m *mockExerciseService) GetExercises(ctx context.Context, userId uint32) (
 	return m.getExercisesFunc(ctx, userId)
 }
 
-func (m *mockExerciseService) CreateExercise(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
+func (m *mockExerciseService) CreateExercise(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
 	return m.createExerciseFunc(ctx, ex)
 }
 
@@ -34,12 +36,12 @@ func (m *mockExerciseService) ModifyExercise(ctx context.Context, ex exercise.Ex
 
 func TestExerciseHandler_GetExercises_Success(t *testing.T) {
 	serviceExercises := []exercise.Exercise{
-		{ExerciseId: 1, UserId: 99, ExerciseName: "Test Exercise 1"},
-		{ExerciseId: 2, UserId: 99, ExerciseName: "Test Exercise 2"},
+		{ExerciseId: testutil.Id(1), UserId: 99, ExerciseName: "Test Exercise 1"},
+		{ExerciseId: testutil.Id(2), UserId: 99, ExerciseName: "Test Exercise 2"},
 	}
 	expected := []exercise.ExerciseResponse{
-		{ExerciseId: 1, ExerciseName: "Test Exercise 1"},
-		{ExerciseId: 2, ExerciseName: "Test Exercise 2"},
+		{ExerciseId: testutil.Id(1), ExerciseName: "Test Exercise 1"},
+		{ExerciseId: testutil.Id(2), ExerciseName: "Test Exercise 2"},
 	}
 
 	service := &mockExerciseService{
@@ -81,7 +83,7 @@ func TestExerciseHandler_GetExercises_ResponseContainsOnlyExpectedFields(t *test
 	service := &mockExerciseService{
 		getExercisesFunc: func(ctx context.Context, userId uint32) ([]exercise.Exercise, error) {
 			return []exercise.Exercise{
-				{ExerciseId: 1, UserId: 99, ExerciseName: "Test Exercise 1"},
+				{ExerciseId: testutil.Id(1), UserId: 99, ExerciseName: "Test Exercise 1"},
 			}, nil
 		},
 	}
@@ -111,7 +113,7 @@ func TestExerciseHandler_GetExercises_ResponseContainsOnlyExpectedFields(t *test
 	}
 
 	want := map[string]any{
-		"exercise_id":   float64(1),
+		"exercise_id":   "00000000-0000-0000-0000-000000000001",
 		"exercise_name": "Test Exercise 1",
 	}
 	if !reflect.DeepEqual(exercises[0], want) {
@@ -196,19 +198,19 @@ func TestExerciseHandler_GetExercises_ServiceError(t *testing.T) {
 }
 
 func TestExerciseHandler_CreateExercise_Success(t *testing.T) {
-	created := exercise.Exercise{ExerciseId: 1, ExerciseName: "Lunge", UserId: 1}
+	created := exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "Lunge", UserId: 1}
 
 	var got exercise.Exercise
 	service := &mockExerciseService{
-		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
 			got = ex
-			return created, nil
+			return created, true, nil
 		},
 	}
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_name":"Lunge"}`))
+	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_id":"00000000-0000-0000-0000-000000000001","exercise_name":"Lunge"}`))
 	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
 	rec := httptest.NewRecorder()
 
@@ -223,25 +225,109 @@ func TestExerciseHandler_CreateExercise_Success(t *testing.T) {
 	if ct := res.Header.Get("Content-Type"); ct != "application/json" {
 		t.Errorf("Expected Content-Type application/json, got %q", ct)
 	}
-	if got.ExerciseName != "Lunge" || got.UserId != 1 {
-		t.Errorf("expected service called with {Lunge, UserId:1}, got %+v", got)
+	if got != created {
+		t.Errorf("expected service called with %+v, got %+v", created, got)
 	}
 
 	var body exercise.ExerciseResponse
 	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
 		t.Fatalf("Failed to decode response body: %v", err)
 	}
-	want := exercise.ExerciseResponse{ExerciseId: 1, ExerciseName: "Lunge"}
+	want := exercise.ExerciseResponse{ExerciseId: testutil.Id(1), ExerciseName: "Lunge"}
 	if body != want {
 		t.Errorf("CreateExercise() response = %+v, want %+v", body, want)
 	}
 }
 
-func TestExerciseHandler_CreateExercise_ResponseContainsOnlyExpectedFields(t *testing.T) {
-	created := exercise.Exercise{ExerciseId: 1, ExerciseName: "Lunge", UserId: 1}
+func TestExerciseHandler_CreateExercise_WithoutExerciseId(t *testing.T) {
+	var got exercise.Exercise
 	service := &mockExerciseService{
-		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
-			return created, nil
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
+			got = ex
+			return exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: ex.ExerciseName, UserId: ex.UserId}, true, nil
+		},
+	}
+
+	handler := exercise.NewExerciseHandler(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_name":"Lunge"}`))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+	rec := httptest.NewRecorder()
+
+	handler.CreateExercise(rec, req)
+
+	if rec.Result().StatusCode != http.StatusCreated {
+		t.Fatalf("Expected status 201, got %d", rec.Result().StatusCode)
+	}
+	if got.ExerciseId != uuid.Nil() {
+		t.Errorf("expected the service to receive no id, leaving it to pick one, got %v", got.ExerciseId)
+	}
+}
+
+func TestExerciseHandler_CreateExercise_ExistingExercise(t *testing.T) {
+	existing := exercise.Exercise{ExerciseId: testutil.Id(2), ExerciseName: "Lunge", UserId: 1}
+	service := &mockExerciseService{
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
+			return existing, false, nil
+		},
+	}
+
+	handler := exercise.NewExerciseHandler(service)
+
+	req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(`{"exercise_id":"00000000-0000-0000-0000-000000000001","exercise_name":"lunge"}`))
+	req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+	rec := httptest.NewRecorder()
+
+	handler.CreateExercise(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", res.StatusCode)
+	}
+
+	var body exercise.ExerciseResponse
+	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
+		t.Fatalf("Failed to decode response body: %v", err)
+	}
+	want := exercise.ExerciseResponse{ExerciseId: testutil.Id(2), ExerciseName: "Lunge"}
+	if body != want {
+		t.Errorf("CreateExercise() response = %+v, want the existing exercise %+v", body, want)
+	}
+}
+
+func TestExerciseHandler_CreateExercise_InvalidExerciseId(t *testing.T) {
+	for _, exerciseId := range []string{`"abc"`, `""`, `1`} {
+		t.Run(exerciseId, func(t *testing.T) {
+			service := &mockExerciseService{
+				createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
+					t.Fatal("CreateExercise should not be called for an invalid exercise_id")
+					return exercise.Exercise{}, false, nil
+				},
+			}
+
+			handler := exercise.NewExerciseHandler(service)
+
+			body := `{"exercise_id":` + exerciseId + `,"exercise_name":"Lunge"}`
+			req := httptest.NewRequest(http.MethodPost, "/exercises", strings.NewReader(body))
+			req = req.WithContext(identity.ContextWithUserId(req.Context(), 1))
+			rec := httptest.NewRecorder()
+
+			handler.CreateExercise(rec, req)
+
+			if rec.Result().StatusCode != http.StatusBadRequest {
+				t.Fatalf("Expected status 400, got %d", rec.Result().StatusCode)
+			}
+		})
+	}
+}
+
+func TestExerciseHandler_CreateExercise_ResponseContainsOnlyExpectedFields(t *testing.T) {
+	created := exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "Lunge", UserId: 1}
+	service := &mockExerciseService{
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
+			return created, true, nil
 		},
 	}
 
@@ -262,7 +348,7 @@ func TestExerciseHandler_CreateExercise_ResponseContainsOnlyExpectedFields(t *te
 	}
 
 	want := map[string]any{
-		"exercise_id":   float64(1),
+		"exercise_id":   "00000000-0000-0000-0000-000000000001",
 		"exercise_name": "Lunge",
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -272,9 +358,9 @@ func TestExerciseHandler_CreateExercise_ResponseContainsOnlyExpectedFields(t *te
 
 func TestExerciseHandler_CreateExercise_Unauthorized(t *testing.T) {
 	service := &mockExerciseService{
-		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
 			t.Fatal("CreateExercise should not be called without an authenticated user")
-			return exercise.Exercise{}, nil
+			return exercise.Exercise{}, false, nil
 		},
 	}
 
@@ -292,9 +378,9 @@ func TestExerciseHandler_CreateExercise_Unauthorized(t *testing.T) {
 
 func TestExerciseHandler_CreateExercise_MalformedBody(t *testing.T) {
 	service := &mockExerciseService{
-		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
 			t.Fatal("CreateExercise should not be called for a malformed request body")
-			return exercise.Exercise{}, nil
+			return exercise.Exercise{}, false, nil
 		},
 	}
 
@@ -313,8 +399,8 @@ func TestExerciseHandler_CreateExercise_MalformedBody(t *testing.T) {
 
 func TestExerciseHandler_CreateExercise_NameRequired(t *testing.T) {
 	service := &mockExerciseService{
-		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
-			return exercise.Exercise{}, exercise.ErrExerciseNameRequired
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
+			return exercise.Exercise{}, false, exercise.ErrExerciseNameRequired
 		},
 	}
 
@@ -331,10 +417,10 @@ func TestExerciseHandler_CreateExercise_NameRequired(t *testing.T) {
 	}
 }
 
-func TestExerciseHandler_CreateExercise_AlreadyExists(t *testing.T) {
+func TestExerciseHandler_CreateExercise_IdTaken(t *testing.T) {
 	service := &mockExerciseService{
-		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
-			return exercise.Exercise{}, exercise.ErrExerciseAlreadyExists
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
+			return exercise.Exercise{}, false, exercise.ErrExerciseIdTaken
 		},
 	}
 
@@ -353,8 +439,8 @@ func TestExerciseHandler_CreateExercise_AlreadyExists(t *testing.T) {
 
 func TestExerciseHandler_CreateExercise_ServiceError(t *testing.T) {
 	service := &mockExerciseService{
-		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
-			return exercise.Exercise{}, errors.New("db exploded")
+		createExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error) {
+			return exercise.Exercise{}, false, errors.New("db exploded")
 		},
 	}
 
@@ -381,7 +467,7 @@ func newModifyExerciseRequest(userId uint32, exerciseId string, body string, aut
 }
 
 func TestExerciseHandler_ModifyExercise_Success(t *testing.T) {
-	modified := exercise.Exercise{ExerciseId: 1, ExerciseName: "Romanian Deadlift", UserId: 1}
+	modified := exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "Romanian Deadlift", UserId: 1}
 
 	var got exercise.Exercise
 	service := &mockExerciseService{
@@ -393,7 +479,7 @@ func TestExerciseHandler_ModifyExercise_Success(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"Romanian Deadlift"}`, true)
+	req := newModifyExerciseRequest(1, testutil.Id(1).String(), `{"exercise_name":"Romanian Deadlift"}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -407,22 +493,22 @@ func TestExerciseHandler_ModifyExercise_Success(t *testing.T) {
 	if ct := res.Header.Get("Content-Type"); ct != "application/json" {
 		t.Errorf("Expected Content-Type application/json, got %q", ct)
 	}
-	if got.ExerciseId != 1 || got.ExerciseName != "Romanian Deadlift" || got.UserId != 1 {
-		t.Errorf("expected service called with {ExerciseId:1, Romanian Deadlift, UserId:1}, got %+v", got)
+	if got != modified {
+		t.Errorf("expected service called with %+v, got %+v", modified, got)
 	}
 
 	var body exercise.ExerciseResponse
 	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
 		t.Fatalf("Failed to decode response body: %v", err)
 	}
-	want := exercise.ExerciseResponse{ExerciseId: 1, ExerciseName: "Romanian Deadlift"}
+	want := exercise.ExerciseResponse{ExerciseId: testutil.Id(1), ExerciseName: "Romanian Deadlift"}
 	if body != want {
 		t.Errorf("ModifyExercise() response = %+v, want %+v", body, want)
 	}
 }
 
 func TestExerciseHandler_ModifyExercise_ResponseContainsOnlyExpectedFields(t *testing.T) {
-	modified := exercise.Exercise{ExerciseId: 1, ExerciseName: "Romanian Deadlift", UserId: 1}
+	modified := exercise.Exercise{ExerciseId: testutil.Id(1), ExerciseName: "Romanian Deadlift", UserId: 1}
 	service := &mockExerciseService{
 		modifyExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
 			return modified, nil
@@ -431,7 +517,7 @@ func TestExerciseHandler_ModifyExercise_ResponseContainsOnlyExpectedFields(t *te
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"Romanian Deadlift"}`, true)
+	req := newModifyExerciseRequest(1, testutil.Id(1).String(), `{"exercise_name":"Romanian Deadlift"}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -445,7 +531,7 @@ func TestExerciseHandler_ModifyExercise_ResponseContainsOnlyExpectedFields(t *te
 	}
 
 	want := map[string]any{
-		"exercise_id":   float64(1),
+		"exercise_id":   "00000000-0000-0000-0000-000000000001",
 		"exercise_name": "Romanian Deadlift",
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -463,7 +549,7 @@ func TestExerciseHandler_ModifyExercise_Unauthorized(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"Lunge"}`, false)
+	req := newModifyExerciseRequest(1, testutil.Id(1).String(), `{"exercise_name":"Lunge"}`, false)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -483,7 +569,7 @@ func TestExerciseHandler_ModifyExercise_MalformedBody(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := newModifyExerciseRequest(1, "1", `not-json`, true)
+	req := newModifyExerciseRequest(1, testutil.Id(1).String(), `not-json`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -502,7 +588,7 @@ func TestExerciseHandler_ModifyExercise_NameRequired(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"   "}`, true)
+	req := newModifyExerciseRequest(1, testutil.Id(1).String(), `{"exercise_name":"   "}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -521,7 +607,7 @@ func TestExerciseHandler_ModifyExercise_AlreadyExists(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"Lunge"}`, true)
+	req := newModifyExerciseRequest(1, testutil.Id(1).String(), `{"exercise_name":"Lunge"}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -540,7 +626,7 @@ func TestExerciseHandler_ModifyExercise_GlobalExercise(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"Bench Press Variant"}`, true)
+	req := newModifyExerciseRequest(1, testutil.Id(1).String(), `{"exercise_name":"Bench Press Variant"}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -559,7 +645,7 @@ func TestExerciseHandler_ModifyExercise_NotFound(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := newModifyExerciseRequest(1, "999", `{"exercise_name":"Lunge"}`, true)
+	req := newModifyExerciseRequest(1, testutil.Id(999).String(), `{"exercise_name":"Lunge"}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -578,7 +664,7 @@ func TestExerciseHandler_ModifyExercise_ServiceError(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := newModifyExerciseRequest(1, "1", `{"exercise_name":"Lunge"}`, true)
+	req := newModifyExerciseRequest(1, testutil.Id(1).String(), `{"exercise_name":"Lunge"}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -589,7 +675,7 @@ func TestExerciseHandler_ModifyExercise_ServiceError(t *testing.T) {
 }
 
 func TestExerciseHandler_ModifyExercise_InvalidExerciseId(t *testing.T) {
-	for _, exerciseId := range []string{"abc", "-1", "4294967296"} {
+	for _, exerciseId := range []string{"abc", "1", "00000000-0000-0000-0000-00000000001"} {
 		t.Run(exerciseId, func(t *testing.T) {
 			service := &mockExerciseService{
 				modifyExerciseFunc: func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error) {
@@ -623,7 +709,7 @@ func TestExerciseHandler_ModifyExercise_PathIdWinsOverBodyId(t *testing.T) {
 
 	handler := exercise.NewExerciseHandler(service)
 
-	req := newModifyExerciseRequest(1, "7", `{"exercise_id":9,"exercise_name":"Lunge"}`, true)
+	req := newModifyExerciseRequest(1, testutil.Id(7).String(), `{"exercise_id":"00000000-0000-0000-0000-000000000009","exercise_name":"Lunge"}`, true)
 	rec := httptest.NewRecorder()
 
 	handler.ModifyExercise(rec, req)
@@ -631,7 +717,7 @@ func TestExerciseHandler_ModifyExercise_PathIdWinsOverBodyId(t *testing.T) {
 	if rec.Result().StatusCode != http.StatusOK {
 		t.Fatalf("Expected status 200, got %d", rec.Result().StatusCode)
 	}
-	if got.ExerciseId != 7 {
-		t.Errorf("expected service to receive exercise id 7 from the path, got %d", got.ExerciseId)
+	if got.ExerciseId != testutil.Id(7) {
+		t.Errorf("expected service to receive exercise id %v from the path, got %v", testutil.Id(7), got.ExerciseId)
 	}
 }

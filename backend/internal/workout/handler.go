@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
+	"uuid"
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/exercise"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/httpx"
@@ -15,10 +15,10 @@ import (
 )
 
 type WorkoutService interface {
-	GetWorkout(context.Context, uint32, uint32) (Workout, error)
+	GetWorkout(context.Context, uint32, uuid.UUID) (Workout, error)
 	GetWorkouts(context.Context, uint32) ([]Workout, error)
-	GetWorkoutsByTemplate(context.Context, uint32, uint32) ([]Workout, error)
-	CreateWorkout(context.Context, uint32, Workout) (Workout, error)
+	GetWorkoutsByTemplate(context.Context, uint32, uuid.UUID) ([]Workout, error)
+	CreateWorkout(context.Context, uint32, Workout) (stored Workout, created bool, err error)
 	ModifyWorkout(context.Context, uint32, Workout) (Workout, error)
 }
 
@@ -36,8 +36,8 @@ type workoutSet struct {
 }
 
 type WorkoutResponse struct {
-	WorkoutId    uint32                     `json:"workout_id"`
-	TemplateId   uint32                     `json:"template_id"`
+	WorkoutId    uuid.UUID                  `json:"workout_id"`
+	TemplateId   uuid.UUID                  `json:"template_id"`
 	TemplateName string                     `json:"template_name"`
 	StartedAt    time.Time                  `json:"started_at"`
 	CompletedAt  time.Time                  `json:"completed_at"`
@@ -62,13 +62,13 @@ func (h *WorkoutHandler) GetWorkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workoutId, err := strconv.ParseUint(r.PathValue("workoutId"), 10, 32)
+	workoutId, err := uuid.Parse(r.PathValue("workoutId"))
 	if err != nil {
 		http.Error(w, "Invalid workout_id", http.StatusBadRequest)
 		return
 	}
 
-	workout, err := h.service.GetWorkout(r.Context(), userId, uint32(workoutId))
+	workout, err := h.service.GetWorkout(r.Context(), userId, workoutId)
 	switch {
 	case errors.Is(err, ErrWorkoutNotFound):
 		http.Error(w, "Workout not found", http.StatusNotFound)
@@ -82,8 +82,8 @@ func (h *WorkoutHandler) GetWorkout(w http.ResponseWriter, r *http.Request) {
 }
 
 type workoutSummary struct {
-	WorkoutId    uint32    `json:"workout_id"`
-	TemplateId   uint32    `json:"template_id"`
+	WorkoutId    uuid.UUID `json:"workout_id"`
+	TemplateId   uuid.UUID `json:"template_id"`
 	TemplateName string    `json:"template_name"`
 	StartedAt    time.Time `json:"started_at"`
 	CompletedAt  time.Time `json:"completed_at"`
@@ -119,12 +119,12 @@ func (h *WorkoutHandler) GetWorkouts(w http.ResponseWriter, r *http.Request) {
 	var workouts []Workout
 	var err error
 	if query := r.URL.Query(); query.Has("template_id") {
-		templateId, parseErr := strconv.ParseUint(query.Get("template_id"), 10, 32)
+		templateId, parseErr := uuid.Parse(query.Get("template_id"))
 		if parseErr != nil {
 			http.Error(w, "Invalid template_id", http.StatusBadRequest)
 			return
 		}
-		workouts, err = h.service.GetWorkoutsByTemplate(r.Context(), userId, uint32(templateId))
+		workouts, err = h.service.GetWorkoutsByTemplate(r.Context(), userId, templateId)
 	} else {
 		workouts, err = h.service.GetWorkouts(r.Context(), userId)
 	}
@@ -142,12 +142,13 @@ func (h *WorkoutHandler) GetWorkouts(w http.ResponseWriter, r *http.Request) {
 }
 
 type workoutRequestExercise struct {
-	ExerciseId uint32       `json:"exercise_id"`
+	ExerciseId uuid.UUID    `json:"exercise_id"`
 	Sets       []workoutSet `json:"sets"`
 }
 
 type createWorkoutRequest struct {
-	TemplateId   uint32                   `json:"template_id"`
+	WorkoutId    uuid.UUID                `json:"workout_id"`
+	TemplateId   uuid.UUID                `json:"template_id"`
 	TemplateName string                   `json:"template_name"`
 	StartedAt    time.Time                `json:"started_at"`
 	CompletedAt  time.Time                `json:"completed_at"`
@@ -176,6 +177,8 @@ func writeWorkoutError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrWorkoutNotFound):
 		http.Error(w, "Workout not found", http.StatusNotFound)
+	case errors.Is(err, ErrWorkoutIdTaken):
+		http.Error(w, "workout_id is already in use", http.StatusConflict)
 	case errors.Is(err, ErrSetsRequired):
 		http.Error(w, "exercises must contain at least one set", http.StatusBadRequest)
 	case errors.Is(err, ErrRepsRequired):
@@ -199,6 +202,14 @@ func writeWorkoutError(w http.ResponseWriter, err error) {
 	}
 }
 
+// CreateWorkout logs a workout for the user, under the workout_id the client
+// sends or a new one if it sends none, and responds 201 Created. Its sets must
+// use exercise_ids the server knows, so a client that created exercises or the
+// template offline creates those first. If the user already has a workout with
+// the workout_id, nothing is created and that workout is returned as stored,
+// with 200 OK, so retrying a create is safe; a client with later changes
+// sends them with PUT. A workout_id belonging to another user's workout is
+// 409 Conflict.
 func (h *WorkoutHandler) CreateWorkout(w http.ResponseWriter, r *http.Request) {
 	userId, ok := identity.RequireUserId(w, r)
 	if !ok {
@@ -210,7 +221,8 @@ func (h *WorkoutHandler) CreateWorkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.service.CreateWorkout(r.Context(), userId, Workout{
+	stored, created, err := h.service.CreateWorkout(r.Context(), userId, Workout{
+		WorkoutId:   req.WorkoutId,
 		StartedAt:   req.StartedAt,
 		CompletedAt: req.CompletedAt,
 		Template:    template.Template{TemplateId: req.TemplateId, TemplateName: req.TemplateName},
@@ -221,7 +233,11 @@ func (h *WorkoutHandler) CreateWorkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpx.WriteJSON(w, http.StatusCreated, toWorkoutResponse(created))
+	status := http.StatusOK
+	if created {
+		status = http.StatusCreated
+	}
+	httpx.WriteJSON(w, status, toWorkoutResponse(stored))
 }
 
 // modifyWorkoutRequest deliberately has no template fields: a workout keeps
@@ -239,7 +255,7 @@ func (h *WorkoutHandler) ModifyWorkout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	workoutId, err := strconv.ParseUint(r.PathValue("workoutId"), 10, 32)
+	workoutId, err := uuid.Parse(r.PathValue("workoutId"))
 	if err != nil {
 		http.Error(w, "Invalid workout_id", http.StatusBadRequest)
 		return
@@ -251,7 +267,7 @@ func (h *WorkoutHandler) ModifyWorkout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	modified, err := h.service.ModifyWorkout(r.Context(), userId, Workout{
-		WorkoutId:   uint32(workoutId),
+		WorkoutId:   workoutId,
 		StartedAt:   req.StartedAt,
 		CompletedAt: req.CompletedAt,
 		Sets:        toSets(req.Exercises),

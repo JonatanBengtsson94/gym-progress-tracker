@@ -40,6 +40,10 @@ class LoginScreenTest {
         override suspend fun endSession(sessionId: String) {
             session.value = SessionState.LoggedOut
         }
+
+        override suspend fun logOut() {
+            session.value = SessionState.LoggedOut
+        }
     }
 
     private val sessionRepository = FakeSessionRepository()

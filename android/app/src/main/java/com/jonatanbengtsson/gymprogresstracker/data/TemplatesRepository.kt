@@ -14,7 +14,7 @@ interface TemplatesRepository {
     val templates: Flow<List<WorkoutTemplate>>
 
     /** Replaces the stored templates with the server's. They're kept as they are if that fails. */
-    suspend fun refresh(sessionId: String): RefreshResult
+    suspend fun refresh(): RefreshResult
 }
 
 class RoomTemplatesRepository(private val api: TemplatesApi, private val dao: TemplateDao) : TemplatesRepository {
@@ -22,17 +22,17 @@ class RoomTemplatesRepository(private val api: TemplatesApi, private val dao: Te
     override val templates: Flow<List<WorkoutTemplate>> =
         dao.observeTemplates().map { templates -> templates.map { it.toTemplate() } }
 
-    override suspend fun refresh(sessionId: String): RefreshResult = when (val result = api.getTemplates(sessionId)) {
-        is TemplatesResult.Success -> {
+    override suspend fun refresh(): RefreshResult = when (val result = api.getTemplates()) {
+        is ApiResult.Success -> {
             dao.replaceTemplates(
-                templates = result.templates.mapIndexed { position, template -> template.toEntity(position) },
-                sets = result.templates.flatMap { it.toSetEntities() }
+                templates = result.value.mapIndexed { position, template -> template.toEntity(position) },
+                sets = result.value.flatMap { it.toSetEntities() }
             )
             RefreshResult.Success
         }
-        TemplatesResult.SessionExpired -> RefreshResult.SessionExpired
-        TemplatesResult.NetworkError -> RefreshResult.NetworkError
-        TemplatesResult.ServerError -> RefreshResult.ServerError
+        ApiResult.Unauthorized -> RefreshResult.SessionExpired
+        ApiResult.NetworkError -> RefreshResult.NetworkError
+        ApiResult.ServerError -> RefreshResult.ServerError
     }
 
     private fun WorkoutTemplate.toEntity(position: Int) = TemplateEntity(

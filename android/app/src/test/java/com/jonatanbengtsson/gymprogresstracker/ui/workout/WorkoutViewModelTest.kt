@@ -4,9 +4,7 @@ import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.FakeActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeExercisesRepository
-import com.jonatanbengtsson.gymprogresstracker.data.FakeSessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
-import com.jonatanbengtsson.gymprogresstracker.data.SessionState
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.data.testId
@@ -29,16 +27,15 @@ class WorkoutViewModelTest {
 
     private val exercisesRepository = FakeExercisesRepository()
     private val activeWorkoutRepository = FakeActiveWorkoutRepository()
-    private val sessionRepository = FakeSessionRepository(SessionState.LoggedIn("session-123"))
 
     // Created lazily so each test can set up the fakes before the view model refreshes on init.
-    private val viewModel by lazy { WorkoutViewModel(exercisesRepository, activeWorkoutRepository, sessionRepository, "session-123") }
+    private val viewModel by lazy { WorkoutViewModel(exercisesRepository, activeWorkoutRepository) }
 
     @Test
-    fun `refreshes the exercises with the session id on creation`() {
+    fun `refreshes the exercises on creation`() {
         viewModel
 
-        assertEquals(listOf("session-123"), exercisesRepository.refreshes)
+        assertEquals(1, exercisesRepository.refreshes)
         assertEquals(WorkoutUiState(isLoadingExercises = true), viewModel.uiState)
     }
 
@@ -84,11 +81,10 @@ class WorkoutViewModelTest {
     }
 
     @Test
-    fun `an expired session is ended`() {
+    fun `an expired session shows no error`() {
         viewModel
         exercisesRepository.refreshResult.complete(RefreshResult.SessionExpired)
 
-        assertEquals(SessionState.LoggedOut, sessionRepository.session.value)
         assertEquals(WorkoutUiState(), viewModel.uiState)
     }
 
@@ -96,7 +92,7 @@ class WorkoutViewModelTest {
     fun `reload is ignored while a refresh is in flight`() {
         viewModel.loadExercises()
 
-        assertEquals(listOf("session-123"), exercisesRepository.refreshes)
+        assertEquals(1, exercisesRepository.refreshes)
     }
 
     @Test
@@ -111,7 +107,7 @@ class WorkoutViewModelTest {
         exercisesRepository.exercises.value = listOf(squat)
         exercisesRepository.refreshResult.complete(RefreshResult.Success)
         assertEquals(WorkoutUiState(exercises = listOf(squat)), viewModel.uiState)
-        assertEquals(listOf("session-123", "session-123"), exercisesRepository.refreshes)
+        assertEquals(2, exercisesRepository.refreshes)
     }
 
     @Test

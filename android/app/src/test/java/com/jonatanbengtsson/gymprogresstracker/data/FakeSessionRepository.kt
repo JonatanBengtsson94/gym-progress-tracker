@@ -16,4 +16,8 @@ class FakeSessionRepository(session: SessionState = SessionState.LoggedOut) : Se
     override suspend fun endSession(sessionId: String) {
         if (session.value == SessionState.LoggedIn(sessionId)) session.value = SessionState.LoggedOut
     }
+
+    override suspend fun logOut() {
+        session.value = SessionState.LoggedOut
+    }
 }

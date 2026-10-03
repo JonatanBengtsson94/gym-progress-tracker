@@ -11,7 +11,7 @@ interface ExercisesRepository {
     val exercises: Flow<List<Exercise>>
 
     /** Replaces the stored exercises with the server's. They're kept as they are if that fails. */
-    suspend fun refresh(sessionId: String): RefreshResult
+    suspend fun refresh(): RefreshResult
 }
 
 class RoomExercisesRepository(private val api: ExercisesApi, private val dao: ExerciseDao) : ExercisesRepository {
@@ -19,13 +19,13 @@ class RoomExercisesRepository(private val api: ExercisesApi, private val dao: Ex
     override val exercises: Flow<List<Exercise>> =
         dao.observeExercises().map { entities -> entities.map { Exercise(it.exerciseId, it.name) } }
 
-    override suspend fun refresh(sessionId: String): RefreshResult = when (val result = api.getExercises(sessionId)) {
-        is ExercisesResult.Success -> {
-            dao.replaceExercises(result.exercises.mapIndexed { position, exercise -> ExerciseEntity(exercise.id, exercise.name, position) })
+    override suspend fun refresh(): RefreshResult = when (val result = api.getExercises()) {
+        is ApiResult.Success -> {
+            dao.replaceExercises(result.value.mapIndexed { position, exercise -> ExerciseEntity(exercise.id, exercise.name, position) })
             RefreshResult.Success
         }
-        ExercisesResult.SessionExpired -> RefreshResult.SessionExpired
-        ExercisesResult.NetworkError -> RefreshResult.NetworkError
-        ExercisesResult.ServerError -> RefreshResult.ServerError
+        ApiResult.Unauthorized -> RefreshResult.SessionExpired
+        ApiResult.NetworkError -> RefreshResult.NetworkError
+        ApiResult.ServerError -> RefreshResult.ServerError
     }
 }

@@ -24,11 +24,11 @@ class RoomExercisesRepositoryTest {
         override suspend fun insertExercises(exercises: List<ExerciseEntity>) = error("Replaced as a whole by replaceExercises")
     }
 
-    private class FakeExercisesApi(var result: ExercisesResult) : ExercisesApi {
-        val calls = mutableListOf<String>()
+    private class FakeExercisesApi(var result: ApiResult<List<Exercise>>) : ExercisesApi {
+        var calls = 0
 
-        override suspend fun getExercises(sessionId: String): ExercisesResult {
-            calls += sessionId
+        override suspend fun getExercises(): ApiResult<List<Exercise>> {
+            calls++
             return result
         }
     }
@@ -37,7 +37,7 @@ class RoomExercisesRepositoryTest {
     private val squat = Exercise(testId(2), "Squat (Barbell)")
 
     private val dao = FakeExerciseDao()
-    private val api = FakeExercisesApi(ExercisesResult.Success(listOf(squat, benchPress)))
+    private val api = FakeExercisesApi(ApiResult.Success(listOf(squat, benchPress)))
     private val repository = RoomExercisesRepository(api, dao)
 
     @Test
@@ -47,35 +47,35 @@ class RoomExercisesRepositoryTest {
 
     @Test
     fun `a refresh stores the server's exercises in its order`() = runTest {
-        assertEquals(RefreshResult.Success, repository.refresh("session-123"))
+        assertEquals(RefreshResult.Success, repository.refresh())
 
-        assertEquals(listOf("session-123"), api.calls)
+        assertEquals(1, api.calls)
         assertEquals(listOf(ExerciseEntity(testId(2), "Squat (Barbell)", 0), ExerciseEntity(testId(1), "Bench Press (Barbell)", 1)), dao.exercises.value)
         assertEquals(listOf(squat, benchPress), repository.exercises.first())
     }
 
     @Test
     fun `a refresh replaces what was stored`() = runTest {
-        repository.refresh("session-123")
-        api.result = ExercisesResult.Success(listOf(benchPress))
+        repository.refresh()
+        api.result = ApiResult.Success(listOf(benchPress))
 
-        repository.refresh("session-123")
+        repository.refresh()
 
         assertEquals(listOf(benchPress), repository.exercises.first())
     }
 
     @Test
     fun `a failed refresh keeps the stored exercises and says why`() = runTest {
-        repository.refresh("session-123")
+        repository.refresh()
 
         for ((result, expected) in listOf(
-            ExercisesResult.NetworkError to RefreshResult.NetworkError,
-            ExercisesResult.ServerError to RefreshResult.ServerError,
-            ExercisesResult.SessionExpired to RefreshResult.SessionExpired
+            ApiResult.NetworkError to RefreshResult.NetworkError,
+            ApiResult.ServerError to RefreshResult.ServerError,
+            ApiResult.Unauthorized to RefreshResult.SessionExpired
         )) {
             api.result = result
 
-            assertEquals(expected, repository.refresh("session-123"))
+            assertEquals(expected, repository.refresh())
             assertEquals(listOf(squat, benchPress), repository.exercises.first())
         }
     }

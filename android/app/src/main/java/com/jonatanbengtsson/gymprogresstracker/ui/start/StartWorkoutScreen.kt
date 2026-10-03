@@ -58,7 +58,6 @@ import kotlin.uuid.Uuid
 
 @Composable
 fun StartWorkoutScreen(
-    sessionId: String,
     onStartNewWorkout: () -> Unit,
     onContinueWorkout: () -> Unit,
     onStartFromTemplate: (WorkoutTemplate) -> Unit,
@@ -69,8 +68,7 @@ fun StartWorkoutScreen(
                 StartWorkoutViewModel(
                     appContainer.templatesRepository,
                     appContainer.activeWorkoutRepository,
-                    appContainer.sessionRepository,
-                    sessionId
+                    appContainer.sessionRepository
                 )
             }
         }

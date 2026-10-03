@@ -8,10 +8,10 @@ class FakeTemplatesRepository(templates: List<WorkoutTemplate> = emptyList()) : 
 
     override val templates = MutableStateFlow(templates)
     var refreshResult = CompletableDeferred<RefreshResult>()
-    val refreshes = mutableListOf<String>()
+    var refreshes = 0
 
-    override suspend fun refresh(sessionId: String): RefreshResult {
-        refreshes += sessionId
+    override suspend fun refresh(): RefreshResult {
+        refreshes++
         return refreshResult.await()
     }
 }

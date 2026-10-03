@@ -35,13 +35,13 @@ class StartWorkoutViewModelTest {
     private val sessionRepository = FakeSessionRepository(SessionState.LoggedIn("session-123"))
 
     // Created lazily so each test can set up the fakes before the view model refreshes on init.
-    private val viewModel by lazy { StartWorkoutViewModel(templatesRepository, activeWorkoutRepository, sessionRepository, "session-123") }
+    private val viewModel by lazy { StartWorkoutViewModel(templatesRepository, activeWorkoutRepository, sessionRepository) }
 
     @Test
-    fun `refreshes the templates with the session id on creation`() {
+    fun `refreshes the templates on creation`() {
         viewModel
 
-        assertEquals(listOf("session-123"), templatesRepository.refreshes)
+        assertEquals(1, templatesRepository.refreshes)
         assertEquals(StartWorkoutUiState(isLoading = true), viewModel.uiState)
     }
 
@@ -84,11 +84,10 @@ class StartWorkoutViewModelTest {
     }
 
     @Test
-    fun `an expired session is ended`() {
+    fun `an expired session shows no error`() {
         viewModel
         templatesRepository.refreshResult.complete(RefreshResult.SessionExpired)
 
-        assertEquals(SessionState.LoggedOut, sessionRepository.session.value)
         assertEquals(StartWorkoutUiState(), viewModel.uiState)
     }
 
@@ -106,7 +105,7 @@ class StartWorkoutViewModelTest {
     fun `reload is ignored while a refresh is in flight`() {
         viewModel.loadTemplates()
 
-        assertEquals(listOf("session-123"), templatesRepository.refreshes)
+        assertEquals(1, templatesRepository.refreshes)
     }
 
     @Test
@@ -121,7 +120,7 @@ class StartWorkoutViewModelTest {
         templatesRepository.templates.value = templates
         templatesRepository.refreshResult.complete(RefreshResult.Success)
         assertEquals(StartWorkoutUiState(templates = templates), viewModel.uiState)
-        assertEquals(listOf("session-123", "session-123"), templatesRepository.refreshes)
+        assertEquals(2, templatesRepository.refreshes)
     }
 
     @Test

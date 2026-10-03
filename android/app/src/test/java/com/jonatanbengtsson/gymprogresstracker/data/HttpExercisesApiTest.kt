@@ -18,7 +18,8 @@ class HttpExercisesApiTest {
     fun setUp() {
         server = MockWebServer()
         server.start()
-        api = HttpExercisesApi(server.url("").toString().removeSuffix("/"))
+        val client = ApiClient(server.url("").toString().removeSuffix("/"), FakeSessionRepository(SessionState.LoggedIn("session-123")))
+        api = HttpExercisesApi(client)
     }
 
     @After
@@ -27,69 +28,40 @@ class HttpExercisesApiTest {
     }
 
     @Test
-    fun `getExercises sends the session as a bearer token`() = runTest {
+    fun `getExercises gets the exercises`() = runTest {
         server.enqueue(MockResponse().setBody("""{"exercises":[]}"""))
 
-        api.getExercises("session-123")
+        api.getExercises()
 
         val request = server.takeRequest()
         assertEquals("GET", request.method)
         assertEquals("/exercises", request.path)
-        assertEquals("Bearer session-123", request.getHeader("Authorization"))
     }
 
     @Test
-    fun `200 parses exercises in response order`() = runTest {
+    fun `exercises are parsed in response order`() = runTest {
         server.enqueue(MockResponse().setBody(contract("get_exercises.response.json")))
 
-        val expected = ExercisesResult.Success(
+        val expected = ApiResult.Success(
             listOf(
                 Exercise(Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d01"), "Bench Press (Barbell)"),
                 Exercise(Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d02"), "Zercher Squat")
             )
         )
-        assertEquals(expected, api.getExercises("session-123"))
+        assertEquals(expected, api.getExercises())
     }
 
     @Test
-    fun `200 with an exercise id that isn't a UUID returns ServerError`() = runTest {
+    fun `an exercise id that isn't a UUID is a server error`() = runTest {
         server.enqueue(MockResponse().setBody("""{"exercises": [{"exercise_id": 1, "exercise_name": "Squat (Barbell)"}]}"""))
 
-        assertEquals(ExercisesResult.ServerError, api.getExercises("session-123"))
+        assertEquals(ApiResult.ServerError, api.getExercises())
     }
 
     @Test
-    fun `401 returns SessionExpired`() = runTest {
-        server.enqueue(MockResponse().setResponseCode(401))
-
-        assertEquals(ExercisesResult.SessionExpired, api.getExercises("expired"))
-    }
-
-    @Test
-    fun `500 returns ServerError`() = runTest {
-        server.enqueue(MockResponse().setResponseCode(500))
-
-        assertEquals(ExercisesResult.ServerError, api.getExercises("session-123"))
-    }
-
-    @Test
-    fun `200 with malformed JSON returns ServerError`() = runTest {
-        server.enqueue(MockResponse().setBody("not json"))
-
-        assertEquals(ExercisesResult.ServerError, api.getExercises("session-123"))
-    }
-
-    @Test
-    fun `200 without exercises returns ServerError`() = runTest {
+    fun `a response without exercises is a server error`() = runTest {
         server.enqueue(MockResponse().setBody("""{"templates":[]}"""))
 
-        assertEquals(ExercisesResult.ServerError, api.getExercises("session-123"))
-    }
-
-    @Test
-    fun `unreachable server returns NetworkError`() = runTest {
-        server.shutdown()
-
-        assertEquals(ExercisesResult.NetworkError, api.getExercises("session-123"))
+        assertEquals(ApiResult.ServerError, api.getExercises())
     }
 }

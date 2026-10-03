@@ -37,6 +37,9 @@ interface SessionRepository {
      * has started since. The workout in progress is kept for when the same user logs in again.
      */
     suspend fun endSession(sessionId: String)
+
+    /** Ends the current session, if there is one, keeping the workout in progress like [endSession]. */
+    suspend fun logOut()
 }
 
 class DataStoreSessionRepository(
@@ -67,6 +70,10 @@ class DataStoreSessionRepository(
         dataStore.edit { preferences ->
             if (preferences[SESSION_ID] == sessionId) preferences.remove(SESSION_ID)
         }
+    }
+
+    override suspend fun logOut() {
+        dataStore.edit { preferences -> preferences.remove(SESSION_ID) }
     }
 
     private companion object {

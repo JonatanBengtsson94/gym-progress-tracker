@@ -28,8 +28,7 @@ data class StartWorkoutUiState(
 class StartWorkoutViewModel(
     private val templatesRepository: TemplatesRepository,
     private val activeWorkoutRepository: ActiveWorkoutRepository,
-    private val sessionRepository: SessionRepository,
-    private val sessionId: String
+    private val sessionRepository: SessionRepository
 ) : ViewModel() {
 
     var uiState by mutableStateOf(StartWorkoutUiState())
@@ -53,8 +52,7 @@ class StartWorkoutViewModel(
         uiState = uiState.copy(isLoading = true, errorMessage = null)
 
         viewModelScope.launch {
-            val result = templatesRepository.refresh(sessionId)
-            if (result == RefreshResult.SessionExpired) sessionRepository.endSession(sessionId)
+            val result = templatesRepository.refresh()
             uiState = uiState.copy(
                 isLoading = false,
                 errorMessage = when (result) {
@@ -70,6 +68,6 @@ class StartWorkoutViewModel(
     fun discardWorkout() = activeWorkoutRepository.update { emptyList() }
 
     fun logOut() {
-        viewModelScope.launch { sessionRepository.endSession(sessionId) }
+        viewModelScope.launch { sessionRepository.logOut() }
     }
 }

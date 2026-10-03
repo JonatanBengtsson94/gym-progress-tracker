@@ -26,7 +26,7 @@ sealed interface Screen : NavKey {
  * gets its own view models, cleared when the screen is popped or this leaves the composition.
  */
 @Composable
-fun AppNavigation(sessionId: String, modifier: Modifier = Modifier) {
+fun AppNavigation(modifier: Modifier = Modifier) {
     val backStack = rememberNavBackStack(Screen.StartWorkout)
 
     // A second tap can land while the screen it opens is still animating in.
@@ -44,7 +44,6 @@ fun AppNavigation(sessionId: String, modifier: Modifier = Modifier) {
         entryProvider = entryProvider {
             entry<Screen.StartWorkout> {
                 StartWorkoutScreen(
-                    sessionId = sessionId,
                     onStartNewWorkout = { navigateTo(Screen.Workout) },
                     onContinueWorkout = { navigateTo(Screen.Workout) },
                     // TODO: open the workout screen prefilled from the template.
@@ -52,7 +51,7 @@ fun AppNavigation(sessionId: String, modifier: Modifier = Modifier) {
                 )
             }
             entry<Screen.Workout> {
-                WorkoutScreen(sessionId = sessionId)
+                WorkoutScreen()
             }
         }
     )

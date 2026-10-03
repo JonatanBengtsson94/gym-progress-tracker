@@ -81,6 +81,28 @@ class DataStoreSessionRepositoryTest {
     }
 
     @Test
+    fun `logging out ends the current session`() = runTest {
+        val repository = repository(backgroundScope)
+        repository.logIn("alice", "session-123")
+
+        repository.logOut()
+
+        assertEquals(SessionState.LoggedOut, repository.session.first { it == SessionState.LoggedOut })
+    }
+
+    @Test
+    fun `logging out keeps the workout for the same user's next login`() = runTest {
+        val repository = repository(backgroundScope)
+        repository.logIn("alice", "session-1")
+        activeWorkoutRepository.exercises.value = workout
+        repository.logOut()
+
+        repository.logIn("alice", "session-2")
+
+        assertEquals(workout, activeWorkoutRepository.exercises.value)
+    }
+
+    @Test
     fun `the first login throws away a workout nobody owns`() = runTest {
         repository(backgroundScope).logIn("alice", "session-123")
 

@@ -40,10 +40,7 @@ class MainActivity : ComponentActivity() {
                         }
                         // Keyed so every session starts on fresh screens.
                         is SessionState.LoggedIn -> key(currentSession.sessionId) {
-                            AppNavigation(
-                                sessionId = currentSession.sessionId,
-                                modifier = Modifier.padding(innerPadding)
-                            )
+                            AppNavigation(modifier = Modifier.padding(innerPadding))
                         }
                     }
                 }

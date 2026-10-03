@@ -11,7 +11,6 @@ import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
-import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import kotlinx.coroutines.flow.filterNotNull
@@ -33,9 +32,7 @@ data class WorkoutUiState(
 
 class WorkoutViewModel(
     private val exercisesRepository: ExercisesRepository,
-    private val activeWorkoutRepository: ActiveWorkoutRepository,
-    private val sessionRepository: SessionRepository,
-    private val sessionId: String
+    private val activeWorkoutRepository: ActiveWorkoutRepository
 ) : ViewModel() {
 
     var uiState by mutableStateOf(WorkoutUiState(isLoadingWorkout = true))
@@ -113,8 +110,7 @@ class WorkoutViewModel(
         uiState = uiState.copy(isLoadingExercises = true, exercisesErrorMessage = null)
 
         viewModelScope.launch {
-            val result = exercisesRepository.refresh(sessionId)
-            if (result == RefreshResult.SessionExpired) sessionRepository.endSession(sessionId)
+            val result = exercisesRepository.refresh()
             uiState = uiState.copy(
                 isLoadingExercises = false,
                 exercisesErrorMessage = when (result) {

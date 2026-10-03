@@ -18,7 +18,7 @@ class HttpAuthApiTest {
     fun setUp() {
         server = MockWebServer()
         server.start()
-        api = HttpAuthApi(server.url("").toString().removeSuffix("/"))
+        api = HttpAuthApi(ApiClient(server.url("").toString().removeSuffix("/"), FakeSessionRepository()))
     }
 
     @After

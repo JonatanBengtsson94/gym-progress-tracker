@@ -36,11 +36,11 @@ class RoomTemplatesRepositoryTest {
         override suspend fun insertSets(sets: List<TemplateSetEntity>) = error("Replaced as a whole by replaceTemplates")
     }
 
-    private class FakeTemplatesApi(var result: TemplatesResult) : TemplatesApi {
-        val calls = mutableListOf<String>()
+    private class FakeTemplatesApi(var result: ApiResult<List<WorkoutTemplate>>) : TemplatesApi {
+        var calls = 0
 
-        override suspend fun getTemplates(sessionId: String): TemplatesResult {
-            calls += sessionId
+        override suspend fun getTemplates(): ApiResult<List<WorkoutTemplate>> {
+            calls++
             return result
         }
     }
@@ -61,7 +61,7 @@ class RoomTemplatesRepositoryTest {
     private val legDay = WorkoutTemplate(id = testId(11), name = "Leg Day", latestWorkout = null)
 
     private val dao = FakeTemplateDao()
-    private val api = FakeTemplatesApi(TemplatesResult.Success(listOf(pushDay, legDay)))
+    private val api = FakeTemplatesApi(ApiResult.Success(listOf(pushDay, legDay)))
     private val repository = RoomTemplatesRepository(api, dao)
 
     @Test
@@ -71,15 +71,15 @@ class RoomTemplatesRepositoryTest {
 
     @Test
     fun `refreshed templates are read back as the server sent them`() = runTest {
-        assertEquals(RefreshResult.Success, repository.refresh("session-123"))
+        assertEquals(RefreshResult.Success, repository.refresh())
 
-        assertEquals(listOf("session-123"), api.calls)
+        assertEquals(1, api.calls)
         assertEquals(listOf(pushDay, legDay), repository.templates.first())
     }
 
     @Test
     fun `a template's latest workout is stored with its sets in the order they were logged`() = runTest {
-        repository.refresh("session-123")
+        repository.refresh()
 
         val latest = TemplateLatestWorkout(testId(20), Instant.parse("2026-09-30T17:00:00Z"), Instant.parse("2026-09-30T18:00:00Z"))
         assertEquals(
@@ -98,10 +98,10 @@ class RoomTemplatesRepositoryTest {
 
     @Test
     fun `a refresh replaces what was stored`() = runTest {
-        repository.refresh("session-123")
-        api.result = TemplatesResult.Success(listOf(legDay))
+        repository.refresh()
+        api.result = ApiResult.Success(listOf(legDay))
 
-        repository.refresh("session-123")
+        repository.refresh()
 
         assertEquals(listOf(legDay), repository.templates.first())
         assertEquals(emptyList<TemplateSetEntity>(), dao.sets.value)
@@ -109,16 +109,16 @@ class RoomTemplatesRepositoryTest {
 
     @Test
     fun `a failed refresh keeps the stored templates and says why`() = runTest {
-        repository.refresh("session-123")
+        repository.refresh()
 
         for ((result, expected) in listOf(
-            TemplatesResult.NetworkError to RefreshResult.NetworkError,
-            TemplatesResult.ServerError to RefreshResult.ServerError,
-            TemplatesResult.SessionExpired to RefreshResult.SessionExpired
+            ApiResult.NetworkError to RefreshResult.NetworkError,
+            ApiResult.ServerError to RefreshResult.ServerError,
+            ApiResult.Unauthorized to RefreshResult.SessionExpired
         )) {
             api.result = result
 
-            assertEquals(expected, repository.refresh("session-123"))
+            assertEquals(expected, repository.refresh())
             assertEquals(listOf(pushDay, legDay), repository.templates.first())
         }
     }

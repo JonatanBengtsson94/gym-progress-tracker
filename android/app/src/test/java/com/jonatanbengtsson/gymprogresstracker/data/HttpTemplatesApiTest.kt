@@ -19,7 +19,8 @@ class HttpTemplatesApiTest {
     fun setUp() {
         server = MockWebServer()
         server.start()
-        api = HttpTemplatesApi(server.url("").toString().removeSuffix("/"))
+        val client = ApiClient(server.url("").toString().removeSuffix("/"), FakeSessionRepository(SessionState.LoggedIn("session-123")))
+        api = HttpTemplatesApi(client)
     }
 
     @After
@@ -28,23 +29,22 @@ class HttpTemplatesApiTest {
     }
 
     @Test
-    fun `getTemplates sends the session as a bearer token`() = runTest {
+    fun `getTemplates gets the templates`() = runTest {
         server.enqueue(MockResponse().setBody("""{"templates":[]}"""))
 
-        api.getTemplates("session-123")
+        api.getTemplates()
 
         val request = server.takeRequest()
         assertEquals("GET", request.method)
         assertEquals("/templates", request.path)
-        assertEquals("Bearer session-123", request.getHeader("Authorization"))
     }
 
     @Test
-    fun `200 parses templates with and without a latest workout in order`() = runTest {
+    fun `templates with and without a latest workout are parsed in order`() = runTest {
         server.enqueue(MockResponse().setBody(contract("get_templates.response.json")))
 
         val benchPressId = Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d01")
-        val expected = TemplatesResult.Success(
+        val expected = ApiResult.Success(
             listOf(
                 WorkoutTemplate(
                     id = Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d10"),
@@ -61,14 +61,7 @@ class HttpTemplatesApiTest {
                 WorkoutTemplate(id = Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d11"), name = "Leg Day", latestWorkout = null)
             )
         )
-        assertEquals(expected, api.getTemplates("session-123"))
-    }
-
-    @Test
-    fun `200 with an id that isn't a UUID returns ServerError`() = runTest {
-        server.enqueue(MockResponse().setBody("""{"templates": [{"template_id": 1, "template_name": "Push Day", "latest_workout": null}]}"""))
-
-        assertEquals(TemplatesResult.ServerError, api.getTemplates("session-123"))
+        assertEquals(expected, api.getTemplates())
     }
 
     @Test
@@ -85,43 +78,22 @@ class HttpTemplatesApiTest {
             )
         )
 
-        val result = api.getTemplates("session-123") as TemplatesResult.Success
-        val latest = result.templates.single().latestWorkout!!
+        val result = api.getTemplates() as ApiResult.Success
+        val latest = result.value.single().latestWorkout!!
 
         assertEquals(Instant.parse("2024-05-08T09:00:00.123456789Z"), latest.startedAt)
         assertEquals(Instant.parse("2024-05-08T10:00:00Z"), latest.completedAt)
     }
 
     @Test
-    fun `401 returns SessionExpired`() = runTest {
-        server.enqueue(MockResponse().setResponseCode(401))
+    fun `an id that isn't a UUID is a server error`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"templates": [{"template_id": 1, "template_name": "Push Day", "latest_workout": null}]}"""))
 
-        assertEquals(TemplatesResult.SessionExpired, api.getTemplates("expired"))
+        assertEquals(ApiResult.ServerError, api.getTemplates())
     }
 
     @Test
-    fun `500 returns ServerError`() = runTest {
-        server.enqueue(MockResponse().setResponseCode(500))
-
-        assertEquals(TemplatesResult.ServerError, api.getTemplates("session-123"))
-    }
-
-    @Test
-    fun `200 with malformed JSON returns ServerError`() = runTest {
-        server.enqueue(MockResponse().setBody("not json"))
-
-        assertEquals(TemplatesResult.ServerError, api.getTemplates("session-123"))
-    }
-
-    @Test
-    fun `200 without templates returns ServerError`() = runTest {
-        server.enqueue(MockResponse().setBody("""{"workouts":[]}"""))
-
-        assertEquals(TemplatesResult.ServerError, api.getTemplates("session-123"))
-    }
-
-    @Test
-    fun `200 with an invalid timestamp returns ServerError`() = runTest {
+    fun `an invalid timestamp is a server error`() = runTest {
         server.enqueue(
             MockResponse().setBody(
                 """
@@ -132,13 +104,13 @@ class HttpTemplatesApiTest {
             )
         )
 
-        assertEquals(TemplatesResult.ServerError, api.getTemplates("session-123"))
+        assertEquals(ApiResult.ServerError, api.getTemplates())
     }
 
     @Test
-    fun `unreachable server returns NetworkError`() = runTest {
-        server.shutdown()
+    fun `a response without templates is a server error`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"workouts":[]}"""))
 
-        assertEquals(TemplatesResult.NetworkError, api.getTemplates("session-123"))
+        assertEquals(ApiResult.ServerError, api.getTemplates())
     }
 }

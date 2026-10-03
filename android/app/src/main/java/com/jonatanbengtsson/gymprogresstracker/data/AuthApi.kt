@@ -1,13 +1,6 @@
 package com.jonatanbengtsson.gymprogresstracker.data
 
-import android.util.Log
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import org.json.JSONException
 import org.json.JSONObject
-import java.io.IOException
-import java.net.HttpURLConnection
-import java.net.URL
 
 sealed interface LoginResult {
     data class Success(val sessionId: String) : LoginResult
@@ -20,44 +13,18 @@ interface AuthApi {
     suspend fun login(username: String, password: String): LoginResult
 }
 
-class HttpAuthApi(private val baseUrl: String) : AuthApi {
+class HttpAuthApi(private val client: ApiClient) : AuthApi {
 
-    override suspend fun login(username: String, password: String): LoginResult = withContext(Dispatchers.IO) {
+    override suspend fun login(username: String, password: String): LoginResult {
         val body = JSONObject()
             .put("username", username)
             .put("password", password)
-            .toString()
 
-        val connection = URL("$baseUrl/login").openConnection() as HttpURLConnection
-        try {
-            connection.requestMethod = "POST"
-            connection.connectTimeout = TIMEOUT_MS
-            connection.readTimeout = TIMEOUT_MS
-            connection.doOutput = true
-            connection.setRequestProperty("Content-Type", "application/json")
-            connection.outputStream.use { it.write(body.toByteArray()) }
-
-            when (connection.responseCode) {
-                HttpURLConnection.HTTP_OK -> {
-                    val response = connection.inputStream.bufferedReader().use { it.readText() }
-                    LoginResult.Success(JSONObject(response).getString("session_id"))
-                }
-                HttpURLConnection.HTTP_UNAUTHORIZED -> LoginResult.InvalidCredentials
-                else -> LoginResult.ServerError
-            }
-        } catch (e: IOException) {
-            Log.w(TAG, "Login request to $baseUrl failed", e)
-            LoginResult.NetworkError
-        } catch (e: JSONException) {
-            Log.w(TAG, "Unexpected login response", e)
-            LoginResult.ServerError
-        } finally {
-            connection.disconnect()
+        return when (val result = client.sendWithoutSession("POST", "/login", body) { it.getString("session_id") }) {
+            is ApiResult.Success -> LoginResult.Success(result.value)
+            ApiResult.Unauthorized -> LoginResult.InvalidCredentials
+            ApiResult.NetworkError -> LoginResult.NetworkError
+            ApiResult.ServerError -> LoginResult.ServerError
         }
-    }
-
-    private companion object {
-        const val TAG = "HttpAuthApi"
-        const val TIMEOUT_MS = 10_000
     }
 }

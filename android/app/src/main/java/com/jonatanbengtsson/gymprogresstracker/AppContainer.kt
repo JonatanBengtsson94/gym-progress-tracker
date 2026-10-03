@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.room.Room
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
+import com.jonatanbengtsson.gymprogresstracker.data.ApiClient
 import com.jonatanbengtsson.gymprogresstracker.data.AuthApi
 import com.jonatanbengtsson.gymprogresstracker.data.DataStoreSessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesRepository
@@ -33,7 +34,6 @@ class AppContainer(context: Context) {
         .fallbackToDestructiveMigrationFrom(dropAllTables = true, 1)
         .build()
 
-    val authApi: AuthApi = HttpAuthApi(BuildConfig.BASE_URL)
 
     // Created with the app, so the saved workout is loading before any screen asks for it.
     val activeWorkoutRepository: ActiveWorkoutRepository =
@@ -45,11 +45,13 @@ class AppContainer(context: Context) {
         applicationScope
     )
 
-    val exercisesRepository: ExercisesRepository =
-        RoomExercisesRepository(HttpExercisesApi(BuildConfig.BASE_URL), database.exerciseDao())
+    private val apiClient = ApiClient(BuildConfig.BASE_URL, sessionRepository)
 
-    val templatesRepository: TemplatesRepository =
-        RoomTemplatesRepository(HttpTemplatesApi(BuildConfig.BASE_URL), database.templateDao())
+    val authApi: AuthApi = HttpAuthApi(apiClient)
+
+    val exercisesRepository: ExercisesRepository = RoomExercisesRepository(HttpExercisesApi(apiClient), database.exerciseDao())
+
+    val templatesRepository: TemplatesRepository = RoomTemplatesRepository(HttpTemplatesApi(apiClient), database.templateDao())
 }
 
 /** The app's [AppContainer], for view model factories. */

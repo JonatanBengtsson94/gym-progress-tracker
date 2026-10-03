@@ -8,10 +8,10 @@ class FakeExercisesRepository(exercises: List<Exercise> = emptyList()) : Exercis
 
     override val exercises = MutableStateFlow(exercises)
     var refreshResult = CompletableDeferred<RefreshResult>()
-    val refreshes = mutableListOf<String>()
+    var refreshes = 0
 
-    override suspend fun refresh(sessionId: String): RefreshResult {
-        refreshes += sessionId
+    override suspend fun refresh(): RefreshResult {
+        refreshes++
         return refreshResult.await()
     }
 }

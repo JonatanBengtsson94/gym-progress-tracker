@@ -79,16 +79,13 @@ import kotlin.uuid.Uuid
 
 @Composable
 fun WorkoutScreen(
-    sessionId: String,
     modifier: Modifier = Modifier,
     viewModel: WorkoutViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
                 WorkoutViewModel(
                     appContainer.exercisesRepository,
-                    appContainer.activeWorkoutRepository,
-                    appContainer.sessionRepository,
-                    sessionId
+                    appContainer.activeWorkoutRepository
                 )
             }
         }

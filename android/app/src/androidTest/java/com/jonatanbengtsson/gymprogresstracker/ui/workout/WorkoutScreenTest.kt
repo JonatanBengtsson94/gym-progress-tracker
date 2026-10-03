@@ -50,8 +50,8 @@ class WorkoutScreenTest {
         }
     }
 
-    private class FakeSessionRepository(sessionId: String) : SessionRepository {
-        override val session = MutableStateFlow<SessionState>(SessionState.LoggedIn(sessionId))
+    private class FakeSessionRepository : SessionRepository {
+        override val session = MutableStateFlow<SessionState>(SessionState.LoggedIn("session-123"))
 
         override suspend fun logIn(username: String, sessionId: String) {
             session.value = SessionState.LoggedIn(sessionId)
@@ -60,9 +60,12 @@ class WorkoutScreenTest {
         override suspend fun endSession(sessionId: String) {
             session.value = SessionState.LoggedOut
         }
+
+        override suspend fun logOut() {
+            session.value = SessionState.LoggedOut
+        }
     }
 
-    private val sessionId = "session-123"
     private val squat = Exercise(testId(1), "Squat (Barbell)")
 
     private lateinit var workoutViewModel: WorkoutViewModel
@@ -70,21 +73,21 @@ class WorkoutScreenTest {
     @Before
     fun setUp() {
         val activeWorkoutRepository = FakeActiveWorkoutRepository()
-        val sessionRepository = FakeSessionRepository(sessionId)
+        val sessionRepository = FakeSessionRepository()
         val templatesRepository = object : TemplatesRepository {
             override val templates = MutableStateFlow(emptyList<WorkoutTemplate>())
-            override suspend fun refresh(sessionId: String) = RefreshResult.Success
+            override suspend fun refresh() = RefreshResult.Success
         }
         val exercisesRepository = object : ExercisesRepository {
             override val exercises = MutableStateFlow(emptyList<Exercise>())
-            override suspend fun refresh(sessionId: String) = RefreshResult.Success
+            override suspend fun refresh() = RefreshResult.Success
         }
         // On the main thread, like viewModel() would, since both update their state as they start.
         val startWorkoutViewModel = composeRule.runOnUiThread {
-            StartWorkoutViewModel(templatesRepository, activeWorkoutRepository, sessionRepository, sessionId)
+            StartWorkoutViewModel(templatesRepository, activeWorkoutRepository, sessionRepository)
         }
         workoutViewModel = composeRule.runOnUiThread {
-            WorkoutViewModel(exercisesRepository, activeWorkoutRepository, sessionRepository, sessionId)
+            WorkoutViewModel(exercisesRepository, activeWorkoutRepository)
         }
 
         composeRule.setContent {
@@ -95,7 +98,6 @@ class WorkoutScreenTest {
                     entryProvider = entryProvider {
                         entry<Screen.StartWorkout> {
                             StartWorkoutScreen(
-                                sessionId = sessionId,
                                 onStartNewWorkout = { backStack.add(Screen.Workout) },
                                 onContinueWorkout = { backStack.add(Screen.Workout) },
                                 onStartFromTemplate = {},
@@ -103,7 +105,7 @@ class WorkoutScreenTest {
                             )
                         }
                         entry<Screen.Workout> {
-                            WorkoutScreen(sessionId = sessionId, viewModel = workoutViewModel)
+                            WorkoutScreen(viewModel = workoutViewModel)
                         }
                     }
                 )

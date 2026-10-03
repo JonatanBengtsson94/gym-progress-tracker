@@ -50,13 +50,13 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `success logs the user in and leaves the form idle`() {
+    fun `success logs the user in and stays loading`() {
         viewModel.login("alice", "pw")
         authApi.response.complete(LoginResult.Success("session-123"))
 
         assertEquals(listOf("alice" to "session-123"), sessionRepository.logIns)
         assertEquals(SessionState.LoggedIn("session-123"), sessionRepository.session.value)
-        assertEquals(LoginUiState(), viewModel.uiState)
+        assertEquals(LoginUiState(isLoading = true), viewModel.uiState)
     }
 
     @Test
@@ -92,7 +92,6 @@ class LoginViewModelTest {
 
         assertEquals(LoginUiState(isLoading = true), viewModel.uiState)
         authApi.response.complete(LoginResult.Success("session-123"))
-        assertEquals(LoginUiState(), viewModel.uiState)
         assertEquals(SessionState.LoggedIn("session-123"), sessionRepository.session.value)
     }
 

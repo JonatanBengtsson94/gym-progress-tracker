@@ -30,15 +30,12 @@ class LoginViewModel(
         uiState = LoginUiState(isLoading = true)
 
         viewModelScope.launch {
-            uiState = when (val result = authApi.login(username, password)) {
-                is LoginResult.Success -> {
-                    sessionRepository.logIn(username, result.sessionId)
-                    // The app leaves this screen once the session is saved; idle again for the next login.
-                    LoginUiState()
-                }
-                LoginResult.InvalidCredentials -> LoginUiState(errorMessage = R.string.login_error_invalid_credentials)
-                LoginResult.NetworkError -> LoginUiState(errorMessage = R.string.login_error_network)
-                LoginResult.ServerError -> LoginUiState(errorMessage = R.string.login_error_server)
+            when (val result = authApi.login(username, password)) {
+                // Stays loading; the app leaves this screen once the session is saved.
+                is LoginResult.Success -> sessionRepository.logIn(username, result.sessionId)
+                LoginResult.InvalidCredentials -> uiState = LoginUiState(errorMessage = R.string.login_error_invalid_credentials)
+                LoginResult.NetworkError -> uiState = LoginUiState(errorMessage = R.string.login_error_network)
+                LoginResult.ServerError -> uiState = LoginUiState(errorMessage = R.string.login_error_server)
             }
         }
     }

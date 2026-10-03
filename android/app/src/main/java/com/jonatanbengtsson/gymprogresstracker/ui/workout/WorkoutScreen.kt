@@ -81,11 +81,8 @@ import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
 @Composable
 fun WorkoutScreen(
     sessionId: String,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    // Keyed by session so logging in again doesn't reuse the previous session's view model.
     viewModel: WorkoutViewModel = viewModel(
-        key = "workout:$sessionId",
         factory = viewModelFactory {
             initializer {
                 WorkoutViewModel(
@@ -98,8 +95,6 @@ fun WorkoutScreen(
         }
     )
 ) {
-    BackHandler(onBack = onBack)
-
     WorkoutContent(
         uiState = viewModel.uiState,
         onRetryExercises = viewModel::loadExercises,
@@ -131,7 +126,7 @@ fun WorkoutContent(
     var exerciseIdToConfirmRemoval by rememberSaveable { mutableStateOf<Long?>(null) }
 
     if (showExercisePicker) {
-        // Composed after WorkoutScreen's BackHandler, so system back closes the picker first.
+        // Added after the navigation's back handling, so system back closes the picker before the screen.
         BackHandler { showExercisePicker = false }
         ExercisePicker(
             uiState = uiState,

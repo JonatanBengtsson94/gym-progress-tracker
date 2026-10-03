@@ -1,15 +1,17 @@
 package com.jonatanbengtsson.gymprogresstracker.ui.workout
 
 import androidx.annotation.StringRes
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.ui.NavDisplay
 import androidx.test.platform.app.InstrumentationRegistry
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
@@ -21,6 +23,7 @@ import com.jonatanbengtsson.gymprogresstracker.data.SessionState
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesApi
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesResult
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
+import com.jonatanbengtsson.gymprogresstracker.ui.navigation.Screen
 import com.jonatanbengtsson.gymprogresstracker.ui.start.StartWorkoutScreen
 import com.jonatanbengtsson.gymprogresstracker.ui.start.StartWorkoutViewModel
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
@@ -31,7 +34,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Drives the real start and workout screens over one workout repository, switching between them like MainActivity. */
+/** Drives the real start and workout screens over one workout repository, navigating between them like AppNavigation. */
 @RunWith(AndroidJUnit4::class)
 class WorkoutScreenTest {
 
@@ -61,7 +64,6 @@ class WorkoutScreenTest {
     private val sessionId = "session-123"
     private val squat = Exercise(1, "Squat (Barbell)")
 
-    private var inWorkout by mutableStateOf(true)
     private lateinit var workoutViewModel: WorkoutViewModel
 
     @Before
@@ -84,21 +86,24 @@ class WorkoutScreenTest {
 
         composeRule.setContent {
             GymProgressTrackerTheme {
-                if (inWorkout) {
-                    WorkoutScreen(
-                        sessionId = sessionId,
-                        onBack = { inWorkout = false },
-                        viewModel = workoutViewModel
-                    )
-                } else {
-                    StartWorkoutScreen(
-                        sessionId = sessionId,
-                        onStartNewWorkout = { inWorkout = true },
-                        onContinueWorkout = { inWorkout = true },
-                        onStartFromTemplate = {},
-                        viewModel = startWorkoutViewModel
-                    )
-                }
+                val backStack = remember { mutableStateListOf<NavKey>(Screen.StartWorkout, Screen.Workout) }
+                NavDisplay(
+                    backStack = backStack,
+                    entryProvider = entryProvider {
+                        entry<Screen.StartWorkout> {
+                            StartWorkoutScreen(
+                                sessionId = sessionId,
+                                onStartNewWorkout = { backStack.add(Screen.Workout) },
+                                onContinueWorkout = { backStack.add(Screen.Workout) },
+                                onStartFromTemplate = {},
+                                viewModel = startWorkoutViewModel
+                            )
+                        }
+                        entry<Screen.Workout> {
+                            WorkoutScreen(sessionId = sessionId, viewModel = workoutViewModel)
+                        }
+                    }
+                )
             }
         }
     }

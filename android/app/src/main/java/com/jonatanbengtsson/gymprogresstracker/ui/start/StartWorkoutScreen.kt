@@ -64,9 +64,7 @@ fun StartWorkoutScreen(
     onContinueWorkout: () -> Unit,
     onStartFromTemplate: (WorkoutTemplate) -> Unit,
     modifier: Modifier = Modifier,
-    // Keyed by session so logging in again doesn't reuse the previous session's view model.
     viewModel: StartWorkoutViewModel = viewModel(
-        key = "start-workout:$sessionId",
         factory = viewModelFactory {
             initializer {
                 StartWorkoutViewModel(

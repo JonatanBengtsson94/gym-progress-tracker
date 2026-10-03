@@ -6,7 +6,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jonatanbengtsson.gymprogresstracker.R
+import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.AuthApi
 import com.jonatanbengtsson.gymprogresstracker.data.LoginResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
@@ -37,6 +40,12 @@ class LoginViewModel(
                 LoginResult.NetworkError -> uiState = LoginUiState(errorMessage = R.string.login_error_network)
                 LoginResult.ServerError -> uiState = LoginUiState(errorMessage = R.string.login_error_server)
             }
+        }
+    }
+
+    companion object {
+        val Factory = viewModelFactory {
+            initializer { LoginViewModel(appContainer.authApi, appContainer.sessionRepository) }
         }
     }
 }

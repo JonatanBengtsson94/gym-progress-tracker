@@ -67,10 +67,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jonatanbengtsson.gymprogresstracker.R
-import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
@@ -80,16 +77,7 @@ import kotlin.uuid.Uuid
 @Composable
 fun WorkoutScreen(
     modifier: Modifier = Modifier,
-    viewModel: WorkoutViewModel = viewModel(
-        factory = viewModelFactory {
-            initializer {
-                WorkoutViewModel(
-                    appContainer.exercisesRepository,
-                    appContainer.activeWorkoutRepository
-                )
-            }
-        }
-    )
+    viewModel: WorkoutViewModel = viewModel(factory = WorkoutViewModel.Factory)
 ) {
     WorkoutContent(
         uiState = viewModel.uiState,

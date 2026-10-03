@@ -41,10 +41,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jonatanbengtsson.gymprogresstracker.R
-import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.LatestWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExercise
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutSet
@@ -62,17 +59,7 @@ fun StartWorkoutScreen(
     onContinueWorkout: () -> Unit,
     onStartFromTemplate: (WorkoutTemplate) -> Unit,
     modifier: Modifier = Modifier,
-    viewModel: StartWorkoutViewModel = viewModel(
-        factory = viewModelFactory {
-            initializer {
-                StartWorkoutViewModel(
-                    appContainer.templatesRepository,
-                    appContainer.activeWorkoutRepository,
-                    appContainer.sessionRepository
-                )
-            }
-        }
-    )
+    viewModel: StartWorkoutViewModel = viewModel(factory = StartWorkoutViewModel.Factory)
 ) {
     StartWorkoutContent(
         uiState = viewModel.uiState,

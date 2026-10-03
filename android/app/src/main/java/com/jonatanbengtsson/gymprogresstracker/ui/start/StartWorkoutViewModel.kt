@@ -6,7 +6,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jonatanbengtsson.gymprogresstracker.R
+import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
@@ -69,5 +72,13 @@ class StartWorkoutViewModel(
 
     fun logOut() {
         viewModelScope.launch { sessionRepository.logOut() }
+    }
+
+    companion object {
+        val Factory = viewModelFactory {
+            initializer {
+                StartWorkoutViewModel(appContainer.templatesRepository, appContainer.activeWorkoutRepository, appContainer.sessionRepository)
+            }
+        }
     }
 }

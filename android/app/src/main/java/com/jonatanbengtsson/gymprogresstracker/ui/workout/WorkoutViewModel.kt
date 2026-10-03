@@ -6,7 +6,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jonatanbengtsson.gymprogresstracker.R
+import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesRepository
@@ -122,10 +125,14 @@ class WorkoutViewModel(
         }
     }
 
-    private companion object {
+    companion object {
+        val Factory = viewModelFactory {
+            initializer { WorkoutViewModel(appContainer.exercisesRepository, appContainer.activeWorkoutRepository) }
+        }
+
         // Accepts a decimal comma as well as a point, since keyboards in many locales offer only one.
-        val WEIGHT_INPUT = Regex("""\d{0,4}([.,]\d{0,2})?""")
+        private val WEIGHT_INPUT = Regex("""\d{0,4}([.,]\d{0,2})?""")
         // The backend stores reps as a uint8, so three digits is the most it can take.
-        val REPS_INPUT = Regex("""\d{0,3}""")
+        private val REPS_INPUT = Regex("""\d{0,3}""")
     }
 }

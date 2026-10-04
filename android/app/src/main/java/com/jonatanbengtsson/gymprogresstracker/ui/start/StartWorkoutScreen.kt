@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -50,6 +49,7 @@ import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExercise
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutSet
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
+import com.jonatanbengtsson.gymprogresstracker.ui.workout.DiscardWorkoutDialog
 import com.jonatanbengtsson.gymprogresstracker.ui.workout.WorkoutTimer
 import java.time.Instant
 import java.time.ZoneId
@@ -143,7 +143,7 @@ fun StartWorkoutContent(
                                 modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                             ) {
-                                Text(stringResource(R.string.start_workout_discard))
+                                Text(stringResource(R.string.discard_workout))
                             }
                             Button(onClick = onContinueWorkout, modifier = Modifier.weight(1f)) {
                                 Text(stringResource(R.string.start_workout_continue))
@@ -217,23 +217,12 @@ fun StartWorkoutContent(
     }
 
     if (confirmDiscard) {
-        AlertDialog(
-            onDismissRequest = { confirmDiscard = false },
-            title = { Text(stringResource(R.string.start_workout_discard_title)) },
-            text = { Text(stringResource(R.string.start_workout_discard_text)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDiscard = false
-                    onDiscardWorkout()
-                }) {
-                    Text(stringResource(R.string.start_workout_discard_confirm))
-                }
+        DiscardWorkoutDialog(
+            onConfirm = {
+                confirmDiscard = false
+                onDiscardWorkout()
             },
-            dismissButton = {
-                TextButton(onClick = { confirmDiscard = false }) {
-                    Text(stringResource(R.string.start_workout_discard_cancel))
-                }
-            }
+            onDismiss = { confirmDiscard = false }
         )
     }
 }

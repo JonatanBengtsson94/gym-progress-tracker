@@ -109,7 +109,7 @@ class StartWorkoutContentTest {
         composeRule.onNodeWithText(str(R.string.start_workout_new)).assertIsDisplayed()
         composeRule.onNodeWithText(str(R.string.start_workout_in_progress)).assertDoesNotExist()
         composeRule.onNodeWithText(str(R.string.start_workout_continue)).assertDoesNotExist()
-        composeRule.onNodeWithText(str(R.string.start_workout_discard)).assertDoesNotExist()
+        composeRule.onNodeWithText(str(R.string.discard_workout)).assertDoesNotExist()
     }
 
     @Test
@@ -149,25 +149,25 @@ class StartWorkoutContentTest {
     fun discardingAWorkoutAsksFirst() {
         setContent(StartWorkoutUiState(workoutInProgress = true))
 
-        composeRule.onNodeWithText(str(R.string.start_workout_discard)).performClick()
-        composeRule.onNodeWithText(str(R.string.start_workout_discard_title)).assertIsDisplayed()
+        composeRule.onNodeWithText(str(R.string.discard_workout)).performClick()
+        composeRule.onNodeWithText(str(R.string.discard_workout_title)).assertIsDisplayed()
         assertEquals(0, discardClicks)
 
-        composeRule.onNode(hasText(str(R.string.start_workout_discard_confirm)) and hasAnyAncestor(isDialog())).performClick()
+        composeRule.onNode(hasText(str(R.string.discard_workout_confirm)) and hasAnyAncestor(isDialog())).performClick()
 
         assertEquals(1, discardClicks)
-        composeRule.onNodeWithText(str(R.string.start_workout_discard_title)).assertDoesNotExist()
+        composeRule.onNodeWithText(str(R.string.discard_workout_title)).assertDoesNotExist()
     }
 
     @Test
     fun cancellingTheDiscardKeepsTheWorkout() {
         setContent(StartWorkoutUiState(workoutInProgress = true))
 
-        composeRule.onNodeWithText(str(R.string.start_workout_discard)).performClick()
-        composeRule.onNodeWithText(str(R.string.start_workout_discard_cancel)).performClick()
+        composeRule.onNodeWithText(str(R.string.discard_workout)).performClick()
+        composeRule.onNodeWithText(str(R.string.discard_workout_cancel)).performClick()
 
         assertEquals(0, discardClicks)
-        composeRule.onNodeWithText(str(R.string.start_workout_discard_title)).assertDoesNotExist()
+        composeRule.onNodeWithText(str(R.string.discard_workout_title)).assertDoesNotExist()
     }
 
     private fun str(@StringRes id: Int, vararg formatArgs: Any) =

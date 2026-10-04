@@ -48,7 +48,14 @@ data class WorkoutUiState(
     @StringRes val saveErrorMessage: Int? = null,
     /** True once the workout has been saved and cleared to make way for the next one. */
     val isSaved: Boolean = false
-)
+) {
+    /** How many sets saving would leave out for not being completed, or 0 when it would leave out every set. */
+    val uncompletedSetsLeftOut: Int
+        get() {
+            val sets = workoutExercises.flatMap { it.sets }
+            return if (sets.any { it.completed }) sets.count { !it.completed } else 0
+        }
+}
 
 class WorkoutViewModel(
     private val exercisesRepository: ExercisesRepository,
@@ -138,6 +145,9 @@ class WorkoutViewModel(
 
     private fun updateExercises(transform: (List<WorkoutExerciseEntry>) -> List<WorkoutExerciseEntry>) =
         activeWorkoutRepository.update { it.copy(exercises = transform(it.exercises)) }
+
+    /** Throws away the workout in progress. */
+    fun discardWorkout() = activeWorkoutRepository.update { ActiveWorkout() }
 
     /**
      * Saves the workout's completed sets on the device, as completed now, for syncing to the server

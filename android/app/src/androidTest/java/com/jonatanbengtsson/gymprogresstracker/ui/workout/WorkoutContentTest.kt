@@ -8,11 +8,13 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -60,7 +62,8 @@ class WorkoutContentTest {
                     onToggleSetCompleted = { id, index -> setEvents += "complete $id $index" },
                     onWeightChange = { id, index, kg -> setEvents += "weight $id $index $kg" },
                     onRepsChange = { id, index, reps -> setEvents += "reps $id $index $reps" },
-                    onSave = { setEvents += "save" }
+                    onSave = { setEvents += "save" },
+                    onDiscard = { setEvents += "discard" }
                 )
             }
         }
@@ -388,11 +391,92 @@ class WorkoutContentTest {
     }
 
     @Test
-    fun aWorkoutBeingSavedCannotBeSavedAgain() {
+    fun savingWithEverySetCompletedDoesNotAsk() {
+        setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5", completed = true))))))
+
+        composeRule.onNodeWithText(str(R.string.workout_save)).performClick()
+
+        assertEquals(listOf("save"), setEvents)
+        composeRule.onNodeWithText(str(R.string.workout_save_incomplete_title)).assertDoesNotExist()
+    }
+
+    @Test
+    fun savingWithSetsNotCompletedSaysHowManyAndSavesOnceConfirmed() {
+        setContent(
+            WorkoutUiState(
+                workoutExercises = listOf(
+                    WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5", completed = true), SetEntry(reps = "5", id = 1))),
+                    WorkoutExerciseEntry(benchPress, listOf(SetEntry()))
+                )
+            )
+        )
+
+        composeRule.onNodeWithText(str(R.string.workout_save)).performClick()
+
+        val resources = InstrumentationRegistry.getInstrumentation().targetContext.resources
+        composeRule.onNodeWithText(resources.getQuantityString(R.plurals.workout_save_incomplete_text, 2, 2)).assertIsDisplayed()
+        assertEquals(emptyList<String>(), setEvents)
+
+        composeRule.onNode(hasText(str(R.string.workout_save_incomplete_confirm)) and hasAnyAncestor(isDialog())).performClick()
+
+        assertEquals(listOf("save"), setEvents)
+        composeRule.onNodeWithText(str(R.string.workout_save_incomplete_title)).assertDoesNotExist()
+    }
+
+    @Test
+    fun cancellingTheSaveKeepsEditing() {
+        setContent(
+            WorkoutUiState(
+                workoutExercises = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5", completed = true), SetEntry(id = 1))))
+            )
+        )
+
+        composeRule.onNodeWithText(str(R.string.workout_save)).performClick()
+        composeRule.onNodeWithText(str(R.string.workout_save_incomplete_cancel)).performClick()
+
+        assertEquals(emptyList<String>(), setEvents)
+        composeRule.onNodeWithText(str(R.string.workout_save_incomplete_title)).assertDoesNotExist()
+    }
+
+    @Test
+    fun aWorkoutBeingSavedCannotBeSavedAgainOrDiscarded() {
         setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat)), isSaving = true))
 
         composeRule.onNodeWithText(str(R.string.workout_save)).assertDoesNotExist()
         composeRule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertIsDisplayed()
+        composeRule.onNodeWithText(str(R.string.discard_workout)).assertIsNotEnabled()
+    }
+
+    @Test
+    fun anEmptyWorkoutHasNoDiscardButton() {
+        setContent(WorkoutUiState())
+
+        composeRule.onNodeWithText(str(R.string.discard_workout)).assertDoesNotExist()
+    }
+
+    @Test
+    fun discardingAsksFirstAndReportsItOnceConfirmed() {
+        setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat))))
+
+        composeRule.onNodeWithText(str(R.string.discard_workout)).performClick()
+        composeRule.onNodeWithText(str(R.string.discard_workout_title)).assertIsDisplayed()
+        assertEquals(emptyList<String>(), setEvents)
+
+        composeRule.onNode(hasText(str(R.string.discard_workout_confirm)) and hasAnyAncestor(isDialog())).performClick()
+
+        assertEquals(listOf("discard"), setEvents)
+        composeRule.onNodeWithText(str(R.string.discard_workout_title)).assertDoesNotExist()
+    }
+
+    @Test
+    fun cancellingTheDiscardKeepsTheWorkout() {
+        setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat))))
+
+        composeRule.onNodeWithText(str(R.string.discard_workout)).performClick()
+        composeRule.onNodeWithText(str(R.string.discard_workout_cancel)).performClick()
+
+        assertEquals(emptyList<String>(), setEvents)
+        composeRule.onNodeWithText(str(R.string.discard_workout_title)).assertDoesNotExist()
     }
 
     @Test

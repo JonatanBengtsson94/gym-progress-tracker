@@ -494,6 +494,29 @@ class WorkoutViewModelTest {
     }
 
     @Test
+    fun `saving leaves out the sets that aren't completed, unless none are`() {
+        val completed = SetEntry(reps = "5", completed = true)
+        fun leftOut(vararg sets: List<SetEntry>) =
+            WorkoutUiState(workoutExercises = sets.mapIndexed { i, s -> WorkoutExerciseEntry(Exercise(testId(i), "$i"), s) }).uncompletedSetsLeftOut
+
+        assertEquals(0, leftOut())
+        assertEquals(0, leftOut(listOf(completed)))
+        assertEquals(0, leftOut(listOf(SetEntry(), SetEntry(reps = "5"))))
+        assertEquals(2, leftOut(listOf(completed, SetEntry(reps = "5")), listOf(SetEntry())))
+    }
+
+    @Test
+    fun `discarding throws the workout away`() {
+        givenWorkoutToSave()
+
+        viewModel.discardWorkout()
+
+        assertEquals(ActiveWorkout(), activeWorkoutRepository.workout.value)
+        assertEquals(WorkoutUiState(isLoadingExercises = true), viewModel.uiState)
+        assertEquals(emptyList<Any>(), workoutsRepository.saves)
+    }
+
+    @Test
     fun `an unnamed workout isn't saved`() {
         givenWorkoutToSave()
         activeWorkoutRepository.update { it.copy(name = " ") }

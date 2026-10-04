@@ -4,6 +4,9 @@ import androidx.annotation.StringRes
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -128,7 +131,11 @@ class WorkoutScreenTest {
                             )
                         }
                         entry<Screen.Workout> {
-                            WorkoutScreen(onWorkoutSaved = { backStack.remove(Screen.Workout) }, viewModel = workoutViewModel)
+                            WorkoutScreen(
+                                onWorkoutSaved = { backStack.remove(Screen.Workout) },
+                                onWorkoutDiscarded = { backStack.remove(Screen.Workout) },
+                                viewModel = workoutViewModel
+                            )
                         }
                     }
                 )
@@ -210,12 +217,24 @@ class WorkoutScreenTest {
     }
 
     @Test
+    fun discardingFromTheWorkoutReturnsToTheStartScreenWithNothingInProgress() {
+        addSquat()
+
+        composeRule.onNodeWithText(str(R.string.discard_workout)).performClick()
+        composeRule.onNode(hasText(str(R.string.discard_workout_confirm)) and hasAnyAncestor(isDialog())).performClick()
+
+        composeRule.onNodeWithText(str(R.string.start_workout_continue)).assertDoesNotExist()
+        composeRule.onNodeWithText(str(R.string.start_workout_new)).performClick()
+        composeRule.onNodeWithText(squat.name).assertDoesNotExist()
+    }
+
+    @Test
     fun aDiscardedWorkoutIsGone() {
         addSquat()
         Espresso.pressBack()
 
-        composeRule.onNodeWithText(str(R.string.start_workout_discard)).performClick()
-        composeRule.onNodeWithText(str(R.string.start_workout_discard_confirm)).performClick()
+        composeRule.onNodeWithText(str(R.string.discard_workout)).performClick()
+        composeRule.onNodeWithText(str(R.string.discard_workout_confirm)).performClick()
         composeRule.onNodeWithText(str(R.string.start_workout_new)).performClick()
 
         composeRule.onNodeWithText(squat.name).assertDoesNotExist()

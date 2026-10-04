@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -67,6 +68,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -88,6 +90,7 @@ import kotlin.uuid.Uuid
 @Composable
 fun WorkoutScreen(
     onWorkoutSaved: () -> Unit,
+    onWorkoutDiscarded: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: WorkoutViewModel = viewModel(factory = WorkoutViewModel.Factory)
 ) {
@@ -107,6 +110,10 @@ fun WorkoutScreen(
         onWeightChange = viewModel::updateWeight,
         onRepsChange = viewModel::updateReps,
         onSave = viewModel::saveWorkout,
+        onDiscard = {
+            viewModel.discardWorkout()
+            onWorkoutDiscarded()
+        },
         modifier = modifier
     )
 }
@@ -124,9 +131,12 @@ fun WorkoutContent(
     onWeightChange: (exerciseId: Uuid, setIndex: Int, weightKg: String) -> Unit,
     onRepsChange: (exerciseId: Uuid, setIndex: Int, reps: String) -> Unit,
     onSave: () -> Unit,
+    onDiscard: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showExercisePicker by rememberSaveable { mutableStateOf(false) }
+    var confirmDiscard by rememberSaveable { mutableStateOf(false) }
+    var confirmSave by rememberSaveable { mutableStateOf(false) }
     // Kept as text, since a Uuid can't be saved in instance state.
     var exerciseIdToConfirmRemoval by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -188,10 +198,47 @@ fun WorkoutContent(
             }
             if (uiState.workoutExercises.isNotEmpty()) {
                 item {
-                    SaveWorkoutButton(isSaving = uiState.isSaving, errorMessage = uiState.saveErrorMessage, onSave = onSave)
+                    WorkoutActions(
+                        isSaving = uiState.isSaving,
+                        errorMessage = uiState.saveErrorMessage,
+                        onSave = { if (uiState.uncompletedSetsLeftOut > 0) confirmSave = true else onSave() },
+                        onDiscard = { confirmDiscard = true }
+                    )
                 }
             }
         }
+    }
+
+    if (confirmSave) {
+        val leftOut = uiState.uncompletedSetsLeftOut
+        AlertDialog(
+            onDismissRequest = { confirmSave = false },
+            title = { Text(stringResource(R.string.workout_save_incomplete_title)) },
+            text = { Text(pluralStringResource(R.plurals.workout_save_incomplete_text, leftOut, leftOut)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmSave = false
+                    onSave()
+                }) {
+                    Text(stringResource(R.string.workout_save_incomplete_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmSave = false }) {
+                    Text(stringResource(R.string.workout_save_incomplete_cancel))
+                }
+            }
+        )
+    }
+
+    if (confirmDiscard) {
+        DiscardWorkoutDialog(
+            onConfirm = {
+                confirmDiscard = false
+                onDiscard()
+            },
+            onDismiss = { confirmDiscard = false }
+        )
     }
 
     uiState.workoutExercises.find { it.exercise.id.toString() == exerciseIdToConfirmRemoval }?.let { entry ->
@@ -217,13 +264,23 @@ fun WorkoutContent(
 }
 
 @Composable
-private fun SaveWorkoutButton(isSaving: Boolean, @StringRes errorMessage: Int?, onSave: () -> Unit) {
+private fun WorkoutActions(isSaving: Boolean, @StringRes errorMessage: Int?, onSave: () -> Unit, onDiscard: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Button(onClick = onSave, enabled = !isSaving, modifier = Modifier.fillMaxWidth()) {
-            if (isSaving) {
-                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = LocalContentColor.current)
-            } else {
-                Text(stringResource(R.string.workout_save))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(
+                onClick = onDiscard,
+                enabled = !isSaving,
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text(stringResource(R.string.discard_workout))
+            }
+            Button(onClick = onSave, enabled = !isSaving, modifier = Modifier.weight(1f)) {
+                if (isSaving) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = LocalContentColor.current)
+                } else {
+                    Text(stringResource(R.string.workout_save))
+                }
             }
         }
         if (errorMessage != null) {
@@ -635,7 +692,8 @@ fun WorkoutContentPreview() {
             onToggleSetCompleted = { _, _ -> },
             onWeightChange = { _, _, _ -> },
             onRepsChange = { _, _, _ -> },
-            onSave = {}
+            onSave = {},
+            onDiscard = {}
         )
     }
 }

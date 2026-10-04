@@ -13,7 +13,7 @@ CREATE TABLE users (
 -- TEMPLATES
 
 CREATE TABLE templates (
-  template_id SERIAL PRIMARY KEY,
+  template_id UUID PRIMARY KEY DEFAULT uuidv7(),
   user_id INTEGER NOT NULL REFERENCES users(user_id),
   template_name VARCHAR(100) NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -29,8 +29,8 @@ CREATE INDEX idx_templates_user_id
 -- WORKOUTS
 
 CREATE TABLE workouts (
-  workout_id SERIAL PRIMARY KEY,
-  template_id INTEGER NOT NULL REFERENCES templates(template_id),
+  workout_id UUID PRIMARY KEY DEFAULT uuidv7(),
+  template_id UUID NOT NULL REFERENCES templates(template_id),
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   started_at TIMESTAMP NOT NULL,
@@ -44,7 +44,7 @@ CREATE INDEX idx_workouts_template_id
 -- EXERCISES
 
 CREATE TABLE exercises (
-  exercise_id SERIAL PRIMARY KEY,
+  exercise_id UUID PRIMARY KEY DEFAULT uuidv7(),
   user_id INTEGER REFERENCES users(user_id),
   exercise_name VARCHAR(100) NOT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -63,8 +63,8 @@ CREATE UNIQUE INDEX uq_exercises_global_name
 
 CREATE TABLE sets (
   set_id SERIAL PRIMARY KEY,
-  exercise_id INTEGER NOT NULL REFERENCES exercises(exercise_id),
-  workout_id INTEGER NOT NULL REFERENCES workouts(workout_id),
+  exercise_id UUID NOT NULL REFERENCES exercises(exercise_id),
+  workout_id UUID NOT NULL REFERENCES workouts(workout_id),
   reps INTEGER NOT NULL CONSTRAINT sets_reps_positive CHECK (reps > 0),
   weight_grams INTEGER NOT NULL CONSTRAINT sets_weight_grams_non_negative CHECK (weight_grams >= 0)
 );

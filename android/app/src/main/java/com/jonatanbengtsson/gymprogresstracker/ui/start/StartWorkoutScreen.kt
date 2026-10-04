@@ -114,15 +114,16 @@ fun StartWorkoutContent(
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             TextButton(
                                 onClick = { confirmDiscard = true },
+                                modifier = Modifier.weight(1f),
                                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                             ) {
                                 Text(stringResource(R.string.start_workout_discard))
                             }
-                            Button(onClick = onContinueWorkout) {
+                            Button(onClick = onContinueWorkout, modifier = Modifier.weight(1f)) {
                                 Text(stringResource(R.string.start_workout_continue))
                             }
                         }

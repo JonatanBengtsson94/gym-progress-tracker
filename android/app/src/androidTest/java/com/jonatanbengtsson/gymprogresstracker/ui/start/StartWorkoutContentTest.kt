@@ -5,7 +5,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasProgressBarRangeInfo
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -126,7 +129,7 @@ class StartWorkoutContentTest {
         composeRule.onNodeWithText(str(R.string.start_workout_discard_title)).assertIsDisplayed()
         assertEquals(0, discardClicks)
 
-        composeRule.onNodeWithText(str(R.string.start_workout_discard_confirm)).performClick()
+        composeRule.onNode(hasText(str(R.string.start_workout_discard_confirm)) and hasAnyAncestor(isDialog())).performClick()
 
         assertEquals(1, discardClicks)
         composeRule.onNodeWithText(str(R.string.start_workout_discard_title)).assertDoesNotExist()

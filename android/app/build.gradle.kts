@@ -66,6 +66,9 @@ android {
         // The API's example requests and responses, which the backend's tests check against too.
         getByName("test").resources.directories.add("../../contract")
     }
+    lint {
+        warningsAsErrors = true
+    }
     testOptions {
         // Local unit tests run against a stubbed android.jar; let calls like Log.w return defaults
         // instead of throwing so the data layer can be tested on the JVM.

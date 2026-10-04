@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Gym Progress Tracker</string>
     <string name="login_username">Username</string>
     <string name="login_password">Password</string>
@@ -43,10 +43,10 @@
     <string name="workout_set_number">Set</string>
     <string name="workout_set_weight">kg</string>
     <string name="workout_set_reps">Reps</string>
-    <string name="workout_set_weight_description">Set %1$d weight in kg</string>
-    <string name="workout_set_reps_description">Set %1$d reps</string>
+    <string name="workout_set_weight_description" tools:ignore="PluralsCandidate">Set %1$d weight in kg</string>
+    <string name="workout_set_reps_description" tools:ignore="PluralsCandidate">Set %1$d reps</string>
     <string name="workout_add_set">Add set</string>
-    <string name="workout_complete_set">Set %1$d completed</string>
+    <string name="workout_complete_set" tools:ignore="PluralsCandidate">Set %1$d completed</string>
     <string name="workout_remove_set">Remove set %1$d</string>
     <string name="workout_search_no_results">No exercises match \"%1$s\"</string>
     <string name="workout_exercises_error_network">Could not load exercises. Check your connection and try again.</string>

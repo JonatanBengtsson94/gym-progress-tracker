@@ -12,7 +12,7 @@ import com.jonatanbengtsson.gymprogresstracker.ui.start.StartWorkoutScreen
 import com.jonatanbengtsson.gymprogresstracker.ui.workout.WorkoutScreen
 import kotlinx.serialization.Serializable
 
-/** The screens of a logged-in session. Serializable so the back stack survives the app's process. */
+/** The screens of a logged-in session. */
 sealed interface Screen : NavKey {
     @Serializable
     data object StartWorkout : Screen

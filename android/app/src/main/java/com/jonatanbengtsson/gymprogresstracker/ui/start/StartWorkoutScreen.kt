@@ -155,8 +155,7 @@ fun StartWorkoutContent(
             )
         }
 
-        // Stored templates show even while they're being fetched, or when that fails. Keys must be
-        // saveable in instance state, which a Uuid isn't.
+        // Keys must be saveable in instance state, which a Uuid isn't.
         when {
             uiState.templates.isNotEmpty() -> itemsIndexed(uiState.templates, key = { _, template -> template.id.toString() }) { index, template ->
                 Column {
@@ -246,7 +245,6 @@ private fun TemplateRow(template: WorkoutTemplate, onClick: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         if (exercises.isNotEmpty()) {
-            // Expands in place like an HTML <details>, without starting the workout.
             Row(
                 modifier = Modifier
                     .toggleable(value = expanded, onValueChange = { expanded = it })

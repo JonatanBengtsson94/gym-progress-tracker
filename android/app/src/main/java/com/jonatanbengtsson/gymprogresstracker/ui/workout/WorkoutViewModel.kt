@@ -59,7 +59,6 @@ class WorkoutViewModel(
         viewModelScope.launch {
             exercisesRepository.exercises.collect { exercises -> uiState = uiState.copy(exercises = exercises) }
         }
-        // Fetched up front so the list is current by the time the user adds an exercise.
         loadExercises()
     }
 
@@ -140,7 +139,6 @@ class WorkoutViewModel(
             initializer { WorkoutViewModel(appContainer.exercisesRepository, appContainer.activeWorkoutRepository) }
         }
 
-        // Accepts a decimal comma as well as a point, since keyboards in many locales offer only one.
         private val WEIGHT_INPUT = Regex("""\d{0,4}([.,]\d{0,2})?""")
         // The backend stores reps as a uint8, so three digits is the most it can take.
         private val REPS_INPUT = Regex("""\d{0,3}""")

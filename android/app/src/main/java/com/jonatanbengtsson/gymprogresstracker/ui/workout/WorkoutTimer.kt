@@ -17,15 +17,13 @@ fun WorkoutTimer(startedAt: Instant, modifier: Modifier = Modifier, style: TextS
     val elapsed by produceState(elapsedSince(startedAt), startedAt) {
         while (true) {
             value = elapsedSince(startedAt)
-            // Waits for the next whole second, so the timer ticks in step with the clock.
+            // Waits until the next whole second.
             delay(1000 - value.toMillis() % 1000)
         }
     }
-    // Tabular figures keep the text from shifting as the digits change.
     Text(text = formatElapsed(elapsed), modifier = modifier, style = style.copy(fontFeatureSettings = "tnum"))
 }
 
-/** Never negative, in case the device's clock was turned back since the workout started. */
 private fun elapsedSince(startedAt: Instant): Duration =
     Duration.between(startedAt, Instant.now()).coerceAtLeast(Duration.ZERO)
 

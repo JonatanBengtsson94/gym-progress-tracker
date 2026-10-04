@@ -218,7 +218,6 @@ private fun WorkoutExerciseCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = containerColor, contentColor = contentColor)
     ) {
-        // Each row pads itself, so a completed set's colour reaches the edges of the card.
         val rowPadding = PaddingValues(start = 16.dp, end = 4.dp)
         Column(modifier = Modifier.padding(vertical = 4.dp)) {
             Row(modifier = Modifier.padding(rowPadding), verticalAlignment = Alignment.CenterVertically) {
@@ -434,8 +433,7 @@ private fun ExercisePicker(
             modifier = Modifier.weight(1f).imePadding(),
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
-            // Stored exercises show even while they're being fetched, or when that fails.
-            when {
+                when {
                 uiState.exercises.isEmpty() && uiState.isLoadingExercises -> item {
                     Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator()
@@ -481,7 +479,7 @@ private fun ExercisePicker(
 internal fun Exercise.matches(query: String): Boolean =
     query.split(' ').filter { it.isNotBlank() }.all { name.contains(it, ignoreCase = true) }
 
-/** Exercises already in the workout stay in place but are greyed out and can't be picked again. */
+/** An exercise already in the workout is greyed out and can't be picked again. */
 @Composable
 private fun ExercisePickerRow(exercise: Exercise, added: Boolean, onClick: () -> Unit) {
     // Material's standard opacity for disabled content.

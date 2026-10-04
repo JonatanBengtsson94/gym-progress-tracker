@@ -34,8 +34,6 @@ class AppContainer(context: Context) {
         .fallbackToDestructiveMigrationFrom(dropAllTables = true, 1)
         .build()
 
-
-    // Created with the app, so the saved workout is loading before any screen asks for it.
     val activeWorkoutRepository: ActiveWorkoutRepository =
         RoomActiveWorkoutRepository(database.activeWorkoutDao(), applicationScope)
 

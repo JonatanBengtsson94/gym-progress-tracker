@@ -30,7 +30,6 @@ class MainActivity : ComponentActivity() {
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     when (val currentSession = session) {
-                        // Brief enough that the window background is all that shows.
                         SessionState.Loading -> {}
                         // Scoped to the logged-out state, so the login view model is cleared once it succeeds.
                         SessionState.LoggedOut -> CompositionLocalProvider(

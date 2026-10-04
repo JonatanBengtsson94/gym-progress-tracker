@@ -168,8 +168,6 @@ func TestWorkoutService_PutWorkout_TrimsTemplateName(t *testing.T) {
 	}
 }
 
-// A PUT replaces the whole workout, so unlike a create it doesn't default an
-// omitted time.
 func TestWorkoutService_PutWorkout_ValidationErrors(t *testing.T) {
 	ctx := t.Context()
 

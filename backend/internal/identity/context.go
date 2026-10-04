@@ -1,7 +1,5 @@
 // Package identity carries the authenticated caller's user id on a request
-// context. Establishing that identity is package auth's job; reading it is
-// every handler's, including handlers in packages that auth itself depends
-// on, so it lives apart from the credential and session handling.
+// context.
 package identity
 
 import (

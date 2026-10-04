@@ -851,7 +851,6 @@ func TestIntegration_PutWorkout_InvalidWorkoutId(t *testing.T) {
 	router := newTestRouter(t)
 	token := mustLogin(t, router, "alice", "secret")
 
-	// Ids are UUIDs, so the numbers older clients sent are rejected too.
 	for _, workoutId := range []string{"abc", "1"} {
 		if rec := putWorkout(router, token, workoutId, createPushWorkoutBody()); rec.Code != http.StatusBadRequest {
 			t.Errorf("workout %q: expected status 400, got %d", workoutId, rec.Code)

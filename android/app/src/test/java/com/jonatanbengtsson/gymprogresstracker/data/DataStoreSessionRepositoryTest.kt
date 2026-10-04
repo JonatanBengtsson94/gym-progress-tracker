@@ -27,6 +27,13 @@ class DataStoreSessionRepositoryTest {
     private val squat = Exercise(testId(1), "Squat (Barbell)")
     private val workout = ActiveWorkout(Instant.parse("2026-10-04T17:00:00Z"), exercises = listOf(WorkoutExerciseEntry(squat)))
     private val activeWorkoutRepository = FakeActiveWorkoutRepository(workout)
+    private val pendingWorkout = PendingWorkout(
+        testId(20),
+        testId(10),
+        templateIsNew = true,
+        FinishedWorkout("Leg day", Instant.parse("2026-10-03T17:00:00Z"), Instant.parse("2026-10-03T18:00:00Z"), emptyList())
+    )
+    private val pendingWorkoutsRepository = FakePendingWorkoutsRepository(listOf(pendingWorkout))
 
     private val file by lazy { File(folder.root, "session.preferences_pb") }
 
@@ -34,6 +41,7 @@ class DataStoreSessionRepositoryTest {
     private fun repository(scope: CoroutineScope) = DataStoreSessionRepository(
         PreferenceDataStoreFactory.create(scope = scope) { file },
         activeWorkoutRepository,
+        pendingWorkoutsRepository,
         scope
     )
 
@@ -92,22 +100,25 @@ class DataStoreSessionRepositoryTest {
     }
 
     @Test
-    fun `logging out keeps the workout for the same user's next login`() = runTest {
+    fun `logging out keeps the workouts for the same user's next login`() = runTest {
         val repository = repository(backgroundScope)
         repository.logIn("alice", "session-1")
         activeWorkoutRepository.workout.value = workout
+        pendingWorkoutsRepository.workouts.value = listOf(pendingWorkout)
         repository.logOut()
 
         repository.logIn("alice", "session-2")
 
         assertEquals(workout, activeWorkoutRepository.workout.value)
+        assertEquals(listOf(pendingWorkout), pendingWorkoutsRepository.workouts.value)
     }
 
     @Test
-    fun `the first login throws away a workout nobody owns`() = runTest {
+    fun `the first login throws away workouts nobody owns`() = runTest {
         repository(backgroundScope).logIn("alice", "session-123")
 
         assertEquals(ActiveWorkout(), activeWorkoutRepository.workout.value)
+        assertEquals(emptyList<PendingWorkout>(), pendingWorkoutsRepository.workouts.value)
     }
 
     @Test
@@ -123,15 +134,17 @@ class DataStoreSessionRepositoryTest {
     }
 
     @Test
-    fun `someone else logging in throws away the workout`() = runTest {
+    fun `someone else logging in throws away the workouts`() = runTest {
         val repository = repository(backgroundScope)
         repository.logIn("alice", "session-1")
         activeWorkoutRepository.workout.value = workout
+        pendingWorkoutsRepository.workouts.value = listOf(pendingWorkout)
         repository.endSession("session-1")
 
         repository.logIn("bob", "session-2")
 
         assertEquals(ActiveWorkout(), activeWorkoutRepository.workout.value)
+        assertEquals(emptyList<PendingWorkout>(), pendingWorkoutsRepository.workouts.value)
     }
 
     @Test

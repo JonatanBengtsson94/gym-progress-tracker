@@ -12,13 +12,12 @@ import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
-import com.jonatanbengtsson.gymprogresstracker.data.ApiResult
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesRepository
-import com.jonatanbengtsson.gymprogresstracker.data.FinishedExercise
 import com.jonatanbengtsson.gymprogresstracker.data.FinishedWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExercise
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutSet
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutsRepository
@@ -43,7 +42,7 @@ data class WorkoutUiState(
     val exercises: List<Exercise> = emptyList(),
     /** Why fetching the exercises failed last time. */
     @StringRes val exercisesErrorMessage: Int? = null,
-    /** True while the workout is being saved to the server. */
+    /** True while the workout is being saved. */
     val isSaving: Boolean = false,
     /** Why the workout couldn't be saved last time. */
     @StringRes val saveErrorMessage: Int? = null,
@@ -141,9 +140,9 @@ class WorkoutViewModel(
         activeWorkoutRepository.update { it.copy(exercises = transform(it.exercises)) }
 
     /**
-     * Saves the workout's completed sets to the server, as completed now, and clears the workout once
-     * it's saved. Sets that aren't completed are left out. A workout changed while it's being saved is
-     * kept instead, so the changes can be saved too.
+     * Saves the workout's completed sets on the device, as completed now, for syncing to the server
+     * later, and clears the workout once it's saved. Sets that aren't completed are left out. A workout
+     * changed while it's being saved is kept instead, so saving it again replaces the saved one.
      */
     fun saveWorkout() {
         if (uiState.isSaving) return
@@ -153,7 +152,7 @@ class WorkoutViewModel(
 
         val exercises = workout.exercises.mapNotNull { entry ->
             val sets = entry.sets.filter { it.completed }.map { WorkoutSet(reps = it.reps.toInt(), weightGrams = it.weightGrams) }
-            if (sets.isEmpty()) null else FinishedExercise(entry.exercise.id, sets)
+            if (sets.isEmpty()) null else WorkoutExercise(entry.exercise.id, entry.exercise.name, sets)
         }
         val invalidMessage = when {
             workout.name.isBlank() -> R.string.workout_save_error_name
@@ -165,25 +164,16 @@ class WorkoutViewModel(
 
         val completedAt = clock.instant()
         val finished = FinishedWorkout(
-            templateId = null,
-            templateName = workout.name.trim(),
+            name = workout.name.trim(),
             startedAt = workout.startedAt ?: completedAt,
             completedAt = completedAt,
             exercises = exercises
         )
         viewModelScope.launch {
-            val result = workoutsRepository.save(workoutId, finished)
-            val cleared = result is ApiResult.Success && activeWorkoutRepository.workout.value == workout
+            workoutsRepository.save(workoutId, finished)
+            val cleared = activeWorkoutRepository.workout.value == workout
             if (cleared) activeWorkoutRepository.update { ActiveWorkout() }
-            uiState = uiState.copy(
-                isSaving = false,
-                isSaved = cleared,
-                saveErrorMessage = when (result) {
-                    ApiResult.NetworkError -> R.string.workout_save_error_network
-                    ApiResult.ServerError -> R.string.workout_save_error_server
-                    is ApiResult.Success, ApiResult.Unauthorized -> null
-                }
-            )
+            uiState = uiState.copy(isSaving = false, isSaved = cleared)
         }
     }
 

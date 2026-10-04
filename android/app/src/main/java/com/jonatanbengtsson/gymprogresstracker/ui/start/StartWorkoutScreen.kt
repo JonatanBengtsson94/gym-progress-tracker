@@ -1,5 +1,6 @@
 package com.jonatanbengtsson.gymprogresstracker.ui.start
 
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
@@ -75,6 +76,7 @@ fun StartWorkoutScreen(
         onDiscardWorkout = viewModel::discardWorkout,
         onStartFromTemplate = onStartFromTemplate,
         onLogOut = viewModel::logOut,
+        onSync = viewModel::sync,
         modifier = modifier
     )
 }
@@ -88,6 +90,7 @@ fun StartWorkoutContent(
     onDiscardWorkout: () -> Unit,
     onStartFromTemplate: (WorkoutTemplate) -> Unit,
     onLogOut: () -> Unit,
+    onSync: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var confirmDiscard by rememberSaveable { mutableStateOf(false) }
@@ -156,6 +159,16 @@ fun StartWorkoutContent(
                 }
             }
         }
+        if (uiState.pendingWorkouts > 0) {
+            item {
+                SyncRow(
+                    pendingWorkouts = uiState.pendingWorkouts,
+                    isSyncing = uiState.isSyncing,
+                    errorMessage = uiState.syncErrorMessage,
+                    onSync = onSync
+                )
+            }
+        }
         item {
             Text(
                 text = stringResource(R.string.start_workout_from_template),
@@ -222,6 +235,34 @@ fun StartWorkoutContent(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun SyncRow(pendingWorkouts: Int, isSyncing: Boolean, @StringRes errorMessage: Int?, onSync: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = pluralStringResource(R.plurals.start_workout_pending, pendingWorkouts, pendingWorkouts),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            OutlinedButton(onClick = onSync, enabled = !isSyncing) {
+                if (isSyncing) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Text(stringResource(R.string.start_workout_sync))
+                }
+            }
+        }
+        if (errorMessage != null) {
+            Text(
+                text = stringResource(errorMessage),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
     }
 }
 
@@ -319,7 +360,8 @@ fun StartWorkoutContentPreview() {
             onContinueWorkout = {},
             onDiscardWorkout = {},
             onStartFromTemplate = {},
-            onLogOut = {}
+            onLogOut = {},
+            onSync = {}
         )
     }
 }
@@ -333,14 +375,16 @@ fun StartWorkoutContentInProgressPreview() {
                 templates = previewTemplates,
                 workoutInProgress = true,
                 workoutStartedAt = Instant.now().minusSeconds(1234),
-                workoutName = "Push day"
+                workoutName = "Push day",
+                pendingWorkouts = 2
             ),
             onRetry = {},
             onStartNewWorkout = {},
             onContinueWorkout = {},
             onDiscardWorkout = {},
             onStartFromTemplate = {},
-            onLogOut = {}
+            onLogOut = {},
+            onSync = {}
         )
     }
 }
@@ -356,7 +400,8 @@ fun StartWorkoutContentErrorPreview() {
             onContinueWorkout = {},
             onDiscardWorkout = {},
             onStartFromTemplate = {},
-            onLogOut = {}
+            onLogOut = {},
+            onSync = {}
         )
     }
 }

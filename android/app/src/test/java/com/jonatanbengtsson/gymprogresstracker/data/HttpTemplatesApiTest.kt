@@ -3,6 +3,7 @@ package com.jonatanbengtsson.gymprogresstracker.data
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -83,6 +84,28 @@ class HttpTemplatesApiTest {
 
         assertEquals(Instant.parse("2024-05-08T09:00:00.123456789Z"), latest.startedAt)
         assertEquals(Instant.parse("2024-05-08T10:00:00Z"), latest.completedAt)
+    }
+
+    @Test
+    fun `createTemplate posts the template and returns the id the server keeps`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(201).setBody(contract("post_templates.response.json")))
+
+        val result = api.createTemplate(Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d10"), "Push Day")
+
+        assertEquals(ApiResult.Success(Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d10")), result)
+        val request = server.takeRequest()
+        assertEquals("POST", request.method)
+        assertEquals("/templates", request.path)
+        assertEquals(JSONObject(contract("post_templates.request.json")).toKotlin(), JSONObject(request.body.readUtf8()).toKotlin())
+    }
+
+    @Test
+    fun `createTemplate returns the existing template's id when the user already has the name`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"template_id": "0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d11", "template_name": "push day"}"""))
+
+        val result = api.createTemplate(Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d10"), "Push Day")
+
+        assertEquals(ApiResult.Success(Uuid.parse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d11")), result)
     }
 
     @Test

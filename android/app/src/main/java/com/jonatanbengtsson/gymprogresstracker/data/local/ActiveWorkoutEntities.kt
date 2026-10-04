@@ -14,7 +14,7 @@ import kotlin.uuid.Uuid
 data class ActiveWorkoutEntity(
     @PrimaryKey val id: Int = 0,
     @ColumnInfo(name = "started_at") val startedAt: Instant?,
-    @ColumnInfo(defaultValue = "") val name: String,
+    val name: String,
     @ColumnInfo(name = "workout_id") val workoutId: Uuid? = null
 )
 

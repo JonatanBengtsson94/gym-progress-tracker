@@ -28,7 +28,8 @@ interface SessionRepository {
 
     /**
      * Starts [sessionId] for [username]. If someone else logged in last, the workout they left in
-     * progress is thrown away first, so the new user never sees it.
+     * progress and the workouts they saved but didn't sync are thrown away first, so the new user
+     * never sees them and they're never sent under the new user's account.
      */
     suspend fun logIn(username: String, sessionId: String)
 
@@ -45,6 +46,7 @@ interface SessionRepository {
 class DataStoreSessionRepository(
     private val dataStore: DataStore<Preferences>,
     private val activeWorkoutRepository: ActiveWorkoutRepository,
+    private val pendingWorkoutsRepository: PendingWorkoutsRepository,
     externalScope: CoroutineScope
 ) : SessionRepository {
 
@@ -59,6 +61,7 @@ class DataStoreSessionRepository(
         if (preferences.first()[USERNAME] != username) {
             activeWorkoutRepository.workout.filterNotNull().first()
             activeWorkoutRepository.update { ActiveWorkout() }
+            pendingWorkoutsRepository.clear()
         }
         dataStore.edit { preferences ->
             preferences[USERNAME] = username

@@ -6,21 +6,31 @@ import com.jonatanbengtsson.gymprogresstracker.data.local.TemplateLatestWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.local.TemplateSetEntity
 import com.jonatanbengtsson.gymprogresstracker.data.local.TemplateWithSets
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import java.time.Instant
 
 /** The user's templates, each with its latest workout, kept on the device so they're there offline too. */
 interface TemplatesRepository {
-    /** Most recently performed first. Empty until they've been fetched once. */
+    /**
+     * Most recently performed first, including the workouts saved but not yet synced and the templates
+     * they create. Holds only those until the templates have been fetched once.
+     */
     val templates: Flow<List<WorkoutTemplate>>
 
     /** Replaces the stored templates with the server's. They're kept as they are if that fails. */
     suspend fun refresh(): RefreshResult
 }
 
-class RoomTemplatesRepository(private val api: TemplatesApi, private val dao: TemplateDao) : TemplatesRepository {
+class RoomTemplatesRepository(
+    private val api: TemplatesApi,
+    private val dao: TemplateDao,
+    pendingWorkoutsRepository: PendingWorkoutsRepository
+) : TemplatesRepository {
 
     override val templates: Flow<List<WorkoutTemplate>> =
-        dao.observeTemplates().map { templates -> templates.map { it.toTemplate() } }
+        combine(dao.observeTemplates(), pendingWorkoutsRepository.workouts) { templates, pending ->
+            withPendingWorkouts(templates.map { it.toTemplate() }, pending)
+        }
 
     override suspend fun refresh(): RefreshResult = when (val result = api.getTemplates()) {
         is ApiResult.Success -> {
@@ -33,6 +43,28 @@ class RoomTemplatesRepository(private val api: TemplatesApi, private val dao: Te
         ApiResult.Unauthorized -> RefreshResult.SessionExpired
         ApiResult.NetworkError -> RefreshResult.NetworkError
         ApiResult.ServerError -> RefreshResult.ServerError
+    }
+
+    /**
+     * [templates] with each of the [pending] workouts as its template's latest workout when it's newer,
+     * adding the templates they create, re-sorted most recently performed first. A template is matched
+     * by id, or by name ignoring case, since the server returns its own template for a name it already
+     * has when the one created on the device is synced.
+     */
+    private fun withPendingWorkouts(templates: List<WorkoutTemplate>, pending: List<PendingWorkout>): List<WorkoutTemplate> {
+        val merged = templates.toMutableList()
+        for ((workoutId, templateId, _, workout) in pending) {
+            val latest = LatestWorkout(workoutId, workout.startedAt, workout.completedAt, workout.exercises)
+            val index = merged.indexOfFirst { it.id == templateId }
+                .takeIf { it >= 0 } ?: merged.indexOfFirst { it.name.equals(workout.name, ignoreCase = true) }
+            if (index < 0) {
+                merged += WorkoutTemplate(templateId, workout.name, latest)
+            } else if ((merged[index].latestWorkout?.completedAt ?: Instant.MIN) < workout.completedAt) {
+                merged[index] = merged[index].copy(latestWorkout = latest)
+            }
+        }
+        // Stable, so templates never performed keep the server's order.
+        return merged.sortedWith(compareByDescending(nullsFirst()) { it.latestWorkout?.completedAt })
     }
 
     private fun WorkoutTemplate.toEntity(position: Int) = TemplateEntity(

@@ -14,8 +14,10 @@ import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
+import com.jonatanbengtsson.gymprogresstracker.data.SyncResult
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutsRepository
 import kotlinx.coroutines.launch
 import java.time.Clock
 import java.time.Instant
@@ -32,13 +34,20 @@ data class StartWorkoutUiState(
     /** When the workout in progress was started. */
     val workoutStartedAt: Instant? = null,
     /** What the user named the workout in progress, empty until they do. */
-    val workoutName: String = ""
+    val workoutName: String = "",
+    /** How many saved workouts haven't been synced to the server yet. */
+    val pendingWorkouts: Int = 0,
+    /** True while the saved workouts are being synced. */
+    val isSyncing: Boolean = false,
+    /** Why syncing failed last time. */
+    @StringRes val syncErrorMessage: Int? = null
 )
 
 class StartWorkoutViewModel(
     private val templatesRepository: TemplatesRepository,
     private val activeWorkoutRepository: ActiveWorkoutRepository,
     private val sessionRepository: SessionRepository,
+    private val workoutsRepository: WorkoutsRepository,
     private val clock: Clock = Clock.systemUTC()
 ) : ViewModel() {
 
@@ -57,6 +66,9 @@ class StartWorkoutViewModel(
         }
         viewModelScope.launch {
             templatesRepository.templates.collect { templates -> uiState = uiState.copy(templates = templates) }
+        }
+        viewModelScope.launch {
+            workoutsRepository.pendingCount.collect { count -> uiState = uiState.copy(pendingWorkouts = count) }
         }
         loadTemplates()
     }
@@ -79,6 +91,24 @@ class StartWorkoutViewModel(
         }
     }
 
+    /** Sends the saved workouts to the server. */
+    fun sync() {
+        if (uiState.isSyncing) return
+        uiState = uiState.copy(isSyncing = true, syncErrorMessage = null)
+
+        viewModelScope.launch {
+            val result = workoutsRepository.sync()
+            uiState = uiState.copy(
+                isSyncing = false,
+                syncErrorMessage = when (result) {
+                    SyncResult.NetworkError -> R.string.start_workout_sync_error_network
+                    SyncResult.ServerError -> R.string.start_workout_sync_error_server
+                    SyncResult.Success, SyncResult.SessionExpired -> null
+                }
+            )
+        }
+    }
+
     /** Starts an empty workout now, unless one is already in progress. */
     fun startNewWorkout() = activeWorkoutRepository.update { workout ->
         if (workout.exercises.isEmpty()) ActiveWorkout(startedAt = clock.instant()) else workout
@@ -94,7 +124,12 @@ class StartWorkoutViewModel(
     companion object {
         val Factory = viewModelFactory {
             initializer {
-                StartWorkoutViewModel(appContainer.templatesRepository, appContainer.activeWorkoutRepository, appContainer.sessionRepository)
+                StartWorkoutViewModel(
+                    appContainer.templatesRepository,
+                    appContainer.activeWorkoutRepository,
+                    appContainer.sessionRepository,
+                    appContainer.workoutsRepository
+                )
             }
         }
     }

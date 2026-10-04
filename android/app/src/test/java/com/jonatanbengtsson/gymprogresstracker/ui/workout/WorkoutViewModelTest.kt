@@ -2,15 +2,14 @@ package com.jonatanbengtsson.gymprogresstracker.ui.workout
 
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkout
-import com.jonatanbengtsson.gymprogresstracker.data.ApiResult
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.FakeActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeExercisesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeWorkoutsRepository
-import com.jonatanbengtsson.gymprogresstracker.data.FinishedExercise
 import com.jonatanbengtsson.gymprogresstracker.data.FinishedWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExercise
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutSet
 import com.jonatanbengtsson.gymprogresstracker.data.testId
@@ -435,7 +434,7 @@ class WorkoutViewModelTest {
     }
 
     @Test
-    fun `saving sends the completed sets under the workout's name, completed now`() {
+    fun `saving keeps the completed sets under the workout's name, completed now`() {
         givenWorkoutToSave()
 
         viewModel.saveWorkout()
@@ -444,11 +443,10 @@ class WorkoutViewModelTest {
         assertEquals(workoutId, activeWorkoutRepository.workout.value?.workoutId)
         assertEquals(
             FinishedWorkout(
-                templateId = null,
-                templateName = "Push day",
+                name = "Push day",
                 startedAt = startedAt,
                 completedAt = now,
-                exercises = listOf(FinishedExercise(squat.id, listOf(WorkoutSet(reps = 5, weightGrams = 102500))))
+                exercises = listOf(WorkoutExercise(squat.id, squat.name, listOf(WorkoutSet(reps = 5, weightGrams = 102500))))
             ),
             workout
         )
@@ -460,24 +458,11 @@ class WorkoutViewModelTest {
         givenWorkoutToSave()
         viewModel.saveWorkout()
 
-        workoutsRepository.saveResult.complete(ApiResult.Success(Unit))
+        workoutsRepository.saveDone.complete(Unit)
 
         assertEquals(ActiveWorkout(), activeWorkoutRepository.workout.value)
         assertTrue(viewModel.uiState.isSaved)
         assertFalse(viewModel.uiState.isSaving)
-    }
-
-    @Test
-    fun `saving again after a failure reuses the workout's id`() {
-        givenWorkoutToSave()
-        viewModel.saveWorkout()
-        workoutsRepository.saveResult.complete(ApiResult.NetworkError)
-        workoutsRepository.saveResult = CompletableDeferred()
-
-        viewModel.saveWorkout()
-
-        assertEquals(1, workoutsRepository.saves.map { it.first }.distinct().size)
-        assertEquals(2, workoutsRepository.saves.size)
     }
 
     @Test
@@ -491,31 +476,21 @@ class WorkoutViewModelTest {
     }
 
     @Test
-    fun `a workout changed while it's being saved is kept`() {
+    fun `a workout changed while it's being saved is kept, and saving it again reuses its id`() {
         givenWorkoutToSave()
         viewModel.saveWorkout()
 
         viewModel.updateReps(benchPress.id, 0, "8")
-        workoutsRepository.saveResult.complete(ApiResult.Success(Unit))
+        workoutsRepository.saveDone.complete(Unit)
 
         assertEquals(listOf(SetEntry("60", "8")), setsOf(benchPress))
         assertFalse(viewModel.uiState.isSaved)
         assertFalse(viewModel.uiState.isSaving)
-    }
 
-    @Test
-    fun `network error saving keeps the workout and shows network error`() {
-        assertSaveErrorFor(ApiResult.NetworkError, R.string.workout_save_error_network)
-    }
+        viewModel.saveWorkout()
 
-    @Test
-    fun `server error saving keeps the workout and shows server error`() {
-        assertSaveErrorFor(ApiResult.ServerError, R.string.workout_save_error_server)
-    }
-
-    @Test
-    fun `an expired session while saving keeps the workout and shows no error`() {
-        assertSaveErrorFor(ApiResult.Unauthorized, null)
+        assertEquals(1, workoutsRepository.saves.map { it.first }.distinct().size)
+        assertEquals(2, workoutsRepository.saves.size)
     }
 
     @Test
@@ -544,27 +519,14 @@ class WorkoutViewModelTest {
     @Test
     fun `saving again clears the last error`() {
         givenWorkoutToSave()
+        activeWorkoutRepository.update { it.copy(name = "") }
         viewModel.saveWorkout()
-        workoutsRepository.saveResult.complete(ApiResult.NetworkError)
-        workoutsRepository.saveResult = CompletableDeferred()
+        viewModel.updateName("Push day")
 
         viewModel.saveWorkout()
 
         assertEquals(null, viewModel.uiState.saveErrorMessage)
         assertTrue(viewModel.uiState.isSaving)
-    }
-
-    private fun assertSaveErrorFor(result: ApiResult<Unit>, expectedMessage: Int?) {
-        givenWorkoutToSave()
-        viewModel.saveWorkout()
-        val saving = activeWorkoutRepository.workout.value
-
-        workoutsRepository.saveResult.complete(result)
-
-        assertEquals(saving, activeWorkoutRepository.workout.value)
-        assertEquals(expectedMessage, viewModel.uiState.saveErrorMessage)
-        assertFalse(viewModel.uiState.isSaving)
-        assertFalse(viewModel.uiState.isSaved)
     }
 
     private fun workoutExercises() = viewModel.uiState.workoutExercises.map { it.exercise }

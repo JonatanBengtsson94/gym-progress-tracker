@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.Instant
+import kotlin.uuid.Uuid
 
 class RoomTemplatesRepositoryTest {
 
@@ -43,6 +44,8 @@ class RoomTemplatesRepositoryTest {
             calls++
             return result
         }
+
+        override suspend fun createTemplate(templateId: Uuid, name: String) = error("Not used by the templates repository")
     }
 
     private val pushDay = WorkoutTemplate(
@@ -62,7 +65,27 @@ class RoomTemplatesRepositoryTest {
 
     private val dao = FakeTemplateDao()
     private val api = FakeTemplatesApi(ApiResult.Success(listOf(pushDay, legDay)))
-    private val repository = RoomTemplatesRepository(api, dao)
+    private val pendingWorkoutsRepository = FakePendingWorkoutsRepository()
+    private val repository = RoomTemplatesRepository(api, dao, pendingWorkoutsRepository)
+
+    private val squat = WorkoutExercise(testId(3), "Squat (Barbell)", listOf(WorkoutSet(5, 100000)))
+
+    /** A workout completed at [completedAt] waiting to sync, logged under the template [templateId] named [name]. */
+    private fun pendingWorkout(
+        workoutId: Uuid,
+        templateId: Uuid,
+        name: String,
+        completedAt: Instant,
+        templateIsNew: Boolean = false
+    ) = PendingWorkout(
+        workoutId,
+        templateId,
+        templateIsNew,
+        FinishedWorkout(name, completedAt.minusSeconds(3600), completedAt, listOf(squat))
+    )
+
+    private fun PendingWorkout.asLatest() =
+        LatestWorkout(workoutId, workout.startedAt, workout.completedAt, workout.exercises)
 
     @Test
     fun `nothing is stored until the first refresh`() = runTest {
@@ -121,5 +144,101 @@ class RoomTemplatesRepositoryTest {
             assertEquals(expected, repository.refresh())
             assertEquals(listOf(pushDay, legDay), repository.templates.first())
         }
+    }
+
+    @Test
+    fun `a workout waiting to sync under a new template shows as that template, most recent first`() = runTest {
+        repository.refresh()
+        val chestDay = pendingWorkout(testId(30), testId(12), "Chest Day", Instant.parse("2026-10-04T18:00:00Z"), templateIsNew = true)
+
+        pendingWorkoutsRepository.add(chestDay)
+
+        assertEquals(
+            listOf(WorkoutTemplate(testId(12), "Chest Day", chestDay.asLatest()), pushDay, legDay),
+            repository.templates.first()
+        )
+    }
+
+    @Test
+    fun `workouts waiting to sync show before the templates have ever been fetched`() = runTest {
+        val chestDay = pendingWorkout(testId(30), testId(12), "Chest Day", Instant.parse("2026-10-04T18:00:00Z"), templateIsNew = true)
+
+        pendingWorkoutsRepository.add(chestDay)
+
+        assertEquals(listOf(WorkoutTemplate(testId(12), "Chest Day", chestDay.asLatest())), repository.templates.first())
+    }
+
+    @Test
+    fun `workouts waiting to sync under the same new template show it once, with the newest as its latest`() = runTest {
+        val first = pendingWorkout(testId(30), testId(12), "Chest Day", Instant.parse("2026-10-03T18:00:00Z"), templateIsNew = true)
+        val second = pendingWorkout(testId(31), testId(12), "Chest Day", Instant.parse("2026-10-04T18:00:00Z"), templateIsNew = true)
+
+        pendingWorkoutsRepository.add(first)
+        pendingWorkoutsRepository.add(second)
+
+        assertEquals(listOf(WorkoutTemplate(testId(12), "Chest Day", second.asLatest())), repository.templates.first())
+    }
+
+    @Test
+    fun `a newer workout waiting to sync becomes its template's latest and moves it first`() = runTest {
+        repository.refresh()
+        val legs = pendingWorkout(testId(30), legDay.id, "Leg Day", Instant.parse("2026-10-04T18:00:00Z"))
+
+        pendingWorkoutsRepository.add(legs)
+
+        assertEquals(listOf(legDay.copy(latestWorkout = legs.asLatest()), pushDay), repository.templates.first())
+    }
+
+    @Test
+    fun `an older workout waiting to sync doesn't replace its template's latest`() = runTest {
+        repository.refresh()
+
+        pendingWorkoutsRepository.add(pendingWorkout(testId(30), pushDay.id, "Push Day", Instant.parse("2026-09-01T18:00:00Z")))
+
+        assertEquals(listOf(pushDay, legDay), repository.templates.first())
+    }
+
+    @Test
+    fun `a new template with the name of one already fetched shows under that one`() = runTest {
+        repository.refresh()
+        val legs = pendingWorkout(testId(30), testId(12), "leg day", Instant.parse("2026-10-04T18:00:00Z"), templateIsNew = true)
+
+        pendingWorkoutsRepository.add(legs)
+
+        assertEquals(listOf(legDay.copy(latestWorkout = legs.asLatest()), pushDay), repository.templates.first())
+    }
+
+    @Test
+    fun `a workout saved with a new name shows in the templates until and after it's synced`() = runTest {
+        // The real repositories over one queue, as in the app.
+        val chestDayId = testId(12)
+        val templatesApi = object : TemplatesApi {
+            var templates = listOf(pushDay, legDay)
+            override suspend fun getTemplates() = ApiResult.Success(templates)
+            override suspend fun createTemplate(templateId: Uuid, name: String) = ApiResult.Success(chestDayId)
+        }
+        val workoutsApi = object : WorkoutsApi {
+            override suspend fun putWorkout(workoutId: Uuid, templateId: Uuid, workout: FinishedWorkout): ApiResult<Unit> {
+                val latest = LatestWorkout(workoutId, workout.startedAt, workout.completedAt, workout.exercises)
+                templatesApi.templates = listOf(WorkoutTemplate(templateId, workout.name, latest)) + templatesApi.templates
+                return ApiResult.Success(Unit)
+            }
+        }
+        val templatesRepository = RoomTemplatesRepository(templatesApi, dao, pendingWorkoutsRepository)
+        val workoutsRepository = ApiWorkoutsRepository(workoutsApi, templatesApi, pendingWorkoutsRepository, templatesRepository)
+        templatesRepository.refresh()
+        val chestDay = FinishedWorkout("Chest Day", Instant.parse("2026-10-04T17:00:00Z"), Instant.parse("2026-10-04T18:00:00Z"), listOf(squat))
+
+        workoutsRepository.save(testId(30), chestDay)
+
+        val beforeSync = templatesRepository.templates.first()
+        assertEquals(listOf("Chest Day", "Push Day", "Leg Day"), beforeSync.map { it.name })
+        assertEquals(LatestWorkout(testId(30), chestDay.startedAt, chestDay.completedAt, chestDay.exercises), beforeSync[0].latestWorkout)
+
+        workoutsRepository.sync()
+
+        val afterSync = templatesRepository.templates.first()
+        assertEquals(listOf(chestDayId, pushDay.id, legDay.id), afterSync.map { it.id })
+        assertEquals(beforeSync[0].latestWorkout, afterSync[0].latestWorkout)
     }
 }

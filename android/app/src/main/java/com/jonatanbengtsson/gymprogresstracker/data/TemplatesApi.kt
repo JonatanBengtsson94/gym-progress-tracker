@@ -22,6 +22,13 @@ data class WorkoutTemplate(val id: Uuid, val name: String, val latestWorkout: La
 interface TemplatesApi {
     /** Lists the user's templates, most recently performed first. */
     suspend fun getTemplates(): ApiResult<List<WorkoutTemplate>>
+
+    /**
+     * Creates the template [templateId] named [name], unless the user already has it or one with the
+     * same name, ignoring case. Returns the id of the template the user has afterwards, which is the
+     * existing one's when there was one.
+     */
+    suspend fun createTemplate(templateId: Uuid, name: String): ApiResult<Uuid>
 }
 
 class HttpTemplatesApi(private val client: ApiClient) : TemplatesApi {
@@ -34,6 +41,11 @@ class HttpTemplatesApi(private val client: ApiClient) : TemplatesApi {
                 latestWorkout = template.optJSONObject("latest_workout")?.let(::parseLatestWorkout)
             )
         }
+    }
+
+    override suspend fun createTemplate(templateId: Uuid, name: String): ApiResult<Uuid> {
+        val body = JSONObject().put("template_id", templateId.toString()).put("template_name", name)
+        return client.send("POST", "/templates", body) { json -> Uuid.parse(json.getString("template_id")) }
     }
 
     private fun parseLatestWorkout(json: JSONObject) = LatestWorkout(

@@ -16,10 +16,13 @@ import com.jonatanbengtsson.gymprogresstracker.data.HttpAuthApi
 import com.jonatanbengtsson.gymprogresstracker.data.HttpExercisesApi
 import com.jonatanbengtsson.gymprogresstracker.data.HttpTemplatesApi
 import com.jonatanbengtsson.gymprogresstracker.data.HttpWorkoutsApi
+import com.jonatanbengtsson.gymprogresstracker.data.PendingWorkoutsRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RoomActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RoomExercisesRepository
+import com.jonatanbengtsson.gymprogresstracker.data.RoomPendingWorkoutsRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RoomTemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
+import com.jonatanbengtsson.gymprogresstracker.data.TemplatesApi
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutsRepository
 import com.jonatanbengtsson.gymprogresstracker.data.local.GymDatabase
@@ -32,17 +35,18 @@ class AppContainer(context: Context) {
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    private val database = Room.databaseBuilder(context, GymDatabase::class.java, "gym-progress-tracker.db")
-        // Version 1 identified exercises by numbers the server no longer uses, so its data can't be kept.
-        .fallbackToDestructiveMigrationFrom(dropAllTables = true, 1)
-        .build()
+    private val database = Room.databaseBuilder(context, GymDatabase::class.java, "gym-progress-tracker.db").build()
 
     val activeWorkoutRepository: ActiveWorkoutRepository =
         RoomActiveWorkoutRepository(database.activeWorkoutDao(), applicationScope)
 
+    private val pendingWorkoutsRepository: PendingWorkoutsRepository =
+        RoomPendingWorkoutsRepository(database.pendingWorkoutDao())
+
     val sessionRepository: SessionRepository = DataStoreSessionRepository(
         PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("session") },
         activeWorkoutRepository,
+        pendingWorkoutsRepository,
         applicationScope
     )
 
@@ -50,12 +54,14 @@ class AppContainer(context: Context) {
 
     val authApi: AuthApi = HttpAuthApi(apiClient)
 
+    private val templatesApi: TemplatesApi = HttpTemplatesApi(apiClient)
+
     val exercisesRepository: ExercisesRepository = RoomExercisesRepository(HttpExercisesApi(apiClient), database.exerciseDao())
 
-    val templatesRepository: TemplatesRepository = RoomTemplatesRepository(HttpTemplatesApi(apiClient), database.templateDao())
+    val templatesRepository: TemplatesRepository = RoomTemplatesRepository(templatesApi, database.templateDao(), pendingWorkoutsRepository)
 
     val workoutsRepository: WorkoutsRepository =
-        ApiWorkoutsRepository(HttpWorkoutsApi(apiClient), templatesRepository, applicationScope)
+        ApiWorkoutsRepository(HttpWorkoutsApi(apiClient), templatesApi, pendingWorkoutsRepository, templatesRepository)
 }
 
 /** The app's [AppContainer], for view model factories. */

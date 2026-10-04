@@ -1,5 +1,6 @@
 package com.jonatanbengtsson.gymprogresstracker.ui.start
 
+import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
@@ -78,6 +79,7 @@ class StartWorkoutContentTest {
     private var discardClicks = 0
     private var retryClicks = 0
     private var logOutClicks = 0
+    private var syncClicks = 0
     private val startedTemplates = mutableListOf<WorkoutTemplate>()
 
     private fun setContent(uiState: StartWorkoutUiState) {
@@ -94,7 +96,8 @@ class StartWorkoutContentTest {
                 onContinueWorkout = { continueClicks++ },
                 onDiscardWorkout = { discardClicks++ },
                 onStartFromTemplate = { startedTemplates += it },
-                onLogOut = { logOutClicks++ }
+                onLogOut = { logOutClicks++ },
+                onSync = { syncClicks++ }
             )
         }
     }
@@ -169,6 +172,9 @@ class StartWorkoutContentTest {
 
     private fun str(@StringRes id: Int, vararg formatArgs: Any) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *formatArgs)
+
+    private fun plural(@PluralsRes id: Int, count: Int) =
+        InstrumentationRegistry.getInstrumentation().targetContext.resources.getQuantityString(id, count, count)
 
     @Test
     fun clickingLogOutLogsOut() {
@@ -301,6 +307,38 @@ class StartWorkoutContentTest {
         composeRule.onNodeWithText(str(R.string.start_workout_retry)).performClick()
 
         assertEquals(1, retryClicks)
+    }
+
+    @Test
+    fun nothingWaitingToSyncHasNoSyncButton() {
+        setContent(StartWorkoutUiState())
+
+        composeRule.onNodeWithText(str(R.string.start_workout_sync)).assertDoesNotExist()
+    }
+
+    @Test
+    fun workoutsWaitingToSyncShowHowManyAndSync() {
+        setContent(StartWorkoutUiState(pendingWorkouts = 2))
+
+        composeRule.onNodeWithText(plural(R.plurals.start_workout_pending, 2)).assertIsDisplayed()
+        composeRule.onNodeWithText(str(R.string.start_workout_sync)).performClick()
+
+        assertEquals(1, syncClicks)
+    }
+
+    @Test
+    fun syncingShowsProgressInsteadOfTheSyncButton() {
+        setContent(StartWorkoutUiState(pendingWorkouts = 1, isSyncing = true))
+
+        composeRule.onNodeWithText(str(R.string.start_workout_sync)).assertDoesNotExist()
+        composeRule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertIsDisplayed()
+    }
+
+    @Test
+    fun aFailedSyncShowsWhy() {
+        setContent(StartWorkoutUiState(pendingWorkouts = 1, syncErrorMessage = R.string.start_workout_sync_error_network))
+
+        composeRule.onNodeWithText(str(R.string.start_workout_sync_error_network)).assertIsDisplayed()
     }
 
     @Test

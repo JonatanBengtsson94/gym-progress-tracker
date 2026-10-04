@@ -398,9 +398,9 @@ class WorkoutContentTest {
     @Test
     fun aFailedSaveShowsWhy() {
         setContent(
-            WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat)), saveErrorMessage = R.string.workout_save_error_network)
+            WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat)), saveErrorMessage = R.string.workout_save_error_name)
         )
 
-        composeRule.onNodeWithText(str(R.string.workout_save_error_network)).assertIsDisplayed()
+        composeRule.onNodeWithText(str(R.string.workout_save_error_name)).assertIsDisplayed()
     }
 }

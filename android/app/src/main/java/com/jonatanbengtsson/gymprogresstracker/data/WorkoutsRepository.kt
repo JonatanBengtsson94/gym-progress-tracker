@@ -1,34 +1,87 @@
 package com.jonatanbengtsson.gymprogresstracker.data
 
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
 import kotlin.uuid.Uuid
 
-/** Logs finished workouts on the server. */
-interface WorkoutsRepository {
-    /**
-     * Saves [workout] as the user's workout [workoutId], replacing it if it was saved before. A workout
-     * without a template id is logged under the user's template with the same name, or a new one if
-     * there is none.
-     */
-    suspend fun save(workoutId: Uuid, workout: FinishedWorkout): ApiResult<Unit>
+/** How sending the saved workouts to the server went. */
+enum class SyncResult {
+    Success,
+    /** The session had ended, which logs the user out. */
+    SessionExpired,
+    NetworkError,
+    /** The server rejected at least one workout. The others were sent. */
+    ServerError
 }
 
-/** Refreshes the templates in [externalScope] after each save, so they show the new workout. */
+/** Finished workouts, saved on the device and sent to the server by [sync]. */
+interface WorkoutsRepository {
+    /** How many saved workouts haven't been sent to the server yet. */
+    val pendingCount: Flow<Int>
+
+    /**
+     * Saves [workout] on the device as workout [workoutId], replacing one saved before under the same
+     * id. It's logged under the user's template with the workout's name, ignoring case, or under a new
+     * template created on the device if there is none.
+     */
+    suspend fun save(workoutId: Uuid, workout: FinishedWorkout)
+
+    /**
+     * Sends the saved workouts to the server, oldest first, creating their templates first where needed,
+     * and removes each one the server accepts. Stops at the first network error, leaving the rest for
+     * next time.
+     */
+    suspend fun sync(): SyncResult
+}
+
 class ApiWorkoutsRepository(
-    private val api: WorkoutsApi,
-    private val templatesRepository: TemplatesRepository,
-    private val externalScope: CoroutineScope
+    private val workoutsApi: WorkoutsApi,
+    private val templatesApi: TemplatesApi,
+    private val pendingWorkoutsRepository: PendingWorkoutsRepository,
+    private val templatesRepository: TemplatesRepository
 ) : WorkoutsRepository {
 
-    override suspend fun save(workoutId: Uuid, workout: FinishedWorkout): ApiResult<Unit> {
+    override val pendingCount: Flow<Int> = pendingWorkoutsRepository.workouts.map { it.size }
+
+    override suspend fun save(workoutId: Uuid, workout: FinishedWorkout) {
         // Template names are unique per user regardless of case, so the server rejects a new template
         // whose name only differs in case from an existing one.
-        val templateId = workout.templateId ?: templatesRepository.templates.first()
-            .find { it.name.equals(workout.templateName.trim(), ignoreCase = true) }?.id
-        val result = api.putWorkout(workoutId, workout.copy(templateId = templateId))
-        if (result is ApiResult.Success) externalScope.launch { templatesRepository.refresh() }
-        return result
+        val existing = templatesRepository.templates.first().find { it.name.equals(workout.name, ignoreCase = true) }?.id
+        // A template matched here may itself have been created on the device by a workout still waiting to sync.
+        val templateIsNew = existing == null ||
+            pendingWorkoutsRepository.workouts.first().any { it.templateIsNew && it.templateId == existing }
+        pendingWorkoutsRepository.add(PendingWorkout(workoutId, existing ?: Uuid.random(), templateIsNew, workout))
+    }
+
+    override suspend fun sync(): SyncResult {
+        var rejected = false
+        var sent = false
+        for (pending in pendingWorkoutsRepository.workouts.first()) {
+            val templateId = if (pending.templateIsNew) {
+                when (val created = templatesApi.createTemplate(pending.templateId, pending.workout.name)) {
+                    is ApiResult.Success -> created.value
+                    ApiResult.ServerError -> {
+                        rejected = true
+                        continue
+                    }
+                    ApiResult.NetworkError -> return SyncResult.NetworkError
+                    ApiResult.Unauthorized -> return SyncResult.SessionExpired
+                }
+            } else {
+                pending.templateId
+            }
+            when (workoutsApi.putWorkout(pending.workoutId, templateId, pending.workout)) {
+                is ApiResult.Success -> {
+                    pendingWorkoutsRepository.remove(pending.workoutId)
+                    sent = true
+                }
+                ApiResult.ServerError -> rejected = true
+                ApiResult.NetworkError -> return SyncResult.NetworkError
+                ApiResult.Unauthorized -> return SyncResult.SessionExpired
+            }
+        }
+        if (sent) templatesRepository.refresh()
+        return if (rejected) SyncResult.ServerError else SyncResult.Success
     }
 }

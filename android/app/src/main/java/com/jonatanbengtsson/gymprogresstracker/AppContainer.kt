@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewmodel.CreationExtras
 import androidx.room.Room
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
+import com.jonatanbengtsson.gymprogresstracker.data.ApiWorkoutsRepository
 import com.jonatanbengtsson.gymprogresstracker.data.ApiClient
 import com.jonatanbengtsson.gymprogresstracker.data.AuthApi
 import com.jonatanbengtsson.gymprogresstracker.data.DataStoreSessionRepository
@@ -14,11 +15,13 @@ import com.jonatanbengtsson.gymprogresstracker.data.ExercisesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.HttpAuthApi
 import com.jonatanbengtsson.gymprogresstracker.data.HttpExercisesApi
 import com.jonatanbengtsson.gymprogresstracker.data.HttpTemplatesApi
+import com.jonatanbengtsson.gymprogresstracker.data.HttpWorkoutsApi
 import com.jonatanbengtsson.gymprogresstracker.data.RoomActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RoomExercisesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RoomTemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesRepository
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutsRepository
 import com.jonatanbengtsson.gymprogresstracker.data.local.GymDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +53,9 @@ class AppContainer(context: Context) {
     val exercisesRepository: ExercisesRepository = RoomExercisesRepository(HttpExercisesApi(apiClient), database.exerciseDao())
 
     val templatesRepository: TemplatesRepository = RoomTemplatesRepository(HttpTemplatesApi(apiClient), database.templateDao())
+
+    val workoutsRepository: WorkoutsRepository =
+        ApiWorkoutsRepository(HttpWorkoutsApi(apiClient), templatesRepository, applicationScope)
 }
 
 /** The app's [AppContainer], for view model factories. */

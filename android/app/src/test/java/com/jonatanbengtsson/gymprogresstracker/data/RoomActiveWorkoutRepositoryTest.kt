@@ -58,7 +58,8 @@ class RoomActiveWorkoutRepositoryTest {
         exercises = listOf(
             WorkoutExerciseEntry(squat, listOf(SetEntry("100", "5", completed = true), SetEntry("102,5", "3", id = 1))),
             WorkoutExerciseEntry(benchPress, listOf(SetEntry()))
-        )
+        ),
+        workoutId = testId(20)
     )
 
     private val dao = FakeActiveWorkoutDao()
@@ -112,7 +113,7 @@ class RoomActiveWorkoutRepositoryTest {
         assertEquals(workout, repository.workout.value)
         runCurrent()
 
-        assertEquals(ActiveWorkoutEntity(startedAt = startedAt, name = "Push day"), dao.workout)
+        assertEquals(ActiveWorkoutEntity(startedAt = startedAt, name = "Push day", workoutId = testId(20)), dao.workout)
         assertEquals(
             listOf(ActiveWorkoutExerciseEntity(testId(1), "Squat (Barbell)", 0), ActiveWorkoutExerciseEntity(testId(2), "Bench Press (Barbell)", 1)),
             dao.exercises
@@ -154,7 +155,7 @@ class RoomActiveWorkoutRepositoryTest {
     }
 
     @Test
-    fun `an emptied workout is saved as not started and unnamed`() = runTest {
+    fun `an emptied workout is saved as not started, unnamed and without an id`() = runTest {
         givenSaved(workout)
         val repository = repository()
         runCurrent()

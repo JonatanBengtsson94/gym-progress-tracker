@@ -2,12 +2,17 @@ package com.jonatanbengtsson.gymprogresstracker.ui.workout
 
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkout
+import com.jonatanbengtsson.gymprogresstracker.data.ApiResult
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.FakeActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeExercisesRepository
+import com.jonatanbengtsson.gymprogresstracker.data.FakeWorkoutsRepository
+import com.jonatanbengtsson.gymprogresstracker.data.FinishedExercise
+import com.jonatanbengtsson.gymprogresstracker.data.FinishedWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutSet
 import com.jonatanbengtsson.gymprogresstracker.data.testId
 import com.jonatanbengtsson.gymprogresstracker.ui.login.MainDispatcherRule
 import kotlinx.coroutines.CompletableDeferred
@@ -16,7 +21,9 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 
 class WorkoutViewModelTest {
 
@@ -29,9 +36,27 @@ class WorkoutViewModelTest {
 
     private val exercisesRepository = FakeExercisesRepository()
     private val activeWorkoutRepository = FakeActiveWorkoutRepository()
+    private val workoutsRepository = FakeWorkoutsRepository()
+
+    private val startedAt = Instant.parse("2026-10-04T17:00:00Z")
+    private val now = Instant.parse("2026-10-04T18:00:00Z")
 
     // Created lazily so each test can set up the fakes before the view model refreshes on init.
-    private val viewModel by lazy { WorkoutViewModel(exercisesRepository, activeWorkoutRepository) }
+    private val viewModel by lazy {
+        WorkoutViewModel(exercisesRepository, activeWorkoutRepository, workoutsRepository, Clock.fixed(now, ZoneOffset.UTC))
+    }
+
+    /** A workout named Push day with one completed and one uncompleted squat set, and a bench press set without reps. */
+    private fun givenWorkoutToSave() {
+        activeWorkoutRepository.workout.value = ActiveWorkout(
+            startedAt = startedAt,
+            name = " Push day ",
+            exercises = listOf(
+                WorkoutExerciseEntry(squat, listOf(SetEntry("102,5", "5", completed = true), SetEntry("105", "3", id = 1))),
+                WorkoutExerciseEntry(benchPress, listOf(SetEntry("60")))
+            )
+        )
+    }
 
     @Test
     fun `refreshes the exercises on creation`() {
@@ -194,7 +219,6 @@ class WorkoutViewModelTest {
 
         assertTrue(viewModel.uiState.isLoadingWorkout)
 
-        val startedAt = Instant.parse("2026-10-04T17:00:00Z")
         activeWorkoutRepository.workout.value = ActiveWorkout(startedAt, exercises = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5")))))
 
         assertFalse(viewModel.uiState.isLoadingWorkout)
@@ -204,7 +228,6 @@ class WorkoutViewModelTest {
 
     @Test
     fun `changes to the workout are saved and keep when it started`() {
-        val startedAt = Instant.parse("2026-10-04T17:00:00Z")
         activeWorkoutRepository.workout.value = ActiveWorkout(startedAt)
 
         viewModel.addExercise(squat)
@@ -398,6 +421,150 @@ class WorkoutViewModelTest {
 
         viewModel.updateReps(squat.id, 0, "")
         assertEquals("", setsOf(squat).single().reps)
+    }
+
+    @Test
+    fun `weight in grams is read from kg with a point or a comma`() {
+        assertEquals(0, SetEntry(weightKg = "").weightGrams)
+        assertEquals(0, SetEntry(weightKg = ".").weightGrams)
+        assertEquals(100000, SetEntry(weightKg = "100").weightGrams)
+        assertEquals(62500, SetEntry(weightKg = "62,5").weightGrams)
+        assertEquals(62000, SetEntry(weightKg = "62,").weightGrams)
+        assertEquals(1250, SetEntry(weightKg = "1.25").weightGrams)
+        assertEquals(9999990, SetEntry(weightKg = "9999.99").weightGrams)
+    }
+
+    @Test
+    fun `saving sends the completed sets under the workout's name, completed now`() {
+        givenWorkoutToSave()
+
+        viewModel.saveWorkout()
+
+        val (workoutId, workout) = workoutsRepository.saves.single()
+        assertEquals(workoutId, activeWorkoutRepository.workout.value?.workoutId)
+        assertEquals(
+            FinishedWorkout(
+                templateId = null,
+                templateName = "Push day",
+                startedAt = startedAt,
+                completedAt = now,
+                exercises = listOf(FinishedExercise(squat.id, listOf(WorkoutSet(reps = 5, weightGrams = 102500))))
+            ),
+            workout
+        )
+        assertTrue(viewModel.uiState.isSaving)
+    }
+
+    @Test
+    fun `a saved workout is cleared`() {
+        givenWorkoutToSave()
+        viewModel.saveWorkout()
+
+        workoutsRepository.saveResult.complete(ApiResult.Success(Unit))
+
+        assertEquals(ActiveWorkout(), activeWorkoutRepository.workout.value)
+        assertTrue(viewModel.uiState.isSaved)
+        assertFalse(viewModel.uiState.isSaving)
+    }
+
+    @Test
+    fun `saving again after a failure reuses the workout's id`() {
+        givenWorkoutToSave()
+        viewModel.saveWorkout()
+        workoutsRepository.saveResult.complete(ApiResult.NetworkError)
+        workoutsRepository.saveResult = CompletableDeferred()
+
+        viewModel.saveWorkout()
+
+        assertEquals(1, workoutsRepository.saves.map { it.first }.distinct().size)
+        assertEquals(2, workoutsRepository.saves.size)
+    }
+
+    @Test
+    fun `saving is ignored while a save is in flight`() {
+        givenWorkoutToSave()
+        viewModel.saveWorkout()
+
+        viewModel.saveWorkout()
+
+        assertEquals(1, workoutsRepository.saves.size)
+    }
+
+    @Test
+    fun `a workout changed while it's being saved is kept`() {
+        givenWorkoutToSave()
+        viewModel.saveWorkout()
+
+        viewModel.updateReps(benchPress.id, 0, "8")
+        workoutsRepository.saveResult.complete(ApiResult.Success(Unit))
+
+        assertEquals(listOf(SetEntry("60", "8")), setsOf(benchPress))
+        assertFalse(viewModel.uiState.isSaved)
+        assertFalse(viewModel.uiState.isSaving)
+    }
+
+    @Test
+    fun `network error saving keeps the workout and shows network error`() {
+        assertSaveErrorFor(ApiResult.NetworkError, R.string.workout_save_error_network)
+    }
+
+    @Test
+    fun `server error saving keeps the workout and shows server error`() {
+        assertSaveErrorFor(ApiResult.ServerError, R.string.workout_save_error_server)
+    }
+
+    @Test
+    fun `an expired session while saving keeps the workout and shows no error`() {
+        assertSaveErrorFor(ApiResult.Unauthorized, null)
+    }
+
+    @Test
+    fun `an unnamed workout isn't saved`() {
+        givenWorkoutToSave()
+        activeWorkoutRepository.update { it.copy(name = " ") }
+
+        viewModel.saveWorkout()
+
+        assertEquals(emptyList<Any>(), workoutsRepository.saves)
+        assertEquals(R.string.workout_save_error_name, viewModel.uiState.saveErrorMessage)
+        assertFalse(viewModel.uiState.isSaving)
+    }
+
+    @Test
+    fun `a workout without completed sets isn't saved`() {
+        givenWorkoutToSave()
+        viewModel.toggleSetCompleted(squat.id, 0)
+
+        viewModel.saveWorkout()
+
+        assertEquals(emptyList<Any>(), workoutsRepository.saves)
+        assertEquals(R.string.workout_save_error_no_sets, viewModel.uiState.saveErrorMessage)
+    }
+
+    @Test
+    fun `saving again clears the last error`() {
+        givenWorkoutToSave()
+        viewModel.saveWorkout()
+        workoutsRepository.saveResult.complete(ApiResult.NetworkError)
+        workoutsRepository.saveResult = CompletableDeferred()
+
+        viewModel.saveWorkout()
+
+        assertEquals(null, viewModel.uiState.saveErrorMessage)
+        assertTrue(viewModel.uiState.isSaving)
+    }
+
+    private fun assertSaveErrorFor(result: ApiResult<Unit>, expectedMessage: Int?) {
+        givenWorkoutToSave()
+        viewModel.saveWorkout()
+        val saving = activeWorkoutRepository.workout.value
+
+        workoutsRepository.saveResult.complete(result)
+
+        assertEquals(saving, activeWorkoutRepository.workout.value)
+        assertEquals(expectedMessage, viewModel.uiState.saveErrorMessage)
+        assertFalse(viewModel.uiState.isSaving)
+        assertFalse(viewModel.uiState.isSaved)
     }
 
     private fun workoutExercises() = viewModel.uiState.workoutExercises.map { it.exercise }

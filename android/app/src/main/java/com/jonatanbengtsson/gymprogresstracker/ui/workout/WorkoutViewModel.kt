@@ -10,14 +10,21 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.appContainer
+import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
+import com.jonatanbengtsson.gymprogresstracker.data.ApiResult
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesRepository
+import com.jonatanbengtsson.gymprogresstracker.data.FinishedExercise
+import com.jonatanbengtsson.gymprogresstracker.data.FinishedWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutSet
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutsRepository
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import java.time.Clock
 import java.time.Instant
 import kotlin.uuid.Uuid
 
@@ -35,12 +42,20 @@ data class WorkoutUiState(
     /** The exercises stored on the device, shown even while they're being fetched or when that fails. */
     val exercises: List<Exercise> = emptyList(),
     /** Why fetching the exercises failed last time. */
-    @StringRes val exercisesErrorMessage: Int? = null
+    @StringRes val exercisesErrorMessage: Int? = null,
+    /** True while the workout is being saved to the server. */
+    val isSaving: Boolean = false,
+    /** Why the workout couldn't be saved last time. */
+    @StringRes val saveErrorMessage: Int? = null,
+    /** True once the workout has been saved and cleared to make way for the next one. */
+    val isSaved: Boolean = false
 )
 
 class WorkoutViewModel(
     private val exercisesRepository: ExercisesRepository,
-    private val activeWorkoutRepository: ActiveWorkoutRepository
+    private val activeWorkoutRepository: ActiveWorkoutRepository,
+    private val workoutsRepository: WorkoutsRepository,
+    private val clock: Clock = Clock.systemUTC()
 ) : ViewModel() {
 
     var uiState by mutableStateOf(WorkoutUiState(isLoadingWorkout = true))
@@ -125,6 +140,53 @@ class WorkoutViewModel(
     private fun updateExercises(transform: (List<WorkoutExerciseEntry>) -> List<WorkoutExerciseEntry>) =
         activeWorkoutRepository.update { it.copy(exercises = transform(it.exercises)) }
 
+    /**
+     * Saves the workout's completed sets to the server, as completed now, and clears the workout once
+     * it's saved. Sets that aren't completed are left out. A workout changed while it's being saved is
+     * kept instead, so the changes can be saved too.
+     */
+    fun saveWorkout() {
+        if (uiState.isSaving) return
+        activeWorkoutRepository.update { it.copy(workoutId = it.workoutId ?: Uuid.random()) }
+        val workout = activeWorkoutRepository.workout.value ?: return
+        val workoutId = workout.workoutId ?: return
+
+        val exercises = workout.exercises.mapNotNull { entry ->
+            val sets = entry.sets.filter { it.completed }.map { WorkoutSet(reps = it.reps.toInt(), weightGrams = it.weightGrams) }
+            if (sets.isEmpty()) null else FinishedExercise(entry.exercise.id, sets)
+        }
+        val invalidMessage = when {
+            workout.name.isBlank() -> R.string.workout_save_error_name
+            exercises.isEmpty() -> R.string.workout_save_error_no_sets
+            else -> null
+        }
+        uiState = uiState.copy(isSaving = invalidMessage == null, saveErrorMessage = invalidMessage)
+        if (invalidMessage != null) return
+
+        val completedAt = clock.instant()
+        val finished = FinishedWorkout(
+            templateId = null,
+            templateName = workout.name.trim(),
+            startedAt = workout.startedAt ?: completedAt,
+            completedAt = completedAt,
+            exercises = exercises
+        )
+        viewModelScope.launch {
+            val result = workoutsRepository.save(workoutId, finished)
+            val cleared = result is ApiResult.Success && activeWorkoutRepository.workout.value == workout
+            if (cleared) activeWorkoutRepository.update { ActiveWorkout() }
+            uiState = uiState.copy(
+                isSaving = false,
+                isSaved = cleared,
+                saveErrorMessage = when (result) {
+                    ApiResult.NetworkError -> R.string.workout_save_error_network
+                    ApiResult.ServerError -> R.string.workout_save_error_server
+                    is ApiResult.Success, ApiResult.Unauthorized -> null
+                }
+            )
+        }
+    }
+
     /** Fetches the exercises from the server, replacing the stored ones. */
     fun loadExercises() {
         if (uiState.isLoadingExercises) return
@@ -145,7 +207,9 @@ class WorkoutViewModel(
 
     companion object {
         val Factory = viewModelFactory {
-            initializer { WorkoutViewModel(appContainer.exercisesRepository, appContainer.activeWorkoutRepository) }
+            initializer {
+                WorkoutViewModel(appContainer.exercisesRepository, appContainer.activeWorkoutRepository, appContainer.workoutsRepository)
+            }
         }
 
         private val WEIGHT_INPUT = Regex("""\d{0,4}([.,]\d{0,2})?""")

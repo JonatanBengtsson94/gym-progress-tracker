@@ -1,6 +1,7 @@
 package com.jonatanbengtsson.gymprogresstracker.ui.workout
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.StringRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -51,6 +52,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -85,9 +87,14 @@ import kotlin.uuid.Uuid
 
 @Composable
 fun WorkoutScreen(
+    onWorkoutSaved: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: WorkoutViewModel = viewModel(factory = WorkoutViewModel.Factory)
 ) {
+    LaunchedEffect(viewModel.uiState.isSaved) {
+        if (viewModel.uiState.isSaved) onWorkoutSaved()
+    }
+
     WorkoutContent(
         uiState = viewModel.uiState,
         onNameChange = viewModel::updateName,
@@ -99,6 +106,7 @@ fun WorkoutScreen(
         onToggleSetCompleted = viewModel::toggleSetCompleted,
         onWeightChange = viewModel::updateWeight,
         onRepsChange = viewModel::updateReps,
+        onSave = viewModel::saveWorkout,
         modifier = modifier
     )
 }
@@ -115,6 +123,7 @@ fun WorkoutContent(
     onToggleSetCompleted: (exerciseId: Uuid, setIndex: Int) -> Unit,
     onWeightChange: (exerciseId: Uuid, setIndex: Int, weightKg: String) -> Unit,
     onRepsChange: (exerciseId: Uuid, setIndex: Int, reps: String) -> Unit,
+    onSave: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var showExercisePicker by rememberSaveable { mutableStateOf(false) }
@@ -177,6 +186,11 @@ fun WorkoutContent(
                     Text(stringResource(R.string.workout_add_exercise))
                 }
             }
+            if (uiState.workoutExercises.isNotEmpty()) {
+                item {
+                    SaveWorkoutButton(isSaving = uiState.isSaving, errorMessage = uiState.saveErrorMessage, onSave = onSave)
+                }
+            }
         }
     }
 
@@ -199,6 +213,27 @@ fun WorkoutContent(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun SaveWorkoutButton(isSaving: Boolean, @StringRes errorMessage: Int?, onSave: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Button(onClick = onSave, enabled = !isSaving, modifier = Modifier.fillMaxWidth()) {
+            if (isSaving) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = LocalContentColor.current)
+            } else {
+                Text(stringResource(R.string.workout_save))
+            }
+        }
+        if (errorMessage != null) {
+            Text(
+                text = stringResource(errorMessage),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
 
@@ -599,7 +634,8 @@ fun WorkoutContentPreview() {
             onRemoveSet = { _, _ -> },
             onToggleSetCompleted = { _, _ -> },
             onWeightChange = { _, _, _ -> },
-            onRepsChange = { _, _, _ -> }
+            onRepsChange = { _, _, _ -> },
+            onSave = {}
         )
     }
 }

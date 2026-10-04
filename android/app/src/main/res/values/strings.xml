@@ -52,4 +52,9 @@
     <string name="workout_exercises_error_network">Could not load exercises. Check your connection and try again.</string>
     <string name="workout_exercises_error_server">Something went wrong loading exercises.</string>
     <string name="workout_exercises_retry">Try again</string>
+    <string name="workout_save">Save workout</string>
+    <string name="workout_save_error_name">Name the workout to save it.</string>
+    <string name="workout_save_error_no_sets">Complete at least one set to save the workout.</string>
+    <string name="workout_save_error_network">Could not save the workout. Check your connection and try again.</string>
+    <string name="workout_save_error_server">Something went wrong saving the workout.</string>
 </resources>

@@ -51,7 +51,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                 )
             }
             entry<Screen.Workout> {
-                WorkoutScreen()
+                WorkoutScreen(onWorkoutSaved = { backStack.remove(Screen.Workout) })
             }
         }
     )

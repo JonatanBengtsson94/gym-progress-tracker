@@ -59,7 +59,8 @@ class WorkoutContentTest {
                     onRemoveSet = { id, index -> setEvents += "remove $id $index" },
                     onToggleSetCompleted = { id, index -> setEvents += "complete $id $index" },
                     onWeightChange = { id, index, kg -> setEvents += "weight $id $index $kg" },
-                    onRepsChange = { id, index, reps -> setEvents += "reps $id $index $reps" }
+                    onRepsChange = { id, index, reps -> setEvents += "reps $id $index $reps" },
+                    onSave = { setEvents += "save" }
                 )
             }
         }
@@ -368,5 +369,38 @@ class WorkoutContentTest {
         composeRule.onNodeWithText(str(R.string.workout_exercises_retry)).performClick()
 
         assertEquals(1, retryClicks)
+    }
+
+    @Test
+    fun anEmptyWorkoutHasNoSaveButton() {
+        setContent(WorkoutUiState())
+
+        composeRule.onNodeWithText(str(R.string.workout_save)).assertDoesNotExist()
+    }
+
+    @Test
+    fun savingReportsIt() {
+        setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat))))
+
+        composeRule.onNodeWithText(str(R.string.workout_save)).performClick()
+
+        assertEquals(listOf("save"), setEvents)
+    }
+
+    @Test
+    fun aWorkoutBeingSavedCannotBeSavedAgain() {
+        setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat)), isSaving = true))
+
+        composeRule.onNodeWithText(str(R.string.workout_save)).assertDoesNotExist()
+        composeRule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertIsDisplayed()
+    }
+
+    @Test
+    fun aFailedSaveShowsWhy() {
+        setContent(
+            WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat)), saveErrorMessage = R.string.workout_save_error_network)
+        )
+
+        composeRule.onNodeWithText(str(R.string.workout_save_error_network)).assertIsDisplayed()
     }
 }

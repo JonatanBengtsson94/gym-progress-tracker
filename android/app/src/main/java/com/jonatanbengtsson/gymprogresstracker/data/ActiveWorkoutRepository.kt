@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.Instant
+import kotlin.uuid.Uuid
 
 /**
  * A set as typed, kept as text so partial input like "62," survives until it's finished. [id] tells the
@@ -26,6 +27,9 @@ data class SetEntry(
 ) {
     /** A set can only be completed once it has at least one rep. */
     val canComplete: Boolean get() = (reps.toIntOrNull() ?: 0) > 0
+
+    /** The weight in grams, 0 when none has been entered. */
+    val weightGrams: Int get() = weightKg.replace(',', '.').toBigDecimalOrNull()?.movePointRight(3)?.toInt() ?: 0
 }
 
 data class WorkoutExerciseEntry(val exercise: Exercise, val sets: List<SetEntry> = listOf(SetEntry())) {
@@ -41,7 +45,9 @@ data class ActiveWorkout(
     /** What the user named the workout, empty until they do. */
     val name: String = "",
     /** The exercises, in the order they were added. */
-    val exercises: List<WorkoutExerciseEntry> = emptyList()
+    val exercises: List<WorkoutExerciseEntry> = emptyList(),
+    /** The id the workout is saved to the server under, null until the first time it's saved. */
+    val workoutId: Uuid? = null
 )
 
 /** The workout being logged, kept on the device so it outlives both the screen and the app's process. */
@@ -71,7 +77,8 @@ class RoomActiveWorkoutRepository(
             _workout.value = ActiveWorkout(
                 startedAt = saved?.startedAt,
                 name = saved?.name.orEmpty(),
-                exercises = dao.getExercises().map { it.toEntry() }
+                exercises = dao.getExercises().map { it.toEntry() },
+                workoutId = saved?.workoutId
             )
             _workout.filterNotNull().collect { save(it) }
         }
@@ -82,7 +89,7 @@ class RoomActiveWorkoutRepository(
     }
 
     private suspend fun save(workout: ActiveWorkout) = dao.replaceWorkout(
-        workout = ActiveWorkoutEntity(startedAt = workout.startedAt, name = workout.name),
+        workout = ActiveWorkoutEntity(startedAt = workout.startedAt, name = workout.name, workoutId = workout.workoutId),
         exercises = workout.exercises.mapIndexed { position, entry ->
             ActiveWorkoutExerciseEntity(exerciseId = entry.exercise.id, name = entry.exercise.name, position = position)
         },

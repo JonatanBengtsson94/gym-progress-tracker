@@ -16,13 +16,16 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
+import com.jonatanbengtsson.gymprogresstracker.data.ApiResult
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesRepository
+import com.jonatanbengtsson.gymprogresstracker.data.FinishedWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.SessionState
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutsRepository
 import com.jonatanbengtsson.gymprogresstracker.data.testId
 import com.jonatanbengtsson.gymprogresstracker.ui.navigation.Screen
 import com.jonatanbengtsson.gymprogresstracker.ui.start.StartWorkoutScreen
@@ -34,6 +37,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.uuid.Uuid
 
 /** Drives the real start and workout screens over one workout repository, navigating between them like AppNavigation. */
 @RunWith(AndroidJUnit4::class)
@@ -78,6 +82,9 @@ class WorkoutScreenTest {
             override val templates = MutableStateFlow(emptyList<WorkoutTemplate>())
             override suspend fun refresh() = RefreshResult.Success
         }
+        val workoutsRepository = object : WorkoutsRepository {
+            override suspend fun save(workoutId: Uuid, workout: FinishedWorkout) = ApiResult.Success(Unit)
+        }
         val exercisesRepository = object : ExercisesRepository {
             override val exercises = MutableStateFlow(emptyList<Exercise>())
             override suspend fun refresh() = RefreshResult.Success
@@ -87,7 +94,7 @@ class WorkoutScreenTest {
             StartWorkoutViewModel(templatesRepository, activeWorkoutRepository, sessionRepository)
         }
         workoutViewModel = composeRule.runOnUiThread {
-            WorkoutViewModel(exercisesRepository, activeWorkoutRepository)
+            WorkoutViewModel(exercisesRepository, activeWorkoutRepository, workoutsRepository)
         }
 
         composeRule.setContent {
@@ -105,7 +112,7 @@ class WorkoutScreenTest {
                             )
                         }
                         entry<Screen.Workout> {
-                            WorkoutScreen(viewModel = workoutViewModel)
+                            WorkoutScreen(onWorkoutSaved = { backStack.remove(Screen.Workout) }, viewModel = workoutViewModel)
                         }
                     }
                 )
@@ -117,6 +124,21 @@ class WorkoutScreenTest {
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
     private fun addSquat() = composeRule.runOnIdle { workoutViewModel.addExercise(squat) }
+
+    @Test
+    fun aSavedWorkoutReturnsToTheStartScreenWithNothingInProgress() {
+        composeRule.runOnIdle {
+            workoutViewModel.updateName("Leg day")
+            workoutViewModel.addExercise(squat)
+            workoutViewModel.updateReps(squat.id, 0, "5")
+            workoutViewModel.toggleSetCompleted(squat.id, 0)
+        }
+
+        composeRule.onNodeWithText(str(R.string.workout_save)).performClick()
+
+        composeRule.onNodeWithText(str(R.string.start_workout_continue)).assertDoesNotExist()
+        composeRule.onNodeWithText(str(R.string.start_workout_new)).assertIsDisplayed()
+    }
 
     @Test
     fun leavingAWorkoutInProgressOffersToContinueIt() {

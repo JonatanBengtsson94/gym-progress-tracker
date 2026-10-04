@@ -25,7 +25,7 @@ class DataStoreSessionRepositoryTest {
     val folder = TemporaryFolder()
 
     private val squat = Exercise(testId(1), "Squat (Barbell)")
-    private val workout = ActiveWorkout(Instant.parse("2026-10-04T17:00:00Z"), listOf(WorkoutExerciseEntry(squat)))
+    private val workout = ActiveWorkout(Instant.parse("2026-10-04T17:00:00Z"), exercises = listOf(WorkoutExerciseEntry(squat)))
     private val activeWorkoutRepository = FakeActiveWorkoutRepository(workout)
 
     private val file by lazy { File(folder.root, "session.preferences_pb") }

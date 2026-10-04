@@ -4,6 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.BasicTextField
@@ -28,6 +31,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -55,13 +59,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -82,6 +90,7 @@ fun WorkoutScreen(
 ) {
     WorkoutContent(
         uiState = viewModel.uiState,
+        onNameChange = viewModel::updateName,
         onRetryExercises = viewModel::loadExercises,
         onExerciseSelected = viewModel::addExercise,
         onRemoveExercise = viewModel::removeExercise,
@@ -97,6 +106,7 @@ fun WorkoutScreen(
 @Composable
 fun WorkoutContent(
     uiState: WorkoutUiState,
+    onNameChange: (String) -> Unit,
     onRetryExercises: () -> Unit,
     onExerciseSelected: (Exercise) -> Unit,
     onRemoveExercise: (exerciseId: Uuid) -> Unit,
@@ -133,12 +143,8 @@ fun WorkoutContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(R.string.workout_title),
-                    style = MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.weight(1f)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                WorkoutNameField(name = uiState.name, onNameChange = onNameChange, modifier = Modifier.weight(1f))
                 uiState.startedAt?.let {
                     WorkoutTimer(startedAt = it, style = MaterialTheme.typography.titleLarge)
                 }
@@ -194,6 +200,59 @@ fun WorkoutContent(
             }
         )
     }
+}
+
+@Composable
+private fun WorkoutNameField(name: String, onNameChange: (String) -> Unit, modifier: Modifier) {
+    val focusManager = LocalFocusManager.current
+    val description = stringResource(R.string.workout_name_description)
+    val style = MaterialTheme.typography.headlineMedium
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    val underlineColor = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+    val underlineWidth = if (focused) 2.dp else 1.dp
+
+    BasicTextField(
+        value = name,
+        onValueChange = onNameChange,
+        modifier = modifier.semantics { contentDescription = description },
+        interactionSource = interactionSource,
+        textStyle = style.copy(color = MaterialTheme.colorScheme.onSurface),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+        singleLine = true,
+        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .wrapContentWidth(Alignment.Start)
+                    .drawBehind {
+                        val y = size.height - underlineWidth.toPx() / 2
+                        drawLine(underlineColor, Offset(0f, y), Offset(size.width, y), underlineWidth.toPx())
+                    }
+                    .padding(bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Box(modifier = Modifier.weight(1f, fill = false)) {
+                    if (name.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.workout_name_placeholder),
+                            style = style,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    innerTextField()
+                }
+                Icon(
+                    imageVector = Icons.Filled.Edit,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    )
 }
 
 @Composable
@@ -520,6 +579,7 @@ fun WorkoutContentPreview() {
         WorkoutContent(
             uiState = WorkoutUiState(
                 startedAt = Instant.now().minusSeconds(1234),
+                name = "Push day",
                 workoutExercises = listOf(
                     WorkoutExerciseEntry(
                         exercise = Exercise(Uuid.fromLongs(0, 1), "Bench Press (Barbell)"),
@@ -531,6 +591,7 @@ fun WorkoutContentPreview() {
                 ),
                 exercises = listOf(Exercise(Uuid.fromLongs(0, 1), "Bench Press (Barbell)"), Exercise(Uuid.fromLongs(0, 2), "Squat (Barbell)"))
             ),
+            onNameChange = {},
             onRetryExercises = {},
             onExerciseSelected = {},
             onRemoveExercise = {},

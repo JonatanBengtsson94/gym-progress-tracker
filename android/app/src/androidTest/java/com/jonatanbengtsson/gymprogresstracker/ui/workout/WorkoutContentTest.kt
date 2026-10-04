@@ -51,6 +51,7 @@ class WorkoutContentTest {
             GymProgressTrackerTheme {
                 WorkoutContent(
                     uiState = uiState,
+                    onNameChange = { setEvents += "name $it" },
                     onRetryExercises = { retryClicks++ },
                     onExerciseSelected = { selectedExercises += it },
                     onRemoveExercise = { setEvents += "remove exercise $it" },
@@ -82,6 +83,24 @@ class WorkoutContentTest {
         composeRule.onNodeWithText(str(R.string.workout_choose_exercise)).assertIsDisplayed()
         composeRule.onNodeWithText("Bench Press (Barbell)").assertIsDisplayed()
         composeRule.onNodeWithText("Squat (Barbell)").assertIsDisplayed()
+    }
+
+    @Test
+    fun anUnnamedWorkoutShowsAPlaceholder() {
+        setContent(WorkoutUiState())
+
+        composeRule.onNodeWithText(str(R.string.workout_name_placeholder)).assertIsDisplayed()
+    }
+
+    @Test
+    fun typingANameReportsIt() {
+        setContent(WorkoutUiState(name = "Push"))
+
+        composeRule.onNodeWithContentDescription(str(R.string.workout_name_description)).assert(hasText("Push"))
+        composeRule.onNodeWithContentDescription(str(R.string.workout_name_description)).performTextInput(" day")
+
+        assertEquals(listOf("name Push day"), setEvents)
+        composeRule.onNodeWithText(str(R.string.workout_name_placeholder)).assertDoesNotExist()
     }
 
     @Test

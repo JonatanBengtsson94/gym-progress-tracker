@@ -19,7 +19,7 @@ class ActiveWorkoutDaoTest {
     private lateinit var database: GymDatabase
     private lateinit var dao: ActiveWorkoutDao
 
-    private val workout = ActiveWorkoutEntity(startedAt = Instant.parse("2026-10-04T17:00:00Z"))
+    private val workout = ActiveWorkoutEntity(startedAt = Instant.parse("2026-10-04T17:00:00Z"), name = "Push day")
     private val squat = ActiveWorkoutExerciseEntity(exerciseId = testId(1), name = "Squat (Barbell)", position = 0)
     private val benchPress = ActiveWorkoutExerciseEntity(exerciseId = testId(2), name = "Bench Press (Barbell)", position = 1)
     private val squatSets = listOf(
@@ -61,7 +61,7 @@ class ActiveWorkoutDaoTest {
     fun replacingTheWorkoutLeavesNothingOfTheOldOne() = runTest {
         dao.replaceWorkout(workout, listOf(squat, benchPress), squatSets + benchPressSet)
 
-        val restarted = ActiveWorkoutEntity(startedAt = Instant.parse("2026-10-05T17:00:00Z"))
+        val restarted = ActiveWorkoutEntity(startedAt = Instant.parse("2026-10-05T17:00:00Z"), name = "")
         dao.replaceWorkout(restarted, listOf(squat), listOf(squatSets[0]))
 
         assertEquals(restarted, dao.getWorkout())
@@ -72,9 +72,10 @@ class ActiveWorkoutDaoTest {
     fun anEmptyWorkoutReplacesTheSavedOne() = runTest {
         dao.replaceWorkout(workout, listOf(squat), squatSets)
 
-        dao.replaceWorkout(null, emptyList(), emptyList())
+        val empty = ActiveWorkoutEntity(startedAt = null, name = "")
+        dao.replaceWorkout(empty, emptyList(), emptyList())
 
-        assertNull(dao.getWorkout())
+        assertEquals(empty, dao.getWorkout())
         assertEquals(emptyList<ActiveWorkoutExerciseWithSets>(), dao.getExercises())
     }
 }

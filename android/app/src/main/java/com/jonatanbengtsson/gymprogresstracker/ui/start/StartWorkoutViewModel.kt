@@ -30,7 +30,9 @@ data class StartWorkoutUiState(
     /** A workout is in progress once it has an exercise; opening an empty one doesn't count. */
     val workoutInProgress: Boolean = false,
     /** When the workout in progress was started. */
-    val workoutStartedAt: Instant? = null
+    val workoutStartedAt: Instant? = null,
+    /** What the user named the workout in progress, empty until they do. */
+    val workoutName: String = ""
 )
 
 class StartWorkoutViewModel(
@@ -48,7 +50,8 @@ class StartWorkoutViewModel(
             activeWorkoutRepository.workout.collect { workout ->
                 uiState = uiState.copy(
                     workoutInProgress = !workout?.exercises.isNullOrEmpty(),
-                    workoutStartedAt = workout?.startedAt
+                    workoutStartedAt = workout?.startedAt,
+                    workoutName = workout?.name.orEmpty()
                 )
             }
         }

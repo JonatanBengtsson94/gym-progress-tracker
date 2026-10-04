@@ -26,6 +26,8 @@ data class WorkoutUiState(
     val isLoadingWorkout: Boolean = false,
     /** When the workout was started, or null when it hasn't been. */
     val startedAt: Instant? = null,
+    /** What the user named the workout, empty until they do. */
+    val name: String = "",
     /** The exercises added to the workout, in the order they were added. */
     val workoutExercises: List<WorkoutExerciseEntry> = emptyList(),
     /** True while the exercises to pick from are being fetched from the server. */
@@ -52,6 +54,7 @@ class WorkoutViewModel(
                 uiState = uiState.copy(
                     isLoadingWorkout = false,
                     startedAt = workout.startedAt,
+                    name = workout.name,
                     workoutExercises = workout.exercises
                 )
             }
@@ -60,6 +63,12 @@ class WorkoutViewModel(
             exercisesRepository.exercises.collect { exercises -> uiState = uiState.copy(exercises = exercises) }
         }
         loadExercises()
+    }
+
+    /** Ignores names longer than a template name can be. */
+    fun updateName(name: String) {
+        if (name.length > MAX_NAME_LENGTH) return
+        activeWorkoutRepository.update { it.copy(name = name) }
     }
 
     /** Adds [exercise] to the end of the workout with one empty set, unless it's already in it. */
@@ -140,6 +149,8 @@ class WorkoutViewModel(
         }
 
         private val WEIGHT_INPUT = Regex("""\d{0,4}([.,]\d{0,2})?""")
+        // The backend stores template names as a VARCHAR(100).
+        private const val MAX_NAME_LENGTH = 100
         // The backend stores reps as a uint8, so three digits is the most it can take.
         private val REPS_INPUT = Regex("""\d{0,3}""")
     }

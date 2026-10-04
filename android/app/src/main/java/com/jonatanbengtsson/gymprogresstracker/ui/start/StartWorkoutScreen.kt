@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -113,11 +114,19 @@ fun StartWorkoutContent(
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = stringResource(R.string.start_workout_in_progress),
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(R.string.start_workout_in_progress),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = uiState.workoutName.ifEmpty { stringResource(R.string.workout_name_placeholder) },
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                             uiState.workoutStartedAt?.let {
                                 WorkoutTimer(startedAt = it, style = MaterialTheme.typography.titleMedium)
                             }
@@ -323,7 +332,8 @@ fun StartWorkoutContentInProgressPreview() {
             uiState = StartWorkoutUiState(
                 templates = previewTemplates,
                 workoutInProgress = true,
-                workoutStartedAt = Instant.now().minusSeconds(1234)
+                workoutStartedAt = Instant.now().minusSeconds(1234),
+                workoutName = "Push day"
             ),
             onRetry = {},
             onStartNewWorkout = {},

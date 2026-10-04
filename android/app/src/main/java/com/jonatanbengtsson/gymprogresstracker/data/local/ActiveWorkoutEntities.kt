@@ -13,7 +13,8 @@ import kotlin.uuid.Uuid
 @Entity(tableName = "active_workout")
 data class ActiveWorkoutEntity(
     @PrimaryKey val id: Int = 0,
-    @ColumnInfo(name = "started_at") val startedAt: Instant
+    @ColumnInfo(name = "started_at") val startedAt: Instant?,
+    @ColumnInfo(defaultValue = "") val name: String
 )
 
 @Entity(tableName = "active_workout_exercise")

@@ -173,13 +173,29 @@ class WorkoutViewModelTest {
     }
 
     @Test
+    fun `renaming the workout saves the name`() {
+        viewModel.updateName("Push day")
+
+        assertEquals("Push day", viewModel.uiState.name)
+        assertEquals(ActiveWorkout(name = "Push day"), activeWorkoutRepository.workout.value)
+    }
+
+    @Test
+    fun `a name longer than a template name can be is ignored`() {
+        viewModel.updateName("a".repeat(100))
+        viewModel.updateName("a".repeat(101))
+
+        assertEquals("a".repeat(100), viewModel.uiState.name)
+    }
+
+    @Test
     fun `the workout is loading until the saved one has been read`() {
         activeWorkoutRepository.workout.value = null
 
         assertTrue(viewModel.uiState.isLoadingWorkout)
 
         val startedAt = Instant.parse("2026-10-04T17:00:00Z")
-        activeWorkoutRepository.workout.value = ActiveWorkout(startedAt, listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5")))))
+        activeWorkoutRepository.workout.value = ActiveWorkout(startedAt, exercises = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5")))))
 
         assertFalse(viewModel.uiState.isLoadingWorkout)
         assertEquals(startedAt, viewModel.uiState.startedAt)
@@ -195,7 +211,7 @@ class WorkoutViewModelTest {
         viewModel.updateReps(squat.id, 0, "5")
 
         assertEquals(
-            ActiveWorkout(startedAt, listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5"))))),
+            ActiveWorkout(startedAt, exercises = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5"))))),
             activeWorkoutRepository.workout.value
         )
     }

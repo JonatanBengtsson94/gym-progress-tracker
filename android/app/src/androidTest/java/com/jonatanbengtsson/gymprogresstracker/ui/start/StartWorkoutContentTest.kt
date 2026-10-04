@@ -122,6 +122,20 @@ class StartWorkoutContentTest {
     }
 
     @Test
+    fun aWorkoutInProgressShowsItsName() {
+        setContent(StartWorkoutUiState(workoutInProgress = true, workoutName = "Push day"))
+
+        composeRule.onNodeWithText("Push day").assertIsDisplayed()
+    }
+
+    @Test
+    fun anUnnamedWorkoutInProgressShowsThePlaceholderName() {
+        setContent(StartWorkoutUiState(workoutInProgress = true))
+
+        composeRule.onNodeWithText(str(R.string.workout_name_placeholder)).assertIsDisplayed()
+    }
+
+    @Test
     fun aWorkoutInProgressShowsHowLongItHasRun() {
         setContent(StartWorkoutUiState(workoutInProgress = true, workoutStartedAt = Instant.now().minusSeconds(3600 + 5 * 60)))
 

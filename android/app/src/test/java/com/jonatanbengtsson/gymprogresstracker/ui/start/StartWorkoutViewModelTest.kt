@@ -35,7 +35,7 @@ class StartWorkoutViewModelTest {
 
     private val squat = Exercise(testId(1), "Squat (Barbell)")
     private val startedAt = Instant.parse("2026-10-04T17:00:00Z")
-    private val workout = ActiveWorkout(startedAt, listOf(WorkoutExerciseEntry(squat)))
+    private val workout = ActiveWorkout(startedAt, exercises = listOf(WorkoutExerciseEntry(squat)))
     private val now = Instant.parse("2026-10-04T18:30:00Z")
 
     private val templatesRepository = FakeTemplatesRepository()
@@ -147,6 +147,13 @@ class StartWorkoutViewModelTest {
         activeWorkoutRepository.workout.value = null
 
         assertFalse(viewModel.uiState.workoutInProgress)
+    }
+
+    @Test
+    fun `the workout in progress shows its name`() {
+        activeWorkoutRepository.workout.value = workout.copy(name = "Push day")
+
+        assertEquals("Push day", viewModel.uiState.workoutName)
     }
 
     @Test

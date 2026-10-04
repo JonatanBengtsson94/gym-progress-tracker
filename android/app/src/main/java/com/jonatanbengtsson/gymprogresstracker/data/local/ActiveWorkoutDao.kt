@@ -2,13 +2,14 @@ package com.jonatanbengtsson.gymprogresstracker.data.local
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 
 @Dao
 interface ActiveWorkoutDao {
 
-    /** Null when no workout has been started. */
+    /** Null until a workout has been saved. */
     @Query("SELECT * FROM active_workout")
     suspend fun getWorkout(): ActiveWorkoutEntity?
 
@@ -16,24 +17,19 @@ interface ActiveWorkoutDao {
     @Query("SELECT * FROM active_workout_exercise ORDER BY position")
     suspend fun getExercises(): List<ActiveWorkoutExerciseWithSets>
 
-    /** Replaces the saved workout; a null [workout] leaves none started. */
     @Transaction
     suspend fun replaceWorkout(
-        workout: ActiveWorkoutEntity?,
+        workout: ActiveWorkoutEntity,
         exercises: List<ActiveWorkoutExerciseEntity>,
         sets: List<ActiveWorkoutSetEntity>
     ) {
-        deleteWorkout()
-        workout?.let { insertWorkout(it) }
+        insertWorkout(workout)
         deleteExercises()
         insertExercises(exercises)
         insertSets(sets)
     }
 
-    @Query("DELETE FROM active_workout")
-    suspend fun deleteWorkout()
-
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWorkout(workout: ActiveWorkoutEntity)
 
     /** Deletes their sets too. */

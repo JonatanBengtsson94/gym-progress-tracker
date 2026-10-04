@@ -38,6 +38,8 @@ data class WorkoutExerciseEntry(val exercise: Exercise, val sets: List<SetEntry>
 data class ActiveWorkout(
     /** When the workout was started, or null when none has been. */
     val startedAt: Instant? = null,
+    /** What the user named the workout, empty until they do. */
+    val name: String = "",
     /** The exercises, in the order they were added. */
     val exercises: List<WorkoutExerciseEntry> = emptyList()
 )
@@ -65,8 +67,10 @@ class RoomActiveWorkoutRepository(
 
     init {
         externalScope.launch {
+            val saved = dao.getWorkout()
             _workout.value = ActiveWorkout(
-                startedAt = dao.getWorkout()?.startedAt,
+                startedAt = saved?.startedAt,
+                name = saved?.name.orEmpty(),
                 exercises = dao.getExercises().map { it.toEntry() }
             )
             _workout.filterNotNull().collect { save(it) }
@@ -78,7 +82,7 @@ class RoomActiveWorkoutRepository(
     }
 
     private suspend fun save(workout: ActiveWorkout) = dao.replaceWorkout(
-        workout = workout.startedAt?.let { ActiveWorkoutEntity(startedAt = it) },
+        workout = ActiveWorkoutEntity(startedAt = workout.startedAt, name = workout.name),
         exercises = workout.exercises.mapIndexed { position, entry ->
             ActiveWorkoutExerciseEntity(exerciseId = entry.exercise.id, name = entry.exercise.name, position = position)
         },

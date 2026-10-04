@@ -101,6 +101,7 @@ class StartWorkoutContentTest {
         setContent(StartWorkoutUiState())
 
         composeRule.onNodeWithText(str(R.string.start_workout_new)).assertIsDisplayed()
+        composeRule.onNodeWithText(str(R.string.start_workout_in_progress)).assertDoesNotExist()
         composeRule.onNodeWithText(str(R.string.start_workout_continue)).assertDoesNotExist()
         composeRule.onNodeWithText(str(R.string.start_workout_discard)).assertDoesNotExist()
     }
@@ -109,6 +110,7 @@ class StartWorkoutContentTest {
     fun aWorkoutInProgressCanBeContinuedInsteadOfStartingANewOne() {
         setContent(StartWorkoutUiState(workoutInProgress = true))
 
+        composeRule.onNodeWithText(str(R.string.start_workout_in_progress)).assertIsDisplayed()
         composeRule.onNodeWithText(str(R.string.start_workout_new)).assertDoesNotExist()
         composeRule.onNodeWithText(str(R.string.start_workout_continue)).performClick()
 

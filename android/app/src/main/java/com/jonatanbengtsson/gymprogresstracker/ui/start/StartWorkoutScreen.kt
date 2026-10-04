@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -105,17 +106,27 @@ fun StartWorkoutContent(
         }
         if (uiState.workoutInProgress) {
             item {
-                Button(onClick = onContinueWorkout, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.start_workout_continue))
-                }
-            }
-            item {
-                TextButton(
-                    onClick = { confirmDiscard = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text(stringResource(R.string.start_workout_discard))
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = stringResource(R.string.start_workout_in_progress),
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                        ) {
+                            TextButton(
+                                onClick = { confirmDiscard = true },
+                                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                            ) {
+                                Text(stringResource(R.string.start_workout_discard))
+                            }
+                            Button(onClick = onContinueWorkout) {
+                                Text(stringResource(R.string.start_workout_continue))
+                            }
+                        }
+                    }
                 }
             }
         } else {
@@ -285,6 +296,22 @@ fun StartWorkoutContentPreview() {
     GymProgressTrackerTheme {
         StartWorkoutContent(
             uiState = StartWorkoutUiState(templates = previewTemplates),
+            onRetry = {},
+            onStartNewWorkout = {},
+            onContinueWorkout = {},
+            onDiscardWorkout = {},
+            onStartFromTemplate = {},
+            onLogOut = {}
+        )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun StartWorkoutContentInProgressPreview() {
+    GymProgressTrackerTheme {
+        StartWorkoutContent(
+            uiState = StartWorkoutUiState(templates = previewTemplates, workoutInProgress = true),
             onRetry = {},
             onStartNewWorkout = {},
             onContinueWorkout = {},

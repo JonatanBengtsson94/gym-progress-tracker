@@ -14,6 +14,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.ui.NavDisplay
 import androidx.test.platform.app.InstrumentationRegistry
 import com.jonatanbengtsson.gymprogresstracker.R
+import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesRepository
@@ -21,7 +22,6 @@ import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.SessionState
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesRepository
-import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
 import com.jonatanbengtsson.gymprogresstracker.data.testId
 import com.jonatanbengtsson.gymprogresstracker.ui.navigation.Screen
@@ -43,10 +43,10 @@ class WorkoutScreenTest {
     val composeRule = createComposeRule()
 
     private class FakeActiveWorkoutRepository : ActiveWorkoutRepository {
-        override val exercises = MutableStateFlow<List<WorkoutExerciseEntry>?>(emptyList())
+        override val workout = MutableStateFlow<ActiveWorkout?>(ActiveWorkout())
 
-        override fun update(transform: (List<WorkoutExerciseEntry>) -> List<WorkoutExerciseEntry>) {
-            exercises.update { it?.let(transform) }
+        override fun update(transform: (ActiveWorkout) -> ActiveWorkout) {
+            workout.update { it?.let(transform) }
         }
     }
 
@@ -127,6 +127,15 @@ class WorkoutScreenTest {
         composeRule.onNodeWithText(str(R.string.start_workout_new)).assertDoesNotExist()
         composeRule.onNodeWithText(str(R.string.start_workout_continue)).performClick()
         composeRule.onNodeWithText(squat.name).assertIsDisplayed()
+    }
+
+    @Test
+    fun startingANewWorkoutShowsHowLongItHasRun() {
+        Espresso.pressBack()
+
+        composeRule.onNodeWithText(str(R.string.start_workout_new)).performClick()
+
+        composeRule.onNodeWithText("0:0", substring = true).assertIsDisplayed()
     }
 
     @Test

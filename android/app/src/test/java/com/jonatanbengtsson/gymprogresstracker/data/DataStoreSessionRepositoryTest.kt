@@ -17,6 +17,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.time.Instant
 
 class DataStoreSessionRepositoryTest {
 
@@ -24,7 +25,7 @@ class DataStoreSessionRepositoryTest {
     val folder = TemporaryFolder()
 
     private val squat = Exercise(testId(1), "Squat (Barbell)")
-    private val workout = listOf(WorkoutExerciseEntry(squat))
+    private val workout = ActiveWorkout(Instant.parse("2026-10-04T17:00:00Z"), listOf(WorkoutExerciseEntry(squat)))
     private val activeWorkoutRepository = FakeActiveWorkoutRepository(workout)
 
     private val file by lazy { File(folder.root, "session.preferences_pb") }
@@ -94,56 +95,56 @@ class DataStoreSessionRepositoryTest {
     fun `logging out keeps the workout for the same user's next login`() = runTest {
         val repository = repository(backgroundScope)
         repository.logIn("alice", "session-1")
-        activeWorkoutRepository.exercises.value = workout
+        activeWorkoutRepository.workout.value = workout
         repository.logOut()
 
         repository.logIn("alice", "session-2")
 
-        assertEquals(workout, activeWorkoutRepository.exercises.value)
+        assertEquals(workout, activeWorkoutRepository.workout.value)
     }
 
     @Test
     fun `the first login throws away a workout nobody owns`() = runTest {
         repository(backgroundScope).logIn("alice", "session-123")
 
-        assertEquals(emptyList<WorkoutExerciseEntry>(), activeWorkoutRepository.exercises.value)
+        assertEquals(ActiveWorkout(), activeWorkoutRepository.workout.value)
     }
 
     @Test
     fun `the same user logging in again keeps their workout`() = runTest {
         val repository = repository(backgroundScope)
         repository.logIn("alice", "session-1")
-        activeWorkoutRepository.exercises.value = workout
+        activeWorkoutRepository.workout.value = workout
         repository.endSession("session-1")
 
         repository.logIn("alice", "session-2")
 
-        assertEquals(workout, activeWorkoutRepository.exercises.value)
+        assertEquals(workout, activeWorkoutRepository.workout.value)
     }
 
     @Test
     fun `someone else logging in throws away the workout`() = runTest {
         val repository = repository(backgroundScope)
         repository.logIn("alice", "session-1")
-        activeWorkoutRepository.exercises.value = workout
+        activeWorkoutRepository.workout.value = workout
         repository.endSession("session-1")
 
         repository.logIn("bob", "session-2")
 
-        assertEquals(emptyList<WorkoutExerciseEntry>(), activeWorkoutRepository.exercises.value)
+        assertEquals(ActiveWorkout(), activeWorkoutRepository.workout.value)
     }
 
     @Test
     fun `logging in waits for the saved workout before throwing it away`() = runTest {
-        activeWorkoutRepository.exercises.value = null
+        activeWorkoutRepository.workout.value = null
         val repository = repository(backgroundScope)
         val loggingIn = backgroundScope.async { repository.logIn("alice", "session-123") }
 
         // In real time, since the file is read off the test's dispatcher.
         assertNull(withContext(Dispatchers.Default) { withTimeoutOrNull(1_000) { loggingIn.await() } })
-        activeWorkoutRepository.exercises.value = workout
+        activeWorkoutRepository.workout.value = workout
         loggingIn.await()
 
-        assertEquals(emptyList<WorkoutExerciseEntry>(), activeWorkoutRepository.exercises.value)
+        assertEquals(ActiveWorkout(), activeWorkoutRepository.workout.value)
     }
 }

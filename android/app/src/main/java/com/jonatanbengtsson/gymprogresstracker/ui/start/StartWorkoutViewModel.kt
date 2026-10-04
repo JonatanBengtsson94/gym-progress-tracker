@@ -10,12 +10,15 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.appContainer
+import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
 import kotlinx.coroutines.launch
+import java.time.Clock
+import java.time.Instant
 
 data class StartWorkoutUiState(
     /** True while the templates are being fetched from the server. */
@@ -25,13 +28,16 @@ data class StartWorkoutUiState(
     /** Why fetching the templates failed last time. */
     @StringRes val errorMessage: Int? = null,
     /** A workout is in progress once it has an exercise; opening an empty one doesn't count. */
-    val workoutInProgress: Boolean = false
+    val workoutInProgress: Boolean = false,
+    /** When the workout in progress was started. */
+    val workoutStartedAt: Instant? = null
 )
 
 class StartWorkoutViewModel(
     private val templatesRepository: TemplatesRepository,
     private val activeWorkoutRepository: ActiveWorkoutRepository,
-    private val sessionRepository: SessionRepository
+    private val sessionRepository: SessionRepository,
+    private val clock: Clock = Clock.systemUTC()
 ) : ViewModel() {
 
     var uiState by mutableStateOf(StartWorkoutUiState())
@@ -39,8 +45,11 @@ class StartWorkoutViewModel(
 
     init {
         viewModelScope.launch {
-            activeWorkoutRepository.exercises.collect { exercises ->
-                uiState = uiState.copy(workoutInProgress = !exercises.isNullOrEmpty())
+            activeWorkoutRepository.workout.collect { workout ->
+                uiState = uiState.copy(
+                    workoutInProgress = !workout?.exercises.isNullOrEmpty(),
+                    workoutStartedAt = workout?.startedAt
+                )
             }
         }
         viewModelScope.launch {
@@ -67,8 +76,13 @@ class StartWorkoutViewModel(
         }
     }
 
+    /** Starts an empty workout now, unless one is already in progress. */
+    fun startNewWorkout() = activeWorkoutRepository.update { workout ->
+        if (workout.exercises.isEmpty()) ActiveWorkout(startedAt = clock.instant()) else workout
+    }
+
     /** Throws away the workout in progress. */
-    fun discardWorkout() = activeWorkoutRepository.update { emptyList() }
+    fun discardWorkout() = activeWorkoutRepository.update { ActiveWorkout() }
 
     fun logOut() {
         viewModelScope.launch { sessionRepository.logOut() }

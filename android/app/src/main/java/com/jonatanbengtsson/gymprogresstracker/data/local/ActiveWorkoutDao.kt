@@ -8,16 +8,33 @@ import androidx.room.Transaction
 @Dao
 interface ActiveWorkoutDao {
 
-    @Transaction
-    @Query("SELECT * FROM active_workout_exercise ORDER BY position")
-    suspend fun getWorkout(): List<ActiveWorkoutExerciseWithSets>
+    /** Null when no workout has been started. */
+    @Query("SELECT * FROM active_workout")
+    suspend fun getWorkout(): ActiveWorkoutEntity?
 
     @Transaction
-    suspend fun replaceWorkout(exercises: List<ActiveWorkoutExerciseEntity>, sets: List<ActiveWorkoutSetEntity>) {
+    @Query("SELECT * FROM active_workout_exercise ORDER BY position")
+    suspend fun getExercises(): List<ActiveWorkoutExerciseWithSets>
+
+    /** Replaces the saved workout; a null [workout] leaves none started. */
+    @Transaction
+    suspend fun replaceWorkout(
+        workout: ActiveWorkoutEntity?,
+        exercises: List<ActiveWorkoutExerciseEntity>,
+        sets: List<ActiveWorkoutSetEntity>
+    ) {
+        deleteWorkout()
+        workout?.let { insertWorkout(it) }
         deleteExercises()
         insertExercises(exercises)
         insertSets(sets)
     }
+
+    @Query("DELETE FROM active_workout")
+    suspend fun deleteWorkout()
+
+    @Insert
+    suspend fun insertWorkout(workout: ActiveWorkoutEntity)
 
     /** Deletes their sets too. */
     @Query("DELETE FROM active_workout_exercise")

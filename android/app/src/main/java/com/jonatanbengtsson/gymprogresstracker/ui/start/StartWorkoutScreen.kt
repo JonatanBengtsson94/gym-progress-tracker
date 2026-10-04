@@ -48,6 +48,7 @@ import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExercise
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutSet
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
+import com.jonatanbengtsson.gymprogresstracker.ui.workout.WorkoutTimer
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -65,7 +66,10 @@ fun StartWorkoutScreen(
     StartWorkoutContent(
         uiState = viewModel.uiState,
         onRetry = viewModel::loadTemplates,
-        onStartNewWorkout = onStartNewWorkout,
+        onStartNewWorkout = {
+            viewModel.startNewWorkout()
+            onStartNewWorkout()
+        },
         onContinueWorkout = onContinueWorkout,
         onDiscardWorkout = viewModel::discardWorkout,
         onStartFromTemplate = onStartFromTemplate,
@@ -108,10 +112,16 @@ fun StartWorkoutContent(
             item {
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = stringResource(R.string.start_workout_in_progress),
-                            style = MaterialTheme.typography.titleMedium
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = stringResource(R.string.start_workout_in_progress),
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            uiState.workoutStartedAt?.let {
+                                WorkoutTimer(startedAt = it, style = MaterialTheme.typography.titleMedium)
+                            }
+                        }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -312,7 +322,11 @@ fun StartWorkoutContentPreview() {
 fun StartWorkoutContentInProgressPreview() {
     GymProgressTrackerTheme {
         StartWorkoutContent(
-            uiState = StartWorkoutUiState(templates = previewTemplates, workoutInProgress = true),
+            uiState = StartWorkoutUiState(
+                templates = previewTemplates,
+                workoutInProgress = true,
+                workoutStartedAt = Instant.now().minusSeconds(1234)
+            ),
             onRetry = {},
             onStartNewWorkout = {},
             onContinueWorkout = {},

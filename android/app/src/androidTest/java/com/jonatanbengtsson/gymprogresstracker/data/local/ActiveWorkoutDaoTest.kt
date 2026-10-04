@@ -7,9 +7,11 @@ import com.jonatanbengtsson.gymprogresstracker.data.testId
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.Instant
 
 @RunWith(AndroidJUnit4::class)
 class ActiveWorkoutDaoTest {
@@ -17,6 +19,7 @@ class ActiveWorkoutDaoTest {
     private lateinit var database: GymDatabase
     private lateinit var dao: ActiveWorkoutDao
 
+    private val workout = ActiveWorkoutEntity(startedAt = Instant.parse("2026-10-04T17:00:00Z"))
     private val squat = ActiveWorkoutExerciseEntity(exerciseId = testId(1), name = "Squat (Barbell)", position = 0)
     private val benchPress = ActiveWorkoutExerciseEntity(exerciseId = testId(2), name = "Bench Press (Barbell)", position = 1)
     private val squatSets = listOf(
@@ -38,35 +41,40 @@ class ActiveWorkoutDaoTest {
 
     @Test
     fun aNewDatabaseHasNoWorkout() = runTest {
-        assertEquals(emptyList<ActiveWorkoutExerciseWithSets>(), dao.getWorkout())
+        assertNull(dao.getWorkout())
+        assertEquals(emptyList<ActiveWorkoutExerciseWithSets>(), dao.getExercises())
     }
 
     @Test
     fun aSavedWorkoutIsReadBackWithItsExercisesInPosition() = runTest {
-        dao.replaceWorkout(listOf(benchPress, squat), squatSets + benchPressSet)
+        dao.replaceWorkout(workout, listOf(benchPress, squat), squatSets + benchPressSet)
 
-        val workout = dao.getWorkout()
+        val exercises = dao.getExercises()
 
-        assertEquals(listOf(squat, benchPress), workout.map { it.exercise })
-        assertEquals(squatSets, workout[0].sets.sortedBy { it.position })
-        assertEquals(listOf(benchPressSet), workout[1].sets)
+        assertEquals(workout, dao.getWorkout())
+        assertEquals(listOf(squat, benchPress), exercises.map { it.exercise })
+        assertEquals(squatSets, exercises[0].sets.sortedBy { it.position })
+        assertEquals(listOf(benchPressSet), exercises[1].sets)
     }
 
     @Test
     fun replacingTheWorkoutLeavesNothingOfTheOldOne() = runTest {
-        dao.replaceWorkout(listOf(squat, benchPress), squatSets + benchPressSet)
+        dao.replaceWorkout(workout, listOf(squat, benchPress), squatSets + benchPressSet)
 
-        dao.replaceWorkout(listOf(squat), listOf(squatSets[0]))
+        val restarted = ActiveWorkoutEntity(startedAt = Instant.parse("2026-10-05T17:00:00Z"))
+        dao.replaceWorkout(restarted, listOf(squat), listOf(squatSets[0]))
 
-        assertEquals(listOf(ActiveWorkoutExerciseWithSets(squat, listOf(squatSets[0]))), dao.getWorkout())
+        assertEquals(restarted, dao.getWorkout())
+        assertEquals(listOf(ActiveWorkoutExerciseWithSets(squat, listOf(squatSets[0]))), dao.getExercises())
     }
 
     @Test
     fun anEmptyWorkoutReplacesTheSavedOne() = runTest {
-        dao.replaceWorkout(listOf(squat), squatSets)
+        dao.replaceWorkout(workout, listOf(squat), squatSets)
 
-        dao.replaceWorkout(emptyList(), emptyList())
+        dao.replaceWorkout(null, emptyList(), emptyList())
 
-        assertEquals(emptyList<ActiveWorkoutExerciseWithSets>(), dao.getWorkout())
+        assertNull(dao.getWorkout())
+        assertEquals(emptyList<ActiveWorkoutExerciseWithSets>(), dao.getExercises())
     }
 }

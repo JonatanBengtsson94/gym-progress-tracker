@@ -3,12 +3,12 @@ package com.jonatanbengtsson.gymprogresstracker.data
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 
-/** Keeps the workout in memory only. Set [exercises] to null to act as if it hasn't loaded yet. */
-class FakeActiveWorkoutRepository(exercises: List<WorkoutExerciseEntry>? = emptyList()) : ActiveWorkoutRepository {
+/** Keeps the workout in memory only. Set [workout] to null to act as if it hasn't loaded yet. */
+class FakeActiveWorkoutRepository(workout: ActiveWorkout? = ActiveWorkout()) : ActiveWorkoutRepository {
 
-    override val exercises = MutableStateFlow(exercises)
+    override val workout = MutableStateFlow(workout)
 
-    override fun update(transform: (List<WorkoutExerciseEntry>) -> List<WorkoutExerciseEntry>) {
-        this.exercises.update { it?.let(transform) }
+    override fun update(transform: (ActiveWorkout) -> ActiveWorkout) {
+        this.workout.update { it?.let(transform) }
     }
 }

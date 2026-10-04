@@ -1,6 +1,7 @@
 package com.jonatanbengtsson.gymprogresstracker.data
 
 import com.jonatanbengtsson.gymprogresstracker.data.local.ActiveWorkoutDao
+import com.jonatanbengtsson.gymprogresstracker.data.local.ActiveWorkoutEntity
 import com.jonatanbengtsson.gymprogresstracker.data.local.ActiveWorkoutExerciseEntity
 import com.jonatanbengtsson.gymprogresstracker.data.local.ActiveWorkoutExerciseWithSets
 import com.jonatanbengtsson.gymprogresstracker.data.local.ActiveWorkoutSetEntity
@@ -11,26 +12,37 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RoomActiveWorkoutRepositoryTest {
 
     /** Stores the workout in memory, handing sets back in reverse since Room doesn't promise their order. */
     private class FakeActiveWorkoutDao : ActiveWorkoutDao {
+        var workout: ActiveWorkoutEntity? = null
         var exercises = emptyList<ActiveWorkoutExerciseEntity>()
         var sets = emptyList<ActiveWorkoutSetEntity>()
         var saves = 0
 
-        override suspend fun getWorkout() = exercises.sortedBy { it.position }.map { exercise ->
+        override suspend fun getWorkout() = workout
+
+        override suspend fun getExercises() = exercises.sortedBy { it.position }.map { exercise ->
             ActiveWorkoutExerciseWithSets(exercise, sets.filter { it.exerciseId == exercise.exerciseId }.reversed())
         }
 
-        override suspend fun replaceWorkout(exercises: List<ActiveWorkoutExerciseEntity>, sets: List<ActiveWorkoutSetEntity>) {
+        override suspend fun replaceWorkout(
+            workout: ActiveWorkoutEntity?,
+            exercises: List<ActiveWorkoutExerciseEntity>,
+            sets: List<ActiveWorkoutSetEntity>
+        ) {
+            this.workout = workout
             this.exercises = exercises
             this.sets = sets
             saves++
         }
 
+        override suspend fun deleteWorkout() = error("Replaced as a whole by replaceWorkout")
+        override suspend fun insertWorkout(workout: ActiveWorkoutEntity) = error("Replaced as a whole by replaceWorkout")
         override suspend fun deleteExercises() = error("Replaced as a whole by replaceWorkout")
         override suspend fun insertExercises(exercises: List<ActiveWorkoutExerciseEntity>) = error("Replaced as a whole by replaceWorkout")
         override suspend fun insertSets(sets: List<ActiveWorkoutSetEntity>) = error("Replaced as a whole by replaceWorkout")
@@ -39,9 +51,14 @@ class RoomActiveWorkoutRepositoryTest {
     private val squat = Exercise(testId(1), "Squat (Barbell)")
     private val benchPress = Exercise(testId(2), "Bench Press (Barbell)")
 
-    private val workout = listOf(
-        WorkoutExerciseEntry(squat, listOf(SetEntry("100", "5", completed = true), SetEntry("102,5", "3", id = 1))),
-        WorkoutExerciseEntry(benchPress, listOf(SetEntry()))
+    private val startedAt = Instant.parse("2026-10-04T17:00:00Z")
+
+    private val workout = ActiveWorkout(
+        startedAt = startedAt,
+        exercises = listOf(
+            WorkoutExerciseEntry(squat, listOf(SetEntry("100", "5", completed = true), SetEntry("102,5", "3", id = 1))),
+            WorkoutExerciseEntry(benchPress, listOf(SetEntry()))
+        )
     )
 
     private val dao = FakeActiveWorkoutDao()
@@ -49,7 +66,7 @@ class RoomActiveWorkoutRepositoryTest {
     private fun TestScope.repository() = RoomActiveWorkoutRepository(dao, backgroundScope)
 
     /** Saves [workout] the way an earlier run of the app would have. */
-    private fun TestScope.givenSaved(workout: List<WorkoutExerciseEntry>) {
+    private fun TestScope.givenSaved(workout: ActiveWorkout) {
         val earlier = repository()
         runCurrent()
         earlier.update { workout }
@@ -59,11 +76,11 @@ class RoomActiveWorkoutRepositoryTest {
     @Test
     fun `the workout is null until the saved one has been read`() = runTest {
         val repository = repository()
-        assertNull(repository.exercises.value)
+        assertNull(repository.workout.value)
 
         runCurrent()
 
-        assertEquals(emptyList<WorkoutExerciseEntry>(), repository.exercises.value)
+        assertEquals(ActiveWorkout(), repository.workout.value)
     }
 
     @Test
@@ -73,7 +90,17 @@ class RoomActiveWorkoutRepositoryTest {
         val repository = repository()
         runCurrent()
 
-        assertEquals(workout, repository.exercises.value)
+        assertEquals(workout, repository.workout.value)
+    }
+
+    @Test
+    fun `a started workout without exercises is read back`() = runTest {
+        givenSaved(ActiveWorkout(startedAt))
+
+        val repository = repository()
+        runCurrent()
+
+        assertEquals(ActiveWorkout(startedAt), repository.workout.value)
     }
 
     @Test
@@ -82,9 +109,10 @@ class RoomActiveWorkoutRepositoryTest {
         runCurrent()
 
         repository.update { workout }
-        assertEquals(workout, repository.exercises.value)
+        assertEquals(workout, repository.workout.value)
         runCurrent()
 
+        assertEquals(ActiveWorkoutEntity(startedAt = startedAt), dao.workout)
         assertEquals(
             listOf(ActiveWorkoutExerciseEntity(testId(1), "Squat (Barbell)", 0), ActiveWorkoutExerciseEntity(testId(2), "Bench Press (Barbell)", 1)),
             dao.exercises
@@ -105,9 +133,9 @@ class RoomActiveWorkoutRepositoryTest {
         runCurrent()
         val savesBefore = dao.saves
 
-        repository.update { listOf(WorkoutExerciseEntry(squat)) }
-        repository.update { it + WorkoutExerciseEntry(benchPress) }
-        repository.update { it.drop(1) }
+        repository.update { ActiveWorkout(startedAt, listOf(WorkoutExerciseEntry(squat))) }
+        repository.update { it.copy(exercises = it.exercises + WorkoutExerciseEntry(benchPress)) }
+        repository.update { it.copy(exercises = it.exercises.drop(1)) }
         runCurrent()
 
         assertEquals(savesBefore + 1, dao.saves)
@@ -119,9 +147,22 @@ class RoomActiveWorkoutRepositoryTest {
         givenSaved(workout)
         val repository = repository()
 
-        repository.update { emptyList() }
+        repository.update { ActiveWorkout() }
         runCurrent()
 
-        assertEquals(workout, repository.exercises.value)
+        assertEquals(workout, repository.workout.value)
+    }
+
+    @Test
+    fun `an emptied workout is saved as not started`() = runTest {
+        givenSaved(workout)
+        val repository = repository()
+        runCurrent()
+
+        repository.update { ActiveWorkout() }
+        runCurrent()
+
+        assertNull(dao.workout)
+        assertEquals(emptyList<ActiveWorkoutExerciseEntity>(), dao.exercises)
     }
 }

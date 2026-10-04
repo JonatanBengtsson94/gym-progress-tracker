@@ -57,8 +57,8 @@ class DataStoreSessionRepository(
 
     override suspend fun logIn(username: String, sessionId: String) {
         if (preferences.first()[USERNAME] != username) {
-            activeWorkoutRepository.exercises.filterNotNull().first()
-            activeWorkoutRepository.update { emptyList() }
+            activeWorkoutRepository.workout.filterNotNull().first()
+            activeWorkoutRepository.update { ActiveWorkout() }
         }
         dataStore.edit { preferences ->
             preferences[USERNAME] = username

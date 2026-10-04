@@ -18,11 +18,14 @@ import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
+import java.time.Instant
 import kotlin.uuid.Uuid
 
 data class WorkoutUiState(
     /** True until the saved workout has been read from disk. */
     val isLoadingWorkout: Boolean = false,
+    /** When the workout was started, or null when it hasn't been. */
+    val startedAt: Instant? = null,
     /** The exercises added to the workout, in the order they were added. */
     val workoutExercises: List<WorkoutExerciseEntry> = emptyList(),
     /** True while the exercises to pick from are being fetched from the server. */
@@ -45,8 +48,12 @@ class WorkoutViewModel(
         // viewModelScope runs on Dispatchers.Main.immediate, so an edit reaches uiState before the next
         // keystroke arrives; the set text fields would drop input otherwise.
         viewModelScope.launch {
-            activeWorkoutRepository.exercises.filterNotNull().collect { exercises ->
-                uiState = uiState.copy(isLoadingWorkout = false, workoutExercises = exercises)
+            activeWorkoutRepository.workout.filterNotNull().collect { workout ->
+                uiState = uiState.copy(
+                    isLoadingWorkout = false,
+                    startedAt = workout.startedAt,
+                    workoutExercises = workout.exercises
+                )
             }
         }
         viewModelScope.launch {
@@ -57,11 +64,11 @@ class WorkoutViewModel(
     }
 
     /** Adds [exercise] to the end of the workout with one empty set, unless it's already in it. */
-    fun addExercise(exercise: Exercise) = activeWorkoutRepository.update { exercises ->
+    fun addExercise(exercise: Exercise) = updateExercises { exercises ->
         if (exercises.any { it.exercise.id == exercise.id }) exercises else exercises + WorkoutExerciseEntry(exercise)
     }
 
-    fun removeExercise(exerciseId: Uuid) = activeWorkoutRepository.update { exercises ->
+    fun removeExercise(exerciseId: Uuid) = updateExercises { exercises ->
         exercises.filter { it.exercise.id != exerciseId }
     }
 
@@ -101,11 +108,14 @@ class WorkoutViewModel(
         }
 
     private fun updateSets(exerciseId: Uuid, transform: (List<SetEntry>) -> List<SetEntry>) =
-        activeWorkoutRepository.update { exercises ->
+        updateExercises { exercises ->
             exercises.map { entry ->
                 if (entry.exercise.id == exerciseId) entry.copy(sets = transform(entry.sets)) else entry
             }
         }
+
+    private fun updateExercises(transform: (List<WorkoutExerciseEntry>) -> List<WorkoutExerciseEntry>) =
+        activeWorkoutRepository.update { it.copy(exercises = transform(it.exercises)) }
 
     /** Fetches the exercises from the server, replacing the stored ones. */
     fun loadExercises() {

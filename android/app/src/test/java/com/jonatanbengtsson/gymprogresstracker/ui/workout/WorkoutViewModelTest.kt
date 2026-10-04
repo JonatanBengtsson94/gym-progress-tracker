@@ -1,6 +1,7 @@
 package com.jonatanbengtsson.gymprogresstracker.ui.workout
 
 import com.jonatanbengtsson.gymprogresstracker.R
+import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.FakeActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeExercisesRepository
@@ -15,6 +16,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import java.time.Instant
 
 class WorkoutViewModelTest {
 
@@ -172,22 +174,30 @@ class WorkoutViewModelTest {
 
     @Test
     fun `the workout is loading until the saved one has been read`() {
-        activeWorkoutRepository.exercises.value = null
+        activeWorkoutRepository.workout.value = null
 
         assertTrue(viewModel.uiState.isLoadingWorkout)
 
-        activeWorkoutRepository.exercises.value = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5"))))
+        val startedAt = Instant.parse("2026-10-04T17:00:00Z")
+        activeWorkoutRepository.workout.value = ActiveWorkout(startedAt, listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5")))))
 
         assertFalse(viewModel.uiState.isLoadingWorkout)
+        assertEquals(startedAt, viewModel.uiState.startedAt)
         assertEquals(listOf(SetEntry(reps = "5")), setsOf(squat))
     }
 
     @Test
-    fun `changes to the workout are saved`() {
+    fun `changes to the workout are saved and keep when it started`() {
+        val startedAt = Instant.parse("2026-10-04T17:00:00Z")
+        activeWorkoutRepository.workout.value = ActiveWorkout(startedAt)
+
         viewModel.addExercise(squat)
         viewModel.updateReps(squat.id, 0, "5")
 
-        assertEquals(listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5")))), activeWorkoutRepository.exercises.value)
+        assertEquals(
+            ActiveWorkout(startedAt, listOf(WorkoutExerciseEntry(squat, listOf(SetEntry(reps = "5"))))),
+            activeWorkoutRepository.workout.value
+        )
     }
 
     @Test
@@ -197,7 +207,7 @@ class WorkoutViewModelTest {
         viewModel.addExercise(squat)
         viewModel.updateReps(squat.id, 0, "5")
 
-        activeWorkoutRepository.update { emptyList() }
+        activeWorkoutRepository.update { ActiveWorkout() }
 
         assertEquals(WorkoutUiState(exercises = listOf(benchPress, squat)), viewModel.uiState)
     }

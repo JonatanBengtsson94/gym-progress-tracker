@@ -122,6 +122,13 @@ class StartWorkoutContentTest {
     }
 
     @Test
+    fun aWorkoutInProgressShowsHowLongItHasRun() {
+        setContent(StartWorkoutUiState(workoutInProgress = true, workoutStartedAt = Instant.now().minusSeconds(3600 + 5 * 60)))
+
+        composeRule.onNodeWithText("1:05:", substring = true).assertIsDisplayed()
+    }
+
+    @Test
     fun discardingAWorkoutAsksFirst() {
         setContent(StartWorkoutUiState(workoutInProgress = true))
 

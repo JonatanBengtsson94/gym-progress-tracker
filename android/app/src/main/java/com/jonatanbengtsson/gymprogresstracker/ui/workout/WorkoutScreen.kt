@@ -72,6 +72,7 @@ import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
+import java.time.Instant
 import kotlin.uuid.Uuid
 
 @Composable
@@ -132,10 +133,16 @@ fun WorkoutContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Text(
-                text = stringResource(R.string.workout_title),
-                style = MaterialTheme.typography.headlineMedium
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.workout_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.weight(1f)
+                )
+                uiState.startedAt?.let {
+                    WorkoutTimer(startedAt = it, style = MaterialTheme.typography.titleLarge)
+                }
+            }
         }
         if (uiState.isLoadingWorkout) {
             item {
@@ -514,6 +521,7 @@ fun WorkoutContentPreview() {
     GymProgressTrackerTheme {
         WorkoutContent(
             uiState = WorkoutUiState(
+                startedAt = Instant.now().minusSeconds(1234),
                 workoutExercises = listOf(
                     WorkoutExerciseEntry(
                         exercise = Exercise(Uuid.fromLongs(0, 1), "Bench Press (Barbell)"),

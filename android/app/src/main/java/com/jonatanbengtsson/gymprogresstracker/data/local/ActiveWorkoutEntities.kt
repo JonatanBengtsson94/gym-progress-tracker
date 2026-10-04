@@ -6,7 +6,15 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.PrimaryKey
 import androidx.room.Relation
+import java.time.Instant
 import kotlin.uuid.Uuid
+
+/** The workout being logged, of which there is at most one row. */
+@Entity(tableName = "active_workout")
+data class ActiveWorkoutEntity(
+    @PrimaryKey val id: Int = 0,
+    @ColumnInfo(name = "started_at") val startedAt: Instant
+)
 
 @Entity(tableName = "active_workout_exercise")
 data class ActiveWorkoutExerciseEntity(

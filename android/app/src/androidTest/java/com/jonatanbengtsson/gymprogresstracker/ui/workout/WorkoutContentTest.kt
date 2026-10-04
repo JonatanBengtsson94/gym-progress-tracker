@@ -31,6 +31,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.time.Instant
 
 @RunWith(AndroidJUnit4::class)
 class WorkoutContentTest {
@@ -81,6 +82,13 @@ class WorkoutContentTest {
         composeRule.onNodeWithText(str(R.string.workout_choose_exercise)).assertIsDisplayed()
         composeRule.onNodeWithText("Bench Press (Barbell)").assertIsDisplayed()
         composeRule.onNodeWithText("Squat (Barbell)").assertIsDisplayed()
+    }
+
+    @Test
+    fun aStartedWorkoutShowsHowLongItHasRun() {
+        setContent(WorkoutUiState(startedAt = Instant.now().minusSeconds(3600 + 5 * 60)))
+
+        composeRule.onNodeWithText("1:05:", substring = true).assertIsDisplayed()
     }
 
     @Test

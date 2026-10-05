@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"uuid"
@@ -43,31 +44,46 @@ func TestExerciseRepository_GetGlobalExercises(t *testing.T) {
 		t.Fatalf("NewExerciseRepository returned error: %v", err)
 	}
 
-	exercises, err := repo.GetExercisesByUserId(ctx, 0)
+	exercises, err := repo.GetGlobalExercises(ctx)
 	if err != nil {
-		t.Fatalf("GetExercises returned error: %v", err)
+		t.Fatalf("GetGlobalExercises returned error: %v", err)
 	}
 
 	if len(exercises) != 48 {
 		t.Errorf("Expected 48 exercises got: %d", len(exercises))
 	}
-
-	expectedNames := []string{
-		"Bench Press (Barbell)",
-		"Squat (Barbell)",
-	}
-
-	for _, expected := range expectedNames {
-		found := false
-		for _, e := range exercises {
-			if e.ExerciseName == expected {
-				found = true
-				break
-			}
-		}
-		if !found {
+	for _, expected := range []string{"Bench Press (Barbell)", "Squat (Barbell)"} {
+		if !containsExerciseName(exercises, expected) {
 			t.Errorf("Expected exercise %q not found in results", expected)
 		}
+	}
+	for _, e := range exercises {
+		if e.UserId != 0 {
+			t.Errorf("Expected only global exercises, got %+v", e)
+		}
+	}
+}
+
+func TestExerciseRepository_GetGlobalExercises_ReturnsACopy(t *testing.T) {
+	ctx := t.Context()
+	repo, err := exercise.NewPostgresExerciseRepository(ctx, testPool)
+	if err != nil {
+		t.Fatalf("NewExerciseRepository returned error: %v", err)
+	}
+
+	first, err := repo.GetGlobalExercises(ctx)
+	if err != nil {
+		t.Fatalf("GetGlobalExercises returned error: %v", err)
+	}
+	want := first[0]
+	first[0] = exercise.Exercise{ExerciseName: "Changed by the caller"}
+
+	second, err := repo.GetGlobalExercises(ctx)
+	if err != nil {
+		t.Fatalf("GetGlobalExercises returned error: %v", err)
+	}
+	if second[0] != want {
+		t.Errorf("Expected the repository's exercises to be unchanged, got %+v, want %+v", second[0], want)
 	}
 }
 
@@ -83,29 +99,10 @@ func TestExerciseRepository_GetUserExercises(t *testing.T) {
 		t.Fatalf("GetExercises returned error: %v", err)
 	}
 
-	if len(exercises) != 49 {
-		t.Errorf("Expected 49 exercises got: %d", len(exercises))
+	want := []exercise.Exercise{{ExerciseId: testutil.Id(1), UserId: 1, ExerciseName: "Custom Test Exercise"}}
+	if !slices.Equal(exercises, want) {
+		t.Errorf("GetExercisesByUserId() = %+v, want only the user's own %+v", exercises, want)
 	}
-
-	expectedNames := []string{
-		"Bench Press (Barbell)",
-		"Squat (Barbell)",
-		"Custom Test Exercise",
-	}
-
-	for _, expected := range expectedNames {
-		found := false
-		for _, e := range exercises {
-			if e.ExerciseName == expected {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("Expected exercise %q not found in results", expected)
-		}
-	}
-
 }
 
 func TestExerciseRepository_GetExercises_UsersDoNotSeeEachOthersCustomExercises(t *testing.T) {

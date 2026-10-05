@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"uuid"
 
@@ -25,6 +26,12 @@ func NewPostgresExerciseRepository(ctx context.Context, db *pgxpool.Pool) (*Post
 	return &PostgresExerciseRepository{db: db, globalExercises: globalExercises}, nil
 }
 
+// GetGlobalExercises returns the exercises every user can see, read once when the repository was created.
+func (r *PostgresExerciseRepository) GetGlobalExercises(ctx context.Context) ([]Exercise, error) {
+	return slices.Clone(r.globalExercises), nil
+}
+
+// GetExercisesByUserId returns the user's own exercises, without the global ones.
 func (r *PostgresExerciseRepository) GetExercisesByUserId(ctx context.Context, userId uint32) ([]Exercise, error) {
 	query := `
 		SELECT exercise_id, exercise_name
@@ -37,10 +44,10 @@ func (r *PostgresExerciseRepository) GetExercisesByUserId(ctx context.Context, u
 	}
 	defer rows.Close()
 
-	exercises := make([]Exercise, 0, len(r.globalExercises))
+	var exercises []Exercise
 
 	for rows.Next() {
-		var exercise Exercise
+		exercise := Exercise{UserId: userId}
 		if err := rows.Scan(&exercise.ExerciseId, &exercise.ExerciseName); err != nil {
 			return nil, fmt.Errorf("Scan exercise failed: %w", err)
 		}
@@ -51,9 +58,7 @@ func (r *PostgresExerciseRepository) GetExercisesByUserId(ctx context.Context, u
 		return nil, fmt.Errorf("Rows iteration failed: %w", err)
 	}
 
-	allExercises := append(exercises, r.globalExercises...)
-
-	return allExercises, nil
+	return exercises, nil
 }
 
 // CreateExercise stores exercise under its own id, unless the user can already see an exercise

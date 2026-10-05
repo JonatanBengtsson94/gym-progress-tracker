@@ -11,6 +11,7 @@ import (
 )
 
 type ExerciseService interface {
+	GetGlobalExercises(context.Context) ([]Exercise, error)
 	GetExercises(context.Context, uint32) ([]Exercise, error)
 	CreateExercise(context.Context, Exercise) (exercise Exercise, created bool, err error)
 	ModifyExercise(context.Context, Exercise) (Exercise, error)
@@ -42,6 +43,18 @@ type ExercisesResponse struct {
 	Exercises []ExerciseResponse `json:"exercises"`
 }
 
+// GetGlobalExercises responds with the exercises every user can see. It needs no session.
+func (h *ExerciseHandler) GetGlobalExercises(w http.ResponseWriter, r *http.Request) {
+	exercises, err := h.service.GetGlobalExercises(r.Context())
+	if err != nil {
+		httpx.InternalError(w, err)
+		return
+	}
+	writeExercises(w, exercises)
+}
+
+// GetExercises responds with the user's own exercises, without the global ones, which are at
+// GET /global-exercises.
 func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
 	userId, ok := identity.RequireUserId(w, r)
 	if !ok {
@@ -53,7 +66,10 @@ func (h *ExerciseHandler) GetExercises(w http.ResponseWriter, r *http.Request) {
 		httpx.InternalError(w, err)
 		return
 	}
+	writeExercises(w, exercises)
+}
 
+func writeExercises(w http.ResponseWriter, exercises []Exercise) {
 	exercisesResponse := make([]ExerciseResponse, len(exercises))
 	for i, e := range exercises {
 		exercisesResponse[i] = ExerciseResponse{ExerciseId: e.ExerciseId, ExerciseName: e.ExerciseName}

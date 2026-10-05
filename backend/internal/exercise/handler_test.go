@@ -17,9 +17,14 @@ import (
 )
 
 type mockExerciseService struct {
+	getGlobalFunc      func(ctx context.Context) ([]exercise.Exercise, error)
 	getExercisesFunc   func(ctx context.Context, userId uint32) ([]exercise.Exercise, error)
 	createExerciseFunc func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error)
 	modifyExerciseFunc func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error)
+}
+
+func (m *mockExerciseService) GetGlobalExercises(ctx context.Context) ([]exercise.Exercise, error) {
+	return m.getGlobalFunc(ctx)
 }
 
 func (m *mockExerciseService) GetExercises(ctx context.Context, userId uint32) ([]exercise.Exercise, error) {
@@ -194,6 +199,74 @@ func TestExerciseHandler_GetExercises_ServiceError(t *testing.T) {
 
 	if res.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("Expected status 500, got %d", res.StatusCode)
+	}
+}
+
+func TestExerciseHandler_GetGlobalExercises_NeedsNoSession(t *testing.T) {
+	service := &mockExerciseService{
+		getGlobalFunc: func(ctx context.Context) ([]exercise.Exercise, error) {
+			return []exercise.Exercise{{ExerciseId: testutil.Id(1), ExerciseName: "Squat (Barbell)"}}, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/global-exercises", nil)
+	rec := httptest.NewRecorder()
+
+	exercise.NewExerciseHandler(service).GetGlobalExercises(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("Expected status 200, got %d", res.StatusCode)
+	}
+
+	var got exercise.ExercisesResponse
+	if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+		t.Fatalf("Failed to decode response body: %v", err)
+	}
+
+	want := []exercise.ExerciseResponse{{ExerciseId: testutil.Id(1), ExerciseName: "Squat (Barbell)"}}
+	if !reflect.DeepEqual(got.Exercises, want) {
+		t.Errorf("GetGlobalExercises() got = %v, want %v", got.Exercises, want)
+	}
+}
+
+func TestExerciseHandler_GetGlobalExercises_EmptyListIsEmptyArray(t *testing.T) {
+	service := &mockExerciseService{
+		getGlobalFunc: func(ctx context.Context) ([]exercise.Exercise, error) {
+			return nil, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/global-exercises", nil)
+	rec := httptest.NewRecorder()
+
+	exercise.NewExerciseHandler(service).GetGlobalExercises(rec, req)
+
+	var got map[string]any
+	if err := json.NewDecoder(rec.Result().Body).Decode(&got); err != nil {
+		t.Fatalf("Failed to decode response body: %v", err)
+	}
+	if exercises, ok := got["exercises"].([]any); !ok || len(exercises) != 0 {
+		t.Errorf("Expected \"exercises\" to be an empty array, got %#v", got["exercises"])
+	}
+}
+
+func TestExerciseHandler_GetGlobalExercises_ServiceError(t *testing.T) {
+	service := &mockExerciseService{
+		getGlobalFunc: func(ctx context.Context) ([]exercise.Exercise, error) {
+			return nil, errors.New("db exploded")
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/global-exercises", nil)
+	rec := httptest.NewRecorder()
+
+	exercise.NewExerciseHandler(service).GetGlobalExercises(rec, req)
+
+	if rec.Result().StatusCode != http.StatusInternalServerError {
+		t.Fatalf("Expected status 500, got %d", rec.Result().StatusCode)
 	}
 }
 

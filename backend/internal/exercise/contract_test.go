@@ -15,14 +15,31 @@ import (
 
 // The exercises the contract files describe.
 var (
-	contractBenchPress   = exercise.Exercise{ExerciseId: uuid.MustParse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d01"), ExerciseName: "Bench Press (Barbell)"}
-	contractZercherSquat = exercise.Exercise{ExerciseId: uuid.MustParse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d02"), ExerciseName: "Zercher Squat", UserId: 1}
+	contractBenchPress    = exercise.Exercise{ExerciseId: uuid.MustParse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d01"), ExerciseName: "Bench Press (Barbell)"}
+	contractSquat         = exercise.Exercise{ExerciseId: uuid.MustParse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d03"), ExerciseName: "Squat (Barbell)"}
+	contractZercherSquat  = exercise.Exercise{ExerciseId: uuid.MustParse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d02"), ExerciseName: "Zercher Squat", UserId: 1}
+	contractLandminePress = exercise.Exercise{ExerciseId: uuid.MustParse("0199a5e0-7c1a-7b3e-9f2d-3a8c4e6b1d04"), ExerciseName: "Landmine Press", UserId: 1}
 )
+
+func TestExerciseContract_GetGlobalExercises(t *testing.T) {
+	service := &mockExerciseService{
+		getGlobalFunc: func(ctx context.Context) ([]exercise.Exercise, error) {
+			return []exercise.Exercise{contractBenchPress, contractSquat}, nil
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/global-exercises", nil)
+	rec := httptest.NewRecorder()
+
+	exercise.NewExerciseHandler(service).GetGlobalExercises(rec, req)
+
+	testutil.AssertJSONEqual(t, rec.Body.Bytes(), testutil.ContractFile(t, "get_global_exercises.response.json"))
+}
 
 func TestExerciseContract_GetExercises(t *testing.T) {
 	service := &mockExerciseService{
 		getExercisesFunc: func(ctx context.Context, userId uint32) ([]exercise.Exercise, error) {
-			return []exercise.Exercise{contractBenchPress, contractZercherSquat}, nil
+			return []exercise.Exercise{contractLandminePress, contractZercherSquat}, nil
 		},
 	}
 

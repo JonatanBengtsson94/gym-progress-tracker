@@ -133,6 +133,33 @@ func TestIntegration_LoginAndAccessProtectedRoute(t *testing.T) {
 	if !found {
 		t.Errorf("expected to find alice's custom exercise, got %+v", exercises)
 	}
+	for _, e := range exercises {
+		if e.ExerciseId == benchPressId {
+			t.Errorf("expected only alice's own exercises, got the global %+v", e)
+		}
+	}
+}
+
+func TestIntegration_GlobalExercises_NeedNoToken(t *testing.T) {
+	router := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/global-exercises", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Result().StatusCode)
+	}
+
+	exercises := decodeBody[exercise.ExercisesResponse](t, rec).Exercises
+	if len(exercises) != 48 {
+		t.Errorf("expected the 48 global exercises, got %d", len(exercises))
+	}
+	for _, e := range exercises {
+		if e.ExerciseName == "Custom Test Exercise" {
+			t.Errorf("expected no user's own exercises, got %+v", e)
+		}
+	}
 }
 
 func TestIntegration_AccessProtectedRoute_NoToken(t *testing.T) {

@@ -21,6 +21,7 @@ func NewRouter(
 ) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /users/me", authMiddleware.RequireAuth(http.HandlerFunc(userHandler.GetUserFromSession)))
+	mux.HandleFunc("GET /global-exercises", exerciseHandler.GetGlobalExercises)
 	mux.Handle("GET /exercises", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.GetExercises)))
 	mux.Handle("POST /exercises", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.CreateExercise)))
 	mux.Handle("PUT /exercises/{exerciseId}", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.ModifyExercise)))

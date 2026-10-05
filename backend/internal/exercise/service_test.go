@@ -11,9 +11,14 @@ import (
 )
 
 type mockExerciseRepository struct {
+	getGlobalFunc      func(ctx context.Context) ([]exercise.Exercise, error)
 	getExerciseFunc    func(ctx context.Context, userId uint32) ([]exercise.Exercise, error)
 	createExerciseFunc func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, bool, error)
 	modifyExerciseFunc func(ctx context.Context, ex exercise.Exercise) (exercise.Exercise, error)
+}
+
+func (m *mockExerciseRepository) GetGlobalExercises(ctx context.Context) ([]exercise.Exercise, error) {
+	return m.getGlobalFunc(ctx)
 }
 
 func (m *mockExerciseRepository) GetExercisesByUserId(ctx context.Context, userId uint32) ([]exercise.Exercise, error) {
@@ -121,6 +126,49 @@ func TestExerciseService_GetExercises_RepoError(t *testing.T) {
 		t.Fatal("Expected error, got nil")
 	}
 
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("Expected error to wrap %v, got %v", wantErr, err)
+	}
+}
+
+func TestExerciseService_GetGlobalExercises_SortsByNameIgnoringCase(t *testing.T) {
+	ctx := t.Context()
+	repo := &mockExerciseRepository{
+		getGlobalFunc: func(ctx context.Context) ([]exercise.Exercise, error) {
+			return []exercise.Exercise{
+				{ExerciseId: testutil.Id(1), ExerciseName: "Squat (Barbell)"},
+				{ExerciseId: testutil.Id(3), ExerciseName: "bench press"},
+				{ExerciseId: testutil.Id(2), ExerciseName: "Bench Press"},
+			}, nil
+		},
+	}
+
+	got, err := exercise.NewExerciseService(repo).GetGlobalExercises(ctx)
+	if err != nil {
+		t.Fatalf("GetGlobalExercises returned error: %v", err)
+	}
+
+	wantIds := []uuid.UUID{testutil.Id(2), testutil.Id(3), testutil.Id(1)}
+	if len(got) != len(wantIds) {
+		t.Fatalf("Expected %d exercises, got %d", len(wantIds), len(got))
+	}
+	for i, ex := range got {
+		if ex.ExerciseId != wantIds[i] {
+			t.Errorf("exercise %d: got id %v (%q), want id %v", i, ex.ExerciseId, ex.ExerciseName, wantIds[i])
+		}
+	}
+}
+
+func TestExerciseService_GetGlobalExercises_RepoError(t *testing.T) {
+	ctx := t.Context()
+	wantErr := errors.New("db exploded")
+	repo := &mockExerciseRepository{
+		getGlobalFunc: func(ctx context.Context) ([]exercise.Exercise, error) {
+			return nil, wantErr
+		},
+	}
+
+	_, err := exercise.NewExerciseService(repo).GetGlobalExercises(ctx)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("Expected error to wrap %v, got %v", wantErr, err)
 	}

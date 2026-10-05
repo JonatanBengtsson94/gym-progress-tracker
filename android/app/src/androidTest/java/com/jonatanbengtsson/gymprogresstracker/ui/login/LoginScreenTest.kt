@@ -12,8 +12,6 @@ import com.jonatanbengtsson.gymprogresstracker.data.AuthApi
 import com.jonatanbengtsson.gymprogresstracker.data.LoginResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.SessionState
-import com.jonatanbengtsson.gymprogresstracker.data.SyncRepository
-import com.jonatanbengtsson.gymprogresstracker.data.SyncResult
 import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
@@ -47,16 +45,6 @@ class LoginScreenTest {
         override suspend fun endSession(sessionId: String) = error("Not used when logging in")
     }
 
-    private class FakeSyncRepository : SyncRepository {
-        var syncs = 0
-
-        override suspend fun sync(): SyncResult {
-            syncs++
-            return SyncResult.Success
-        }
-    }
-
-    private val syncRepository = FakeSyncRepository()
     private lateinit var authApi: FakeAuthApi
     private lateinit var sessionRepository: FakeSessionRepository
     private var loggedInCalls = 0
@@ -64,7 +52,7 @@ class LoginScreenTest {
     private fun setContent(result: LoginResult, session: SessionState = SessionState.LoggedOut(null)) {
         authApi = FakeAuthApi(result)
         sessionRepository = FakeSessionRepository(session)
-        val viewModel = LoginViewModel(authApi, sessionRepository, syncRepository)
+        val viewModel = LoginViewModel(authApi, sessionRepository)
         composeRule.setContent {
             GymProgressTrackerTheme {
                 LoginScreen(onLoggedIn = { loggedInCalls++ }, viewModel = viewModel)
@@ -82,18 +70,17 @@ class LoginScreenTest {
     }
 
     @Test
-    fun theFirstLoginStartsTheSessionDownloadsAndLeaves() {
+    fun theFirstLoginStartsTheSessionAndLeaves() {
         setContent(LoginResult.Success("session-123"))
 
         logIn()
 
         assertEquals(SessionState.LoggedIn("session-123", "alice"), sessionRepository.session.value)
-        assertEquals(1, syncRepository.syncs)
         assertEquals(1, loggedInCalls)
     }
 
     @Test
-    fun loggingInAgainLogsInAsTheOwnerWithoutDownloading() {
+    fun loggingInAgainLogsInAsTheOwner() {
         setContent(LoginResult.Success("session-123"), session = SessionState.LoggedOut("alice"))
 
         composeRule.onNodeWithText("alice").assertIsDisplayed()
@@ -101,7 +88,6 @@ class LoginScreenTest {
 
         assertEquals(listOf("alice"), authApi.usernames)
         assertEquals(SessionState.LoggedIn("session-123", "alice"), sessionRepository.session.value)
-        assertEquals(0, syncRepository.syncs)
         assertEquals(1, loggedInCalls)
     }
 

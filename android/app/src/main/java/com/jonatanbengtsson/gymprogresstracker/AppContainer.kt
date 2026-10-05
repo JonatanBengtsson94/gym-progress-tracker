@@ -31,6 +31,7 @@ import com.jonatanbengtsson.gymprogresstracker.data.local.GymDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /** The objects that live as long as the app, shared by the view models that need them. */
 class AppContainer(context: Context) {
@@ -64,6 +65,10 @@ class AppContainer(context: Context) {
         ApiWorkoutsRepository(HttpWorkoutsApi(apiClient), templatesApi, pendingWorkoutsRepository, templatesRepository)
 
     val syncRepository: SyncRepository = DefaultSyncRepository(workoutsRepository, templatesRepository, exercisesRepository)
+
+    init {
+        applicationScope.launch { exercisesRepository.fetchGlobalIfNoneStored() }
+    }
 }
 
 /** The app's [AppContainer], for view model factories. */

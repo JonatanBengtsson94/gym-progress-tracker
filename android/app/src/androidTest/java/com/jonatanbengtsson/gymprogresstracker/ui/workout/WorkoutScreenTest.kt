@@ -87,6 +87,7 @@ class WorkoutScreenTest {
         val workoutsRepository = ApiWorkoutsRepository(workoutsApi, templatesApi, pendingWorkoutsRepository, templatesRepository)
         val exercisesRepository = object : ExercisesRepository {
             override val exercises = MutableStateFlow(emptyList<Exercise>())
+            override suspend fun fetchGlobalIfNoneStored() {}
             override suspend fun refresh() = RefreshResult.Success
         }
         // On the main thread, like viewModel() would, since both update their state as they start.

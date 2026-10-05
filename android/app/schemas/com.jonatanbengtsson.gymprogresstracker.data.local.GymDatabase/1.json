@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "f617c3b7c4bb83c7df3d9a65d12e4d52",
+    "identityHash": "1da327865311086db123c63d968c59c1",
     "entities": [
       {
         "tableName": "active_workout",
@@ -126,7 +126,7 @@
       },
       {
         "tableName": "exercise",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`exercise_id` TEXT NOT NULL, `name` TEXT NOT NULL, `position` INTEGER NOT NULL, PRIMARY KEY(`exercise_id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`exercise_id` TEXT NOT NULL, `name` TEXT NOT NULL, `is_global` INTEGER NOT NULL, PRIMARY KEY(`exercise_id`))",
         "fields": [
           {
             "fieldPath": "exerciseId",
@@ -141,8 +141,8 @@
             "notNull": true
           },
           {
-            "fieldPath": "position",
-            "columnName": "position",
+            "fieldPath": "isGlobal",
+            "columnName": "is_global",
             "affinity": "INTEGER",
             "notNull": true
           }
@@ -374,7 +374,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f617c3b7c4bb83c7df3d9a65d12e4d52')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '1da327865311086db123c63d968c59c1')"
     ]
   }
 }

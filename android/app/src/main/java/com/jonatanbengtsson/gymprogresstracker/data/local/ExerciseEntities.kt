@@ -9,6 +9,6 @@ import kotlin.uuid.Uuid
 data class ExerciseEntity(
     @PrimaryKey @ColumnInfo(name = "exercise_id") val exerciseId: Uuid,
     val name: String,
-    /** Where the server listed the exercise, counting from 0. */
-    val position: Int
+    /** True for an exercise every user can see, false for one of the user's own. */
+    @ColumnInfo(name = "is_global") val isGlobal: Boolean
 )

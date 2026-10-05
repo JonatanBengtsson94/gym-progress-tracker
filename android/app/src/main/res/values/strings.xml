@@ -49,7 +49,7 @@
     <string name="workout_complete_set" tools:ignore="PluralsCandidate">Set %1$d completed</string>
     <string name="workout_remove_set">Remove set %1$d</string>
     <string name="workout_search_no_results">No exercises match \"%1$s\"</string>
-    <string name="workout_no_exercises">No exercises yet. Sync to download them.</string>
+    <string name="workout_no_exercises">No exercises yet. They\'re downloaded once you\'re online.</string>
     <string name="workout_save">Save workout</string>
     <string name="workout_save_incomplete_title">Save workout?</string>
     <plurals name="workout_save_incomplete_text">
@@ -62,6 +62,7 @@
     <string name="workout_save_error_no_sets">Complete at least one set to save the workout.</string>
     <string name="user_logged_in_as">Logged in as</string>
     <string name="user_logged_out">Logged out</string>
+    <string name="user_not_logged_in">Not logged in</string>
     <plurals name="user_pending">
         <item quantity="one">%1$d workout waiting to sync</item>
         <item quantity="other">%1$d workouts waiting to sync</item>

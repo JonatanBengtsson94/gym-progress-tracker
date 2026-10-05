@@ -19,8 +19,8 @@ import com.jonatanbengtsson.gymprogresstracker.data.owner
 import kotlinx.coroutines.launch
 
 data class UserUiState(
-    /** Who the device belongs to. */
-    val username: String = "",
+    /** Who the device belongs to, or null if nobody has logged in on it yet. */
+    val username: String? = null,
     val isLoggedIn: Boolean = false,
     /** How many saved workouts haven't been synced to the server yet. */
     val pendingWorkouts: Int = 0,
@@ -48,7 +48,7 @@ class UserViewModel(
         viewModelScope.launch {
             sessionRepository.session.collect { session ->
                 val isLoggedIn = session is SessionState.LoggedIn
-                uiState = uiState.copy(username = session.owner.orEmpty(), isLoggedIn = isLoggedIn)
+                uiState = uiState.copy(username = session.owner, isLoggedIn = isLoggedIn)
                 if (isLoggedIn && syncAfterLogIn) sync()
             }
         }

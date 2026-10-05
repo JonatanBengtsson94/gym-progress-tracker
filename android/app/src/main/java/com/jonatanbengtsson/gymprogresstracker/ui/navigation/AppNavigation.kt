@@ -42,15 +42,14 @@ sealed interface Screen : NavKey {
 }
 
 /**
- * Navigates between the app's screens, starting at [Screen.StartWorkout], or at [Screen.Login] when
- * [startAtLogin] is true, as on the device's first launch. A navigation bar switches between the start
- * screen and [Screen.User], and is hidden on the other screens. Later, [Screen.Login] opens over the
- * screen that needs a session and closes once the user has logged in. Each screen gets its own view
- * models, cleared when the screen is popped or this leaves the composition.
+ * Navigates between the app's screens, starting at [Screen.StartWorkout]. A navigation bar switches
+ * between the start screen and [Screen.User], and is hidden on the other screens. [Screen.Login] opens
+ * over the screen that needs a session and closes once the user has logged in. Each screen gets its own
+ * view models, cleared when the screen is popped or this leaves the composition.
  */
 @Composable
-fun AppNavigation(startAtLogin: Boolean, modifier: Modifier = Modifier) {
-    val backStack = rememberNavBackStack(if (startAtLogin) Screen.Login else Screen.StartWorkout)
+fun AppNavigation(modifier: Modifier = Modifier) {
+    val backStack = rememberNavBackStack(Screen.StartWorkout)
     val currentScreen = backStack.last()
 
     Scaffold(
@@ -100,7 +99,7 @@ fun AppNavigation(startAtLogin: Boolean, modifier: Modifier = Modifier) {
                     UserScreen(onLogIn = { backStack.navigateTo(Screen.Login) })
                 }
                 entry<Screen.Login> {
-                    LoginScreen(onLoggedIn = { backStack.closeLogin() })
+                    LoginScreen(onLoggedIn = { backStack.remove(Screen.Login) })
                 }
             }
         )

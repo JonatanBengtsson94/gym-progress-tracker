@@ -3,10 +3,8 @@ package com.jonatanbengtsson.gymprogresstracker.ui.login
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.AuthApi
 import com.jonatanbengtsson.gymprogresstracker.data.FakeSessionRepository
-import com.jonatanbengtsson.gymprogresstracker.data.FakeSyncRepository
 import com.jonatanbengtsson.gymprogresstracker.data.LoginResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionState
-import com.jonatanbengtsson.gymprogresstracker.data.SyncResult
 import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -30,10 +28,9 @@ class LoginViewModelTest {
 
     private val authApi = FakeAuthApi()
     private val sessionRepository = FakeSessionRepository()
-    private val syncRepository = FakeSyncRepository()
 
     // Created lazily so a test can give the device an owner first.
-    private val viewModel by lazy { LoginViewModel(authApi, sessionRepository, syncRepository) }
+    private val viewModel by lazy { LoginViewModel(authApi, sessionRepository) }
 
     @Test
     fun `initial state is idle`() {
@@ -55,46 +52,19 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `the first login downloads the user's data before it's done`() {
+    fun `success logs the user in`() {
         viewModel.login("alice", "pw")
         authApi.response.complete(LoginResult.Success("session-123"))
 
         assertEquals(listOf("alice" to "session-123"), sessionRepository.logIns)
         assertEquals(SessionState.LoggedIn("session-123", "alice"), sessionRepository.session.value)
-        assertEquals(1, syncRepository.syncs)
-        assertEquals(LoginUiState(isLoading = true), viewModel.uiState)
-
-        syncRepository.syncResult.complete(SyncResult.Success)
-
         assertEquals(LoginUiState(isLoggedIn = true), viewModel.uiState)
-    }
-
-    @Test
-    fun `the first login is done even if downloading fails`() {
-        viewModel.login("alice", "pw")
-        authApi.response.complete(LoginResult.Success("session-123"))
-
-        syncRepository.syncResult.complete(SyncResult.NetworkError)
-
-        assertEquals(LoginUiState(isLoggedIn = true), viewModel.uiState)
-    }
-
-    @Test
-    fun `logging in again doesn't download anything`() {
-        sessionRepository.session.value = SessionState.LoggedOut("alice")
-
-        viewModel.login("alice", "pw")
-        authApi.response.complete(LoginResult.Success("session-123"))
-
-        assertEquals(0, syncRepository.syncs)
-        assertEquals(LoginUiState(ownerUsername = "alice", isLoggedIn = true), viewModel.uiState)
     }
 
     @Test
     fun `login is ignored once logged in`() {
         viewModel.login("alice", "pw")
         authApi.response.complete(LoginResult.Success("session-123"))
-        syncRepository.syncResult.complete(SyncResult.Success)
 
         viewModel.login("alice", "pw")
 
@@ -152,7 +122,6 @@ class LoginViewModelTest {
 
         assertEquals(LoginUiState(isLoading = true), viewModel.uiState)
         authApi.response.complete(LoginResult.Success("session-123"))
-        syncRepository.syncResult.complete(SyncResult.Success)
         assertEquals(LoginUiState(isLoggedIn = true), viewModel.uiState)
         assertEquals(SessionState.LoggedIn("session-123", "alice"), sessionRepository.session.value)
     }

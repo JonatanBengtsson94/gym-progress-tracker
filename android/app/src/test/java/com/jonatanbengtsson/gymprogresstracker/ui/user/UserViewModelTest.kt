@@ -40,6 +40,23 @@ class UserViewModelTest {
     }
 
     @Test
+    fun `shows nobody before anyone has logged in`() {
+        sessionRepository.session.value = SessionState.LoggedOut(null)
+
+        assertEquals(UserUiState(), viewModel.uiState)
+    }
+
+    @Test
+    fun `syncing before anyone has logged in asks to log in`() {
+        sessionRepository.session.value = SessionState.LoggedOut(null)
+
+        viewModel.sync()
+
+        assertEquals(0, syncRepository.syncs)
+        assertTrue(viewModel.uiState.logInRequested)
+    }
+
+    @Test
     fun `shows how many saved workouts are waiting to sync`() {
         viewModel
 

@@ -20,8 +20,3 @@ internal fun MutableList<NavKey>.selectTab(screen: Screen) {
     while (size > 1) removeAt(lastIndex)
     if (screen != Screen.StartWorkout) add(screen)
 }
-
-/** Closes [Screen.Login] once the user has logged in. A first login is the only screen, so the start screen takes its place. */
-internal fun MutableList<NavKey>.closeLogin() {
-    if (size == 1) set(0, Screen.StartWorkout) else remove(Screen.Login)
-}

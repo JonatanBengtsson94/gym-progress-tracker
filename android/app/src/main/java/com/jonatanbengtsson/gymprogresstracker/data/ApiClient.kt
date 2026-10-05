@@ -38,7 +38,7 @@ class ApiClient(private val baseUrl: String, private val sessionRepository: Sess
         return result
     }
 
-    /** Sends a request without a session, which is how logging in works. */
+    /** Sends a request without a session, for logging in and for what anyone may see. */
     suspend fun <T> sendWithoutSession(method: String, path: String, body: JSONObject? = null, parse: (JSONObject) -> T): ApiResult<T> =
         exchange(method, path, body, sessionId = null, parse)
 

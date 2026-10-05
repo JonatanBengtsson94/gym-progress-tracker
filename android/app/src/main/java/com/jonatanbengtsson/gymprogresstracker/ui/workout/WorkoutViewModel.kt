@@ -78,6 +78,7 @@ class WorkoutViewModel(
         viewModelScope.launch {
             exercisesRepository.exercises.collect { exercises -> uiState = uiState.copy(exercises = exercises) }
         }
+        viewModelScope.launch { exercisesRepository.fetchGlobalIfNoneStored() }
     }
 
     /** Ignores names longer than a template name can be. */

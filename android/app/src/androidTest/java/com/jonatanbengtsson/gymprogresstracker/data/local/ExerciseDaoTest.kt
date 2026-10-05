@@ -18,8 +18,9 @@ class ExerciseDaoTest {
     private lateinit var database: GymDatabase
     private lateinit var dao: ExerciseDao
 
-    private val squat = ExerciseEntity(exerciseId = testId(1), name = "Squat (Barbell)", position = 1)
-    private val benchPress = ExerciseEntity(exerciseId = testId(2), name = "Bench Press (Barbell)", position = 0)
+    private val squat = ExerciseEntity(exerciseId = testId(1), name = "Squat (Barbell)", isGlobal = true)
+    private val benchPress = ExerciseEntity(exerciseId = testId(2), name = "Bench Press (Barbell)", isGlobal = true)
+    private val landminePress = ExerciseEntity(exerciseId = testId(3), name = "Landmine Press", isGlobal = false)
 
     @Before
     fun setUp() {
@@ -32,24 +33,38 @@ class ExerciseDaoTest {
         database.close()
     }
 
+    private suspend fun stored() = dao.observeExercises().first().toSet()
+
     @Test
     fun aNewDatabaseHasNoExercises() = runTest {
-        assertEquals(emptyList<ExerciseEntity>(), dao.observeExercises().first())
+        assertEquals(emptySet<ExerciseEntity>(), stored())
     }
 
     @Test
-    fun storedExercisesAreReadBackInPosition() = runTest {
-        dao.replaceExercises(listOf(squat, benchPress))
+    fun storedExercisesAreReadBack() = runTest {
+        dao.replaceExercises(isGlobal = true, listOf(squat, benchPress))
+        dao.replaceExercises(isGlobal = false, listOf(landminePress))
 
-        assertEquals(listOf(benchPress, squat), dao.observeExercises().first())
+        assertEquals(setOf(squat, benchPress, landminePress), stored())
     }
 
     @Test
-    fun replacingTheExercisesLeavesNothingOfTheOldOnes() = runTest {
-        dao.replaceExercises(listOf(squat, benchPress))
+    fun replacingTheGlobalExercisesKeepsTheUsersOwn() = runTest {
+        dao.replaceExercises(isGlobal = true, listOf(squat, benchPress))
+        dao.replaceExercises(isGlobal = false, listOf(landminePress))
 
-        dao.replaceExercises(listOf(squat.copy(position = 0)))
+        dao.replaceExercises(isGlobal = true, listOf(squat))
 
-        assertEquals(listOf(squat.copy(position = 0)), dao.observeExercises().first())
+        assertEquals(setOf(squat, landminePress), stored())
+    }
+
+    @Test
+    fun replacingTheUsersOwnKeepsTheGlobalExercises() = runTest {
+        dao.replaceExercises(isGlobal = true, listOf(squat, benchPress))
+        dao.replaceExercises(isGlobal = false, listOf(landminePress))
+
+        dao.replaceExercises(isGlobal = false, emptyList())
+
+        assertEquals(setOf(squat, benchPress), stored())
     }
 }

@@ -56,6 +56,13 @@ class WorkoutViewModelTest {
     }
 
     @Test
+    fun `fetches the global exercises if none are stored yet`() {
+        viewModel
+
+        assertEquals(1, exercisesRepository.globalFetches)
+    }
+
+    @Test
     fun `shows the stored exercises`() {
         exercisesRepository.exercises.value = listOf(squat)
         viewModel

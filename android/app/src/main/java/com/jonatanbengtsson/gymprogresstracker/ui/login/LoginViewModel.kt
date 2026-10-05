@@ -13,14 +13,12 @@ import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.AuthApi
 import com.jonatanbengtsson.gymprogresstracker.data.LoginResult
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
-import com.jonatanbengtsson.gymprogresstracker.data.SyncRepository
 import com.jonatanbengtsson.gymprogresstracker.data.owner
 import kotlinx.coroutines.launch
 
 data class LoginUiState(
     /** Who the device belongs to, the only user who can log in on it, or null if nobody has yet. */
     val ownerUsername: String? = null,
-    /** True while logging in, and on the device's first login while the user's data is downloaded. */
     val isLoading: Boolean = false,
     @StringRes val errorMessage: Int? = null,
     /** True once the session has been saved. */
@@ -29,17 +27,13 @@ data class LoginUiState(
 
 class LoginViewModel(
     private val authApi: AuthApi,
-    private val sessionRepository: SessionRepository,
-    private val syncRepository: SyncRepository
+    private val sessionRepository: SessionRepository
 ) : ViewModel() {
 
     var uiState by mutableStateOf(LoginUiState(ownerUsername = sessionRepository.session.value.owner))
         private set
 
-    /**
-     * Logs in as [username], or as the device's owner if it has one. The first login on the device also
-     * downloads the user's templates and exercises. If that fails, they can be synced later.
-     */
+    /** Logs in as [username], or as the device's owner if it has one. */
     fun login(username: String, password: String) {
         if (uiState.isLoading || uiState.isLoggedIn) return
         val loginUsername = uiState.ownerUsername ?: username
@@ -47,10 +41,7 @@ class LoginViewModel(
 
         viewModelScope.launch {
             val result = authApi.login(loginUsername, password)
-            if (result is LoginResult.Success) {
-                sessionRepository.logIn(loginUsername, result.sessionId)
-                if (uiState.ownerUsername == null) syncRepository.sync()
-            }
+            if (result is LoginResult.Success) sessionRepository.logIn(loginUsername, result.sessionId)
             uiState = uiState.copy(
                 isLoading = false,
                 isLoggedIn = result is LoginResult.Success,
@@ -66,7 +57,7 @@ class LoginViewModel(
 
     companion object {
         val Factory = viewModelFactory {
-            initializer { LoginViewModel(appContainer.authApi, appContainer.sessionRepository, appContainer.syncRepository) }
+            initializer { LoginViewModel(appContainer.authApi, appContainer.sessionRepository) }
         }
     }
 }

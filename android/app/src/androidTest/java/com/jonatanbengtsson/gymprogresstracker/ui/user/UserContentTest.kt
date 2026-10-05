@@ -50,6 +50,15 @@ class UserContentTest {
     }
 
     @Test
+    fun beforeAnyoneHasLoggedInSaysSo() {
+        setContent(UserUiState())
+
+        composeRule.onNodeWithText(str(R.string.user_not_logged_in)).assertIsDisplayed()
+        composeRule.onNodeWithText(str(R.string.user_logged_out)).assertDoesNotExist()
+        composeRule.onNodeWithText(str(R.string.user_sync)).assertIsDisplayed()
+    }
+
+    @Test
     fun showsWhoTheDeviceBelongsToWhileLoggedOut() {
         setContent(UserUiState(username = "alice"))
 

@@ -67,22 +67,4 @@ class BackStackTest {
 
         assertEquals(backStack(Screen.StartWorkout, Screen.User), backStack)
     }
-
-    @Test
-    fun `a login opened over another screen closes back to it`() {
-        val backStack = backStack(Screen.StartWorkout, Screen.User, Screen.Login)
-
-        backStack.closeLogin()
-
-        assertEquals(backStack(Screen.StartWorkout, Screen.User), backStack)
-    }
-
-    @Test
-    fun `the first login is replaced by the start screen`() {
-        val backStack = backStack(Screen.Login)
-
-        backStack.closeLogin()
-
-        assertEquals(backStack(Screen.StartWorkout), backStack)
-    }
 }

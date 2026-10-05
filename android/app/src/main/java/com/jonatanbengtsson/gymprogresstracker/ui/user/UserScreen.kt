@@ -55,13 +55,17 @@ fun UserContent(
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column {
-            Text(
-                text = stringResource(if (uiState.isLoggedIn) R.string.user_logged_in_as else R.string.user_logged_out),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(text = uiState.username, style = MaterialTheme.typography.headlineMedium)
+        if (uiState.username == null) {
+            Text(text = stringResource(R.string.user_not_logged_in), style = MaterialTheme.typography.headlineMedium)
+        } else {
+            Column {
+                Text(
+                    text = stringResource(if (uiState.isLoggedIn) R.string.user_logged_in_as else R.string.user_logged_out),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(text = uiState.username, style = MaterialTheme.typography.headlineMedium)
+            }
         }
         HorizontalDivider()
         SyncSection(
@@ -111,6 +115,14 @@ private fun SyncSection(pendingWorkouts: Int, isSyncing: Boolean, @StringRes err
 fun UserContentPreview() {
     GymProgressTrackerTheme {
         UserContent(uiState = UserUiState(username = "alice", isLoggedIn = true, pendingWorkouts = 2), onSync = {})
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+fun UserContentNotLoggedInPreview() {
+    GymProgressTrackerTheme {
+        UserContent(uiState = UserUiState(pendingWorkouts = 1), onSync = {})
     }
 }
 

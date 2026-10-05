@@ -33,8 +33,8 @@ val SessionState.owner: String?
 
 /**
  * The session used to talk to the server, kept on the device so the user stays logged in across
- * restarts. The first login makes that user the device's owner. After that the app works without a
- * session; only requests to the server need one.
+ * restarts. The app works without one; only requests for the user's own data need it. The first
+ * login makes that user the device's owner.
  */
 interface SessionRepository {
     val session: StateFlow<SessionState>

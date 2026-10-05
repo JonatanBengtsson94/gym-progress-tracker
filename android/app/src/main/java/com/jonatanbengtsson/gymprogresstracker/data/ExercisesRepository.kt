@@ -24,7 +24,7 @@ class RoomExercisesRepository(private val api: ExercisesApi, private val dao: Ex
             dao.replaceExercises(result.value.mapIndexed { position, exercise -> ExerciseEntity(exercise.id, exercise.name, position) })
             RefreshResult.Success
         }
-        ApiResult.Unauthorized -> RefreshResult.SessionExpired
+        ApiResult.Unauthorized -> RefreshResult.NotLoggedIn
         ApiResult.NetworkError -> RefreshResult.NetworkError
         ApiResult.ServerError -> RefreshResult.ServerError
     }

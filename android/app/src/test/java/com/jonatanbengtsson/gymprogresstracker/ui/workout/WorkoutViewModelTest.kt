@@ -107,9 +107,9 @@ class WorkoutViewModelTest {
     }
 
     @Test
-    fun `an expired session shows no error`() {
+    fun `no session shows no error`() {
         viewModel
-        exercisesRepository.refreshResult.complete(RefreshResult.SessionExpired)
+        exercisesRepository.refreshResult.complete(RefreshResult.NotLoggedIn)
 
         assertEquals(WorkoutUiState(), viewModel.uiState)
     }

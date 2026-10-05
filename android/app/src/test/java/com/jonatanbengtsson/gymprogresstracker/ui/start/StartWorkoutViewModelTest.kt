@@ -4,12 +4,9 @@ import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.FakeActiveWorkoutRepository
-import com.jonatanbengtsson.gymprogresstracker.data.FakeSessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeTemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeWorkoutsRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
-import com.jonatanbengtsson.gymprogresstracker.data.SessionState
-import com.jonatanbengtsson.gymprogresstracker.data.SyncResult
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
 import com.jonatanbengtsson.gymprogresstracker.data.testId
@@ -42,12 +39,11 @@ class StartWorkoutViewModelTest {
 
     private val templatesRepository = FakeTemplatesRepository()
     private val activeWorkoutRepository = FakeActiveWorkoutRepository()
-    private val sessionRepository = FakeSessionRepository(SessionState.LoggedIn("session-123"))
     private val workoutsRepository = FakeWorkoutsRepository()
 
     // Created lazily so each test can set up the fakes before the view model refreshes on init.
     private val viewModel by lazy {
-        StartWorkoutViewModel(templatesRepository, activeWorkoutRepository, sessionRepository, workoutsRepository, Clock.fixed(now, ZoneOffset.UTC))
+        StartWorkoutViewModel(templatesRepository, activeWorkoutRepository, workoutsRepository, Clock.fixed(now, ZoneOffset.UTC))
     }
 
     @Test
@@ -97,21 +93,11 @@ class StartWorkoutViewModelTest {
     }
 
     @Test
-    fun `an expired session shows no error`() {
+    fun `no session shows no error`() {
         viewModel
-        templatesRepository.refreshResult.complete(RefreshResult.SessionExpired)
+        templatesRepository.refreshResult.complete(RefreshResult.NotLoggedIn)
 
         assertEquals(StartWorkoutUiState(), viewModel.uiState)
-    }
-
-    @Test
-    fun `logging out ends the session but keeps the workout`() {
-        activeWorkoutRepository.workout.value = workout
-
-        viewModel.logOut()
-
-        assertEquals(SessionState.LoggedOut, sessionRepository.session.value)
-        assertEquals(workout, activeWorkoutRepository.workout.value)
     }
 
     @Test
@@ -217,63 +203,6 @@ class StartWorkoutViewModelTest {
         workoutsRepository.pendingCount.value = 2
 
         assertEquals(2, viewModel.uiState.pendingWorkouts)
-    }
-
-    @Test
-    fun `syncing shows progress until it's done`() {
-        viewModel.sync()
-
-        assertEquals(1, workoutsRepository.syncs)
-        assertTrue(viewModel.uiState.isSyncing)
-
-        workoutsRepository.syncResult.complete(SyncResult.Success)
-
-        assertFalse(viewModel.uiState.isSyncing)
-        assertNull(viewModel.uiState.syncErrorMessage)
-    }
-
-    @Test
-    fun `syncing is ignored while a sync is in flight`() {
-        viewModel.sync()
-
-        viewModel.sync()
-
-        assertEquals(1, workoutsRepository.syncs)
-    }
-
-    @Test
-    fun `network error syncing shows network error`() {
-        assertSyncErrorFor(SyncResult.NetworkError, R.string.start_workout_sync_error_network)
-    }
-
-    @Test
-    fun `server error syncing shows server error`() {
-        assertSyncErrorFor(SyncResult.ServerError, R.string.start_workout_sync_error_server)
-    }
-
-    @Test
-    fun `an expired session while syncing shows no error`() {
-        assertSyncErrorFor(SyncResult.SessionExpired, null)
-    }
-
-    @Test
-    fun `syncing again clears the last error`() {
-        viewModel.sync()
-        workoutsRepository.syncResult.complete(SyncResult.NetworkError)
-        workoutsRepository.syncResult = CompletableDeferred()
-
-        viewModel.sync()
-
-        assertNull(viewModel.uiState.syncErrorMessage)
-        assertEquals(2, workoutsRepository.syncs)
-    }
-
-    private fun assertSyncErrorFor(result: SyncResult, expectedMessage: Int?) {
-        viewModel.sync()
-        workoutsRepository.syncResult.complete(result)
-
-        assertEquals(expectedMessage, viewModel.uiState.syncErrorMessage)
-        assertFalse(viewModel.uiState.isSyncing)
     }
 
     private fun assertErrorFor(result: RefreshResult, expectedMessage: Int) {

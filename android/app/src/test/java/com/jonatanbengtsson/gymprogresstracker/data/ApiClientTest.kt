@@ -16,7 +16,7 @@ import kotlin.uuid.Uuid
 class ApiClientTest {
 
     private lateinit var server: MockWebServer
-    private val sessionRepository = FakeSessionRepository(SessionState.LoggedIn("session-123"))
+    private val sessionRepository = FakeSessionRepository(SessionState.LoggedIn("session-123", "alice"))
     private lateinit var client: ApiClient
 
     @Before
@@ -60,7 +60,7 @@ class ApiClientTest {
 
     @Test
     fun `without a session nothing is sent`() = runTest {
-        sessionRepository.session.value = SessionState.LoggedOut
+        sessionRepository.session.value = SessionState.LoggedOut("alice")
 
         assertEquals(ApiResult.Unauthorized, getName())
         assertEquals(0, server.requestCount)
@@ -71,7 +71,7 @@ class ApiClientTest {
         server.enqueue(MockResponse().setResponseCode(401))
 
         assertEquals(ApiResult.Unauthorized, getName())
-        assertEquals(SessionState.LoggedOut, sessionRepository.session.value)
+        assertEquals(SessionState.LoggedOut("alice"), sessionRepository.session.value)
     }
 
     @Test
@@ -79,13 +79,13 @@ class ApiClientTest {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse {
                 // The user logs in again while the request is on its way.
-                sessionRepository.session.value = SessionState.LoggedIn("session-456")
+                sessionRepository.session.value = SessionState.LoggedIn("session-456", "alice")
                 return MockResponse().setResponseCode(401)
             }
         }
 
         assertEquals(ApiResult.Unauthorized, getName())
-        assertEquals(SessionState.LoggedIn("session-456"), sessionRepository.session.value)
+        assertEquals(SessionState.LoggedIn("session-456", "alice"), sessionRepository.session.value)
     }
 
     @Test
@@ -95,7 +95,7 @@ class ApiClientTest {
 
             assertEquals(ApiResult.ServerError, getName())
         }
-        assertEquals(SessionState.LoggedIn("session-123"), sessionRepository.session.value)
+        assertEquals(SessionState.LoggedIn("session-123", "alice"), sessionRepository.session.value)
     }
 
     @Test
@@ -125,6 +125,6 @@ class ApiClientTest {
 
         assertEquals(ApiResult.Unauthorized, client.sendWithoutSession("POST", "/login", JSONObject()) { it.getString("session_id") })
         assertNull(server.takeRequest().getHeader("Authorization"))
-        assertEquals(SessionState.LoggedIn("session-123"), sessionRepository.session.value)
+        assertEquals(SessionState.LoggedIn("session-123", "alice"), sessionRepository.session.value)
     }
 }

@@ -137,7 +137,7 @@ class RoomTemplatesRepositoryTest {
         for ((result, expected) in listOf(
             ApiResult.NetworkError to RefreshResult.NetworkError,
             ApiResult.ServerError to RefreshResult.ServerError,
-            ApiResult.Unauthorized to RefreshResult.SessionExpired
+            ApiResult.Unauthorized to RefreshResult.NotLoggedIn
         )) {
             api.result = result
 

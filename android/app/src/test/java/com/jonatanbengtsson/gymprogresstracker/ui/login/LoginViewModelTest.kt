@@ -28,7 +28,9 @@ class LoginViewModelTest {
 
     private val authApi = FakeAuthApi()
     private val sessionRepository = FakeSessionRepository()
-    private val viewModel = LoginViewModel(authApi, sessionRepository)
+
+    // Created lazily so a test can give the device an owner first.
+    private val viewModel by lazy { LoginViewModel(authApi, sessionRepository) }
 
     @Test
     fun `initial state is idle`() {
@@ -50,13 +52,41 @@ class LoginViewModelTest {
     }
 
     @Test
-    fun `success logs the user in and stays loading`() {
+    fun `success logs the user in`() {
         viewModel.login("alice", "pw")
         authApi.response.complete(LoginResult.Success("session-123"))
 
         assertEquals(listOf("alice" to "session-123"), sessionRepository.logIns)
-        assertEquals(SessionState.LoggedIn("session-123"), sessionRepository.session.value)
-        assertEquals(LoginUiState(isLoading = true), viewModel.uiState)
+        assertEquals(SessionState.LoggedIn("session-123", "alice"), sessionRepository.session.value)
+        assertEquals(LoginUiState(isLoggedIn = true), viewModel.uiState)
+    }
+
+    @Test
+    fun `login is ignored once logged in`() {
+        viewModel.login("alice", "pw")
+        authApi.response.complete(LoginResult.Success("session-123"))
+
+        viewModel.login("alice", "pw")
+
+        assertEquals(1, authApi.calls.size)
+    }
+
+    @Test
+    fun `a device that belongs to someone shows who`() {
+        sessionRepository.session.value = SessionState.LoggedOut("alice")
+
+        assertEquals(LoginUiState(ownerUsername = "alice"), viewModel.uiState)
+    }
+
+    @Test
+    fun `a device that belongs to someone only logs in as them`() {
+        sessionRepository.session.value = SessionState.LoggedOut("alice")
+
+        viewModel.login("bob", "pw")
+        authApi.response.complete(LoginResult.Success("session-123"))
+
+        assertEquals(listOf("alice" to "pw"), authApi.calls)
+        assertEquals(SessionState.LoggedIn("session-123", "alice"), sessionRepository.session.value)
     }
 
     @Test
@@ -92,7 +122,8 @@ class LoginViewModelTest {
 
         assertEquals(LoginUiState(isLoading = true), viewModel.uiState)
         authApi.response.complete(LoginResult.Success("session-123"))
-        assertEquals(SessionState.LoggedIn("session-123"), sessionRepository.session.value)
+        assertEquals(LoginUiState(isLoggedIn = true), viewModel.uiState)
+        assertEquals(SessionState.LoggedIn("session-123", "alice"), sessionRepository.session.value)
     }
 
     private fun assertErrorFor(result: LoginResult, expectedMessage: Int) {

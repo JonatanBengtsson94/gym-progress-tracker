@@ -45,8 +45,6 @@ class AppContainer(context: Context) {
 
     val sessionRepository: SessionRepository = DataStoreSessionRepository(
         PreferenceDataStoreFactory.create { context.preferencesDataStoreFile("session") },
-        activeWorkoutRepository,
-        pendingWorkoutsRepository,
         applicationScope
     )
 

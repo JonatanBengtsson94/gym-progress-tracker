@@ -14,7 +14,10 @@ import java.time.DateTimeException
 sealed interface ApiResult<out T> {
     data class Success<T>(val value: T) : ApiResult<T>
 
-    /** The server answered 401: the session has ended, or for a login, the credentials are wrong. */
+    /**
+     * The server answered 401: the session has ended, or for a login, the credentials are wrong. Also
+     * returned without sending anything when there's no session.
+     */
     data object Unauthorized : ApiResult<Nothing>
     data object NetworkError : ApiResult<Nothing>
     data object ServerError : ApiResult<Nothing>

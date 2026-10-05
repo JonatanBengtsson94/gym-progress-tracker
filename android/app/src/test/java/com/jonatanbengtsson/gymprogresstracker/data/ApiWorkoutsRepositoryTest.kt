@@ -186,7 +186,7 @@ class ApiWorkoutsRepositoryTest {
         repository.save(testId(20), workout)
         workoutsApi.results[testId(20)] = ApiResult.Unauthorized
 
-        assertEquals(SyncResult.SessionExpired, repository.sync())
+        assertEquals(SyncResult.NotLoggedIn, repository.sync())
 
         assertEquals(listOf(testId(20)), pending().map { it.workoutId })
     }

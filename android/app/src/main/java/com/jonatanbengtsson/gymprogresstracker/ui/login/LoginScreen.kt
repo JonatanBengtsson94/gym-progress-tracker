@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,12 +34,18 @@ import com.jonatanbengtsson.gymprogresstracker.ui.theme.GymProgressTrackerTheme
 
 @Composable
 fun LoginScreen(
+    onLoggedIn: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: LoginViewModel = viewModel(factory = LoginViewModel.Factory)
 ) {
     val uiState = viewModel.uiState
 
+    LaunchedEffect(uiState.isLoggedIn) {
+        if (uiState.isLoggedIn) onLoggedIn()
+    }
+
     LoginContent(
+        ownerUsername = uiState.ownerUsername,
         isLoading = uiState.isLoading,
         errorMessage = uiState.errorMessage,
         onLogin = viewModel::login,
@@ -48,12 +55,13 @@ fun LoginScreen(
 
 @Composable
 fun LoginContent(
+    ownerUsername: String?,
     isLoading: Boolean,
     @StringRes errorMessage: Int?,
     onLogin: (username: String, password: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var username by rememberSaveable { mutableStateOf("") }
+    var username by rememberSaveable { mutableStateOf(ownerUsername.orEmpty()) }
     var password by rememberSaveable { mutableStateOf("") }
     val canSubmit = username.isNotBlank() && password.isNotEmpty() && !isLoading
     val submit = { if (canSubmit) onLogin(username.trim(), password) }
@@ -74,7 +82,7 @@ fun LoginContent(
             onValueChange = { username = it },
             label = { Text(stringResource(R.string.login_username)) },
             singleLine = true,
-            enabled = !isLoading,
+            enabled = !isLoading && ownerUsername == null,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
             modifier = Modifier.fillMaxWidth()
         )
@@ -120,7 +128,7 @@ fun LoginContent(
 @Composable
 fun LoginContentPreview() {
     GymProgressTrackerTheme {
-        LoginContent(isLoading = false, errorMessage = null, onLogin = { _, _ -> })
+        LoginContent(ownerUsername = null, isLoading = false, errorMessage = null, onLogin = { _, _ -> })
     }
 }
 
@@ -129,6 +137,7 @@ fun LoginContentPreview() {
 fun LoginContentErrorPreview() {
     GymProgressTrackerTheme {
         LoginContent(
+            ownerUsername = "alice",
             isLoading = false,
             errorMessage = R.string.login_error_invalid_credentials,
             onLogin = { _, _ -> }

@@ -199,7 +199,7 @@ class WorkoutViewModel(
                 exercisesErrorMessage = when (result) {
                     RefreshResult.NetworkError -> R.string.workout_exercises_error_network
                     RefreshResult.ServerError -> R.string.workout_exercises_error_server
-                    RefreshResult.Success, RefreshResult.SessionExpired -> null
+                    RefreshResult.Success, RefreshResult.NotLoggedIn -> null
                 }
             )
         }

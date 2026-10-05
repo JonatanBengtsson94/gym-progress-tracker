@@ -8,8 +8,8 @@ import kotlin.uuid.Uuid
 /** How sending the saved workouts to the server went. */
 enum class SyncResult {
     Success,
-    /** The session had ended, which logs the user out. */
-    SessionExpired,
+    /** There's no session, or the server ended it. The workouts not yet sent are kept. */
+    NotLoggedIn,
     NetworkError,
     /** The server rejected at least one workout. The others were sent. */
     ServerError
@@ -66,7 +66,7 @@ class ApiWorkoutsRepository(
                         continue
                     }
                     ApiResult.NetworkError -> return SyncResult.NetworkError
-                    ApiResult.Unauthorized -> return SyncResult.SessionExpired
+                    ApiResult.Unauthorized -> return SyncResult.NotLoggedIn
                 }
             } else {
                 pending.templateId
@@ -78,7 +78,7 @@ class ApiWorkoutsRepository(
                 }
                 ApiResult.ServerError -> rejected = true
                 ApiResult.NetworkError -> return SyncResult.NetworkError
-                ApiResult.Unauthorized -> return SyncResult.SessionExpired
+                ApiResult.Unauthorized -> return SyncResult.NotLoggedIn
             }
         }
         if (sent) templatesRepository.refresh()

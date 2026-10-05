@@ -40,7 +40,7 @@ class RoomTemplatesRepository(
             )
             RefreshResult.Success
         }
-        ApiResult.Unauthorized -> RefreshResult.SessionExpired
+        ApiResult.Unauthorized -> RefreshResult.NotLoggedIn
         ApiResult.NetworkError -> RefreshResult.NetworkError
         ApiResult.ServerError -> RefreshResult.ServerError
     }

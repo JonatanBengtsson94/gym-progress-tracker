@@ -13,8 +13,6 @@ import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
-import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
-import com.jonatanbengtsson.gymprogresstracker.data.SyncResult
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutsRepository
@@ -36,17 +34,12 @@ data class StartWorkoutUiState(
     /** What the user named the workout in progress, empty until they do. */
     val workoutName: String = "",
     /** How many saved workouts haven't been synced to the server yet. */
-    val pendingWorkouts: Int = 0,
-    /** True while the saved workouts are being synced. */
-    val isSyncing: Boolean = false,
-    /** Why syncing failed last time. */
-    @StringRes val syncErrorMessage: Int? = null
+    val pendingWorkouts: Int = 0
 )
 
 class StartWorkoutViewModel(
     private val templatesRepository: TemplatesRepository,
     private val activeWorkoutRepository: ActiveWorkoutRepository,
-    private val sessionRepository: SessionRepository,
     private val workoutsRepository: WorkoutsRepository,
     private val clock: Clock = Clock.systemUTC()
 ) : ViewModel() {
@@ -85,25 +78,7 @@ class StartWorkoutViewModel(
                 errorMessage = when (result) {
                     RefreshResult.NetworkError -> R.string.start_workout_error_network
                     RefreshResult.ServerError -> R.string.start_workout_error_server
-                    RefreshResult.Success, RefreshResult.SessionExpired -> null
-                }
-            )
-        }
-    }
-
-    /** Sends the saved workouts to the server. */
-    fun sync() {
-        if (uiState.isSyncing) return
-        uiState = uiState.copy(isSyncing = true, syncErrorMessage = null)
-
-        viewModelScope.launch {
-            val result = workoutsRepository.sync()
-            uiState = uiState.copy(
-                isSyncing = false,
-                syncErrorMessage = when (result) {
-                    SyncResult.NetworkError -> R.string.start_workout_sync_error_network
-                    SyncResult.ServerError -> R.string.start_workout_sync_error_server
-                    SyncResult.Success, SyncResult.SessionExpired -> null
+                    RefreshResult.Success, RefreshResult.NotLoggedIn -> null
                 }
             )
         }
@@ -117,17 +92,12 @@ class StartWorkoutViewModel(
     /** Throws away the workout in progress. */
     fun discardWorkout() = activeWorkoutRepository.update { ActiveWorkout() }
 
-    fun logOut() {
-        viewModelScope.launch { sessionRepository.logOut() }
-    }
-
     companion object {
         val Factory = viewModelFactory {
             initializer {
                 StartWorkoutViewModel(
                     appContainer.templatesRepository,
                     appContainer.activeWorkoutRepository,
-                    appContainer.sessionRepository,
                     appContainer.workoutsRepository
                 )
             }

@@ -20,7 +20,7 @@ class HttpTemplatesApiTest {
     fun setUp() {
         server = MockWebServer()
         server.start()
-        val client = ApiClient(server.url("").toString().removeSuffix("/"), FakeSessionRepository(SessionState.LoggedIn("session-123")))
+        val client = ApiClient(server.url("").toString().removeSuffix("/"), FakeSessionRepository(SessionState.LoggedIn("session-123", "alice")))
         api = HttpTemplatesApi(client)
     }
 

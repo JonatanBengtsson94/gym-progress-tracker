@@ -47,7 +47,6 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -101,7 +100,6 @@ fun WorkoutScreen(
     WorkoutContent(
         uiState = viewModel.uiState,
         onNameChange = viewModel::updateName,
-        onRetryExercises = viewModel::loadExercises,
         onExerciseSelected = viewModel::addExercise,
         onRemoveExercise = viewModel::removeExercise,
         onAddSet = viewModel::addSet,
@@ -122,7 +120,6 @@ fun WorkoutScreen(
 fun WorkoutContent(
     uiState: WorkoutUiState,
     onNameChange: (String) -> Unit,
-    onRetryExercises: () -> Unit,
     onExerciseSelected: (Exercise) -> Unit,
     onRemoveExercise: (exerciseId: Uuid) -> Unit,
     onAddSet: (exerciseId: Uuid) -> Unit,
@@ -145,7 +142,6 @@ fun WorkoutContent(
         BackHandler { showExercisePicker = false }
         ExercisePicker(
             uiState = uiState,
-            onRetry = onRetryExercises,
             onExerciseSelected = {
                 showExercisePicker = false
                 onExerciseSelected(it)
@@ -531,7 +527,6 @@ private fun SetField(
 @Composable
 private fun ExercisePicker(
     uiState: WorkoutUiState,
-    onRetry: () -> Unit,
     onExerciseSelected: (Exercise) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -585,26 +580,13 @@ private fun ExercisePicker(
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
                 when {
-                uiState.exercises.isEmpty() && uiState.isLoadingExercises -> item {
-                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-                uiState.exercises.isEmpty() && uiState.exercisesErrorMessage != null -> item {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = stringResource(uiState.exercisesErrorMessage),
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        OutlinedButton(onClick = onRetry) {
-                            Text(stringResource(R.string.workout_exercises_retry))
-                        }
-                    }
+                uiState.exercises.isEmpty() -> item {
+                    Text(
+                        text = stringResource(R.string.workout_no_exercises),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(24.dp)
+                    )
                 }
                 matchingExercises.isEmpty() && query.isNotBlank() -> item {
                     Text(
@@ -684,7 +666,6 @@ fun WorkoutContentPreview() {
                 exercises = listOf(Exercise(Uuid.fromLongs(0, 1), "Bench Press (Barbell)"), Exercise(Uuid.fromLongs(0, 2), "Squat (Barbell)"))
             ),
             onNameChange = {},
-            onRetryExercises = {},
             onExerciseSelected = {},
             onRemoveExercise = {},
             onAddSet = {},

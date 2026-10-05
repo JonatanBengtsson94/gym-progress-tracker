@@ -38,7 +38,7 @@ class ApiWorkoutsRepositoryTest {
     private val workoutsApi = FakeWorkoutsApi()
     private val templatesApi = FakeTemplatesApi()
     private val pushDay = WorkoutTemplate(testId(10), "Push Day", latestWorkout = null)
-    private val templatesRepository = FakeTemplatesRepository(listOf(pushDay)).apply { refreshResult.complete(RefreshResult.Success) }
+    private val templatesRepository = FakeTemplatesRepository(listOf(pushDay))
     private val pendingWorkoutsRepository = FakePendingWorkoutsRepository()
     private val repository = ApiWorkoutsRepository(workoutsApi, templatesApi, pendingWorkoutsRepository, templatesRepository)
 
@@ -99,16 +99,15 @@ class ApiWorkoutsRepositoryTest {
     }
 
     @Test
-    fun `syncing sends the saved workouts in order under their templates and removes them`() = runTest {
+    fun `sending sends the saved workouts in order under their templates and removes them`() = runTest {
         repository.save(testId(20), workout)
         repository.save(testId(21), workout)
 
-        assertEquals(SyncResult.Success, repository.sync())
+        assertEquals(SyncResult.Success, repository.send())
 
         assertEquals(listOf(testId(20) to pushDay.id, testId(21) to pushDay.id), workoutsApi.puts)
         assertEquals(emptyList<Pair<Uuid, String>>(), templatesApi.creates)
         assertEquals(emptyList<PendingWorkout>(), pending())
-        assertEquals(1, templatesRepository.refreshes)
     }
 
     @Test
@@ -116,7 +115,7 @@ class ApiWorkoutsRepositoryTest {
         repository.save(testId(20), legDay)
         val created = pending().single().templateId
 
-        repository.sync()
+        repository.send()
 
         assertEquals(listOf(created to "Leg Day"), templatesApi.creates)
         assertEquals(listOf(testId(20) to created), workoutsApi.puts)
@@ -127,7 +126,7 @@ class ApiWorkoutsRepositoryTest {
         templatesApi.existing["leg day"] = testId(12)
         repository.save(testId(20), legDay)
 
-        repository.sync()
+        repository.send()
 
         assertEquals(listOf(testId(20) to testId(12)), workoutsApi.puts)
     }
@@ -138,7 +137,7 @@ class ApiWorkoutsRepositoryTest {
         repository.save(testId(21), workout)
         templatesApi.result = ApiResult.ServerError
 
-        assertEquals(SyncResult.ServerError, repository.sync())
+        assertEquals(SyncResult.ServerError, repository.send())
 
         assertEquals(listOf(testId(21) to pushDay.id), workoutsApi.puts)
         assertEquals(listOf(testId(20)), pending().map { it.workoutId })
@@ -150,52 +149,50 @@ class ApiWorkoutsRepositoryTest {
         repository.save(testId(21), workout)
         workoutsApi.results[testId(20)] = ApiResult.ServerError
 
-        assertEquals(SyncResult.ServerError, repository.sync())
+        assertEquals(SyncResult.ServerError, repository.send())
 
         assertEquals(listOf(testId(20), testId(21)), workoutsApi.puts.map { it.first })
         assertEquals(listOf(testId(20)), pending().map { it.workoutId })
     }
 
     @Test
-    fun `a network error stops the sync and keeps the rest`() = runTest {
+    fun `a network error stops sending and keeps the rest`() = runTest {
         repository.save(testId(20), workout)
         repository.save(testId(21), workout)
         workoutsApi.results[testId(20)] = ApiResult.NetworkError
 
-        assertEquals(SyncResult.NetworkError, repository.sync())
+        assertEquals(SyncResult.NetworkError, repository.send())
 
         assertEquals(listOf(testId(20)), workoutsApi.puts.map { it.first })
         assertEquals(listOf(testId(20), testId(21)), pending().map { it.workoutId })
-        assertEquals(0, templatesRepository.refreshes)
     }
 
     @Test
-    fun `a network error creating a template stops the sync`() = runTest {
+    fun `a network error creating a template stops sending`() = runTest {
         repository.save(testId(20), legDay)
         repository.save(testId(21), workout)
         templatesApi.result = ApiResult.NetworkError
 
-        assertEquals(SyncResult.NetworkError, repository.sync())
+        assertEquals(SyncResult.NetworkError, repository.send())
 
         assertEquals(emptyList<Pair<Uuid, Uuid>>(), workoutsApi.puts)
         assertEquals(2, pending().size)
     }
 
     @Test
-    fun `an expired session stops the sync and keeps the workouts`() = runTest {
+    fun `an expired session stops sending and keeps the workouts`() = runTest {
         repository.save(testId(20), workout)
         workoutsApi.results[testId(20)] = ApiResult.Unauthorized
 
-        assertEquals(SyncResult.NotLoggedIn, repository.sync())
+        assertEquals(SyncResult.NotLoggedIn, repository.send())
 
         assertEquals(listOf(testId(20)), pending().map { it.workoutId })
     }
 
     @Test
-    fun `syncing nothing sends nothing and refreshes nothing`() = runTest {
-        assertEquals(SyncResult.Success, repository.sync())
+    fun `sending nothing sends nothing`() = runTest {
+        assertEquals(SyncResult.Success, repository.send())
 
         assertEquals(emptyList<Pair<Uuid, Uuid>>(), workoutsApi.puts)
-        assertEquals(0, templatesRepository.refreshes)
     }
 }

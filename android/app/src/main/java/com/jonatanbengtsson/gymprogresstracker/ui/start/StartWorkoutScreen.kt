@@ -1,11 +1,9 @@
 package com.jonatanbengtsson.gymprogresstracker.ui.start
 
-import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -21,11 +19,9 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -67,7 +63,6 @@ fun StartWorkoutScreen(
 ) {
     StartWorkoutContent(
         uiState = viewModel.uiState,
-        onRetry = viewModel::loadTemplates,
         onStartNewWorkout = {
             viewModel.startNewWorkout()
             onStartNewWorkout()
@@ -82,7 +77,6 @@ fun StartWorkoutScreen(
 @Composable
 fun StartWorkoutContent(
     uiState: StartWorkoutUiState,
-    onRetry: () -> Unit,
     onStartNewWorkout: () -> Unit,
     onContinueWorkout: () -> Unit,
     onDiscardWorkout: () -> Unit,
@@ -172,27 +166,6 @@ fun StartWorkoutContent(
                 Column {
                     if (index > 0) HorizontalDivider(modifier = Modifier.padding(bottom = 12.dp))
                     TemplateRow(template = template, onClick = { onStartFromTemplate(template) })
-                }
-            }
-            uiState.isLoading -> item {
-                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-            }
-            uiState.errorMessage != null -> item {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = stringResource(uiState.errorMessage),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    OutlinedButton(onClick = onRetry) {
-                        Text(stringResource(R.string.start_workout_retry))
-                    }
                 }
             }
             else -> item {
@@ -305,7 +278,6 @@ fun StartWorkoutContentPreview() {
     GymProgressTrackerTheme {
         StartWorkoutContent(
             uiState = StartWorkoutUiState(templates = previewTemplates),
-            onRetry = {},
             onStartNewWorkout = {},
             onContinueWorkout = {},
             onDiscardWorkout = {},
@@ -326,22 +298,6 @@ fun StartWorkoutContentInProgressPreview() {
                 workoutName = "Push day",
                 pendingWorkouts = 2
             ),
-            onRetry = {},
-            onStartNewWorkout = {},
-            onContinueWorkout = {},
-            onDiscardWorkout = {},
-            onStartFromTemplate = {}
-        )
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun StartWorkoutContentErrorPreview() {
-    GymProgressTrackerTheme {
-        StartWorkoutContent(
-            uiState = StartWorkoutUiState(errorMessage = R.string.start_workout_error_network),
-            onRetry = {},
             onStartNewWorkout = {},
             onContinueWorkout = {},
             onDiscardWorkout = {},

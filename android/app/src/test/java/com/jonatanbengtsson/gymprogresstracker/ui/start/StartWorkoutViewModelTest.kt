@@ -1,17 +1,14 @@
 package com.jonatanbengtsson.gymprogresstracker.ui.start
 
-import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.FakeActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeTemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeWorkoutsRepository
-import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
 import com.jonatanbengtsson.gymprogresstracker.data.testId
 import com.jonatanbengtsson.gymprogresstracker.ui.login.MainDispatcherRule
-import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -41,85 +38,19 @@ class StartWorkoutViewModelTest {
     private val activeWorkoutRepository = FakeActiveWorkoutRepository()
     private val workoutsRepository = FakeWorkoutsRepository()
 
-    // Created lazily so each test can set up the fakes before the view model refreshes on init.
+    // Created lazily so each test can set up the fakes first.
     private val viewModel by lazy {
         StartWorkoutViewModel(templatesRepository, activeWorkoutRepository, workoutsRepository, Clock.fixed(now, ZoneOffset.UTC))
     }
 
     @Test
-    fun `refreshes the templates on creation`() {
-        viewModel
-
-        assertEquals(1, templatesRepository.refreshes)
-        assertEquals(StartWorkoutUiState(isLoading = true), viewModel.uiState)
-    }
-
-    @Test
-    fun `stored templates show while they're being refreshed`() {
-        templatesRepository.templates.value = templates
-
-        assertEquals(StartWorkoutUiState(isLoading = true, templates = templates), viewModel.uiState)
-    }
-
-    @Test
-    fun `refreshed templates replace the stored ones`() {
+    fun `shows the stored templates`() {
         templatesRepository.templates.value = templates.take(1)
         viewModel
 
         templatesRepository.templates.value = templates
-        templatesRepository.refreshResult.complete(RefreshResult.Success)
 
         assertEquals(StartWorkoutUiState(templates = templates), viewModel.uiState)
-    }
-
-    @Test
-    fun `network error shows network error`() {
-        assertErrorFor(RefreshResult.NetworkError, R.string.start_workout_error_network)
-    }
-
-    @Test
-    fun `server error shows server error`() {
-        assertErrorFor(RefreshResult.ServerError, R.string.start_workout_error_server)
-    }
-
-    @Test
-    fun `a failed refresh keeps showing the stored templates`() {
-        templatesRepository.templates.value = templates
-        viewModel
-
-        templatesRepository.refreshResult.complete(RefreshResult.NetworkError)
-
-        assertEquals(StartWorkoutUiState(templates = templates, errorMessage = R.string.start_workout_error_network), viewModel.uiState)
-    }
-
-    @Test
-    fun `no session shows no error`() {
-        viewModel
-        templatesRepository.refreshResult.complete(RefreshResult.NotLoggedIn)
-
-        assertEquals(StartWorkoutUiState(), viewModel.uiState)
-    }
-
-    @Test
-    fun `reload is ignored while a refresh is in flight`() {
-        viewModel.loadTemplates()
-
-        assertEquals(1, templatesRepository.refreshes)
-    }
-
-    @Test
-    fun `retrying after an error clears the error and refreshes again`() {
-        viewModel
-        templatesRepository.refreshResult.complete(RefreshResult.NetworkError)
-        templatesRepository.refreshResult = CompletableDeferred()
-
-        viewModel.loadTemplates()
-
-        assertEquals(StartWorkoutUiState(isLoading = true), viewModel.uiState)
-        templatesRepository.templates.value = templates
-        templatesRepository.refreshResult.complete(RefreshResult.Success)
-        assertEquals(StartWorkoutUiState(templates = templates), viewModel.uiState)
-        assertEquals(2, templatesRepository.refreshes)
     }
 
     @Test
@@ -177,7 +108,6 @@ class StartWorkoutViewModelTest {
         viewModel
 
         templatesRepository.templates.value = templates
-        templatesRepository.refreshResult.complete(RefreshResult.Success)
 
         assertEquals(
             StartWorkoutUiState(templates = templates, workoutInProgress = true, workoutStartedAt = startedAt),
@@ -203,12 +133,5 @@ class StartWorkoutViewModelTest {
         workoutsRepository.pendingCount.value = 2
 
         assertEquals(2, viewModel.uiState.pendingWorkouts)
-    }
-
-    private fun assertErrorFor(result: RefreshResult, expectedMessage: Int) {
-        viewModel
-        templatesRepository.refreshResult.complete(result)
-
-        assertEquals(StartWorkoutUiState(errorMessage = expectedMessage), viewModel.uiState)
     }
 }

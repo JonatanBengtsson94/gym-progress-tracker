@@ -44,7 +44,6 @@ class WorkoutContentTest {
     private val benchPress = Exercise(testId(1), "Bench Press (Barbell)")
     private val squat = Exercise(testId(2), "Squat (Barbell)")
 
-    private var retryClicks = 0
     private val selectedExercises = mutableListOf<Exercise>()
     private val setEvents = mutableListOf<String>()
 
@@ -54,7 +53,6 @@ class WorkoutContentTest {
                 WorkoutContent(
                     uiState = uiState,
                     onNameChange = { setEvents += "name $it" },
-                    onRetryExercises = { retryClicks++ },
                     onExerciseSelected = { selectedExercises += it },
                     onRemoveExercise = { setEvents += "remove exercise $it" },
                     onAddSet = { setEvents += "add $it" },
@@ -338,40 +336,20 @@ class WorkoutContentTest {
     }
 
     @Test
-    fun loadingShowsAProgressIndicator() {
-        setContent(WorkoutUiState(isLoadingExercises = true))
+    fun withoutStoredExercisesThePickerSaysToSync() {
+        setContent(WorkoutUiState())
         openExercisePicker()
 
-        composeRule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertIsDisplayed()
+        composeRule.onNodeWithText(str(R.string.workout_no_exercises)).assertIsDisplayed()
     }
 
     @Test
-    fun storedExercisesShowWhileTheyAreFetched() {
-        setContent(WorkoutUiState(isLoadingExercises = true, exercises = listOf(benchPress, squat)))
+    fun storedExercisesShowInThePicker() {
+        setContent(WorkoutUiState(exercises = listOf(benchPress, squat)))
         openExercisePicker()
 
         composeRule.onNodeWithText(benchPress.name).assertIsDisplayed()
-        composeRule.onNode(hasProgressBarRangeInfo(ProgressBarRangeInfo.Indeterminate)).assertDoesNotExist()
-    }
-
-    @Test
-    fun storedExercisesShowWhenFetchingThemFails() {
-        setContent(WorkoutUiState(exercises = listOf(benchPress, squat), exercisesErrorMessage = R.string.workout_exercises_error_network))
-        openExercisePicker()
-
-        composeRule.onNodeWithText(benchPress.name).assertIsDisplayed()
-        composeRule.onNodeWithText(str(R.string.workout_exercises_error_network)).assertDoesNotExist()
-    }
-
-    @Test
-    fun errorShowsMessageAndRetries() {
-        setContent(WorkoutUiState(exercisesErrorMessage = R.string.workout_exercises_error_network))
-        openExercisePicker()
-
-        composeRule.onNodeWithText(str(R.string.workout_exercises_error_network)).assertIsDisplayed()
-        composeRule.onNodeWithText(str(R.string.workout_exercises_retry)).performClick()
-
-        assertEquals(1, retryClicks)
+        composeRule.onNodeWithText(str(R.string.workout_no_exercises)).assertDoesNotExist()
     }
 
     @Test

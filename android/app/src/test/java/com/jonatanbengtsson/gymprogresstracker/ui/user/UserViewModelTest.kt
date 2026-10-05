@@ -2,6 +2,7 @@ package com.jonatanbengtsson.gymprogresstracker.ui.user
 
 import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.data.FakeSessionRepository
+import com.jonatanbengtsson.gymprogresstracker.data.FakeSyncRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeWorkoutsRepository
 import com.jonatanbengtsson.gymprogresstracker.data.SessionState
 import com.jonatanbengtsson.gymprogresstracker.data.SyncResult
@@ -21,9 +22,10 @@ class UserViewModelTest {
 
     private val sessionRepository = FakeSessionRepository(SessionState.LoggedIn("session-123", "alice"))
     private val workoutsRepository = FakeWorkoutsRepository()
+    private val syncRepository = FakeSyncRepository()
 
     // Created lazily so each test can set up the fakes first.
-    private val viewModel by lazy { UserViewModel(sessionRepository, workoutsRepository) }
+    private val viewModel by lazy { UserViewModel(sessionRepository, workoutsRepository, syncRepository) }
 
     @Test
     fun `shows who is logged in`() {
@@ -50,10 +52,10 @@ class UserViewModelTest {
     fun `syncing shows progress until it's done`() {
         viewModel.sync()
 
-        assertEquals(1, workoutsRepository.syncs)
+        assertEquals(1, syncRepository.syncs)
         assertTrue(viewModel.uiState.isSyncing)
 
-        workoutsRepository.syncResult.complete(SyncResult.Success)
+        syncRepository.syncResult.complete(SyncResult.Success)
 
         assertFalse(viewModel.uiState.isSyncing)
         assertNull(viewModel.uiState.syncErrorMessage)
@@ -65,7 +67,7 @@ class UserViewModelTest {
 
         viewModel.sync()
 
-        assertEquals(1, workoutsRepository.syncs)
+        assertEquals(1, syncRepository.syncs)
     }
 
     @Test
@@ -81,13 +83,13 @@ class UserViewModelTest {
     @Test
     fun `syncing again clears the last error`() {
         viewModel.sync()
-        workoutsRepository.syncResult.complete(SyncResult.NetworkError)
-        workoutsRepository.syncResult = CompletableDeferred()
+        syncRepository.syncResult.complete(SyncResult.NetworkError)
+        syncRepository.syncResult = CompletableDeferred()
 
         viewModel.sync()
 
         assertNull(viewModel.uiState.syncErrorMessage)
-        assertEquals(2, workoutsRepository.syncs)
+        assertEquals(2, syncRepository.syncs)
     }
 
     @Test
@@ -96,14 +98,14 @@ class UserViewModelTest {
 
         viewModel.sync()
 
-        assertEquals(0, workoutsRepository.syncs)
+        assertEquals(0, syncRepository.syncs)
         assertTrue(viewModel.uiState.logInRequested)
     }
 
     @Test
     fun `a session the server ended asks to log in without an error`() {
         viewModel.sync()
-        workoutsRepository.syncResult.complete(SyncResult.NotLoggedIn)
+        syncRepository.syncResult.complete(SyncResult.NotLoggedIn)
 
         assertTrue(viewModel.uiState.logInRequested)
         assertNull(viewModel.uiState.syncErrorMessage)
@@ -127,8 +129,43 @@ class UserViewModelTest {
 
         sessionRepository.session.value = SessionState.LoggedIn("session-123", "alice")
 
-        assertEquals(1, workoutsRepository.syncs)
+        assertEquals(1, syncRepository.syncs)
         assertTrue(viewModel.uiState.isSyncing)
+    }
+
+    @Test
+    fun `syncs again once the user has logged in after the server ended the session`() {
+        viewModel.sync()
+        syncRepository.syncResult.complete(SyncResult.NotLoggedIn)
+        syncRepository.syncResult = CompletableDeferred()
+        viewModel.onLogInShown()
+        sessionRepository.session.value = SessionState.LoggedOut("alice")
+
+        sessionRepository.session.value = SessionState.LoggedIn("session-456", "alice")
+
+        assertEquals(2, syncRepository.syncs)
+        assertTrue(viewModel.uiState.isSyncing)
+    }
+
+    @Test
+    fun `a sync waiting for a login still runs if the login is left and done later`() {
+        sessionRepository.session.value = SessionState.LoggedOut("alice")
+        viewModel.sync()
+        viewModel.onLogInShown()
+
+        sessionRepository.session.value = SessionState.LoggedOut("alice")
+        sessionRepository.session.value = SessionState.LoggedIn("session-123", "alice")
+
+        assertEquals(1, syncRepository.syncs)
+    }
+
+    @Test
+    fun `shows when the session ends`() {
+        viewModel
+
+        sessionRepository.session.value = SessionState.LoggedOut("alice")
+
+        assertEquals(UserUiState(username = "alice"), viewModel.uiState)
     }
 
     @Test
@@ -138,12 +175,12 @@ class UserViewModelTest {
 
         sessionRepository.session.value = SessionState.LoggedIn("session-123", "alice")
 
-        assertEquals(0, workoutsRepository.syncs)
+        assertEquals(0, syncRepository.syncs)
     }
 
     private fun assertSyncErrorFor(result: SyncResult, expectedMessage: Int) {
         viewModel.sync()
-        workoutsRepository.syncResult.complete(result)
+        syncRepository.syncResult.complete(result)
 
         assertEquals(expectedMessage, viewModel.uiState.syncErrorMessage)
         assertFalse(viewModel.uiState.logInRequested)

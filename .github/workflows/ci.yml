@@ -44,6 +44,8 @@ jobs:
         run: ./gradlew :app:lint
       - name: Unit tests
         run: ./gradlew :app:testDebugUnitTest
+      - name: Compile instrumented tests
+        run: ./gradlew :app:compileDebugAndroidTestKotlin
       - name: Upload reports
         if: failure()
         uses: actions/upload-artifact@v7

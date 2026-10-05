@@ -12,6 +12,7 @@ import com.jonatanbengtsson.gymprogresstracker.R
 import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
 import com.jonatanbengtsson.gymprogresstracker.data.SessionState
+import com.jonatanbengtsson.gymprogresstracker.data.SyncRepository
 import com.jonatanbengtsson.gymprogresstracker.data.SyncResult
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutsRepository
 import com.jonatanbengtsson.gymprogresstracker.data.owner
@@ -33,7 +34,8 @@ data class UserUiState(
 
 class UserViewModel(
     private val sessionRepository: SessionRepository,
-    private val workoutsRepository: WorkoutsRepository
+    private val workoutsRepository: WorkoutsRepository,
+    private val syncRepository: SyncRepository
 ) : ViewModel() {
 
     var uiState by mutableStateOf(UserUiState())
@@ -55,7 +57,10 @@ class UserViewModel(
         }
     }
 
-    /** Sends the saved workouts to the server. Without a session, asks the user to log in and syncs once they have. */
+    /**
+     * Sends the saved workouts to the server and downloads the templates and exercises. Without a
+     * session, asks the user to log in and syncs once they have.
+     */
     fun sync() {
         if (uiState.isSyncing) return
         if (!uiState.isLoggedIn) {
@@ -66,7 +71,7 @@ class UserViewModel(
         uiState = uiState.copy(isSyncing = true, syncErrorMessage = null)
 
         viewModelScope.launch {
-            val result = workoutsRepository.sync()
+            val result = syncRepository.sync()
             uiState = uiState.copy(
                 isSyncing = false,
                 syncErrorMessage = when (result) {
@@ -90,7 +95,7 @@ class UserViewModel(
 
     companion object {
         val Factory = viewModelFactory {
-            initializer { UserViewModel(appContainer.sessionRepository, appContainer.workoutsRepository) }
+            initializer { UserViewModel(appContainer.sessionRepository, appContainer.workoutsRepository, appContainer.syncRepository) }
         }
     }
 }

@@ -7,14 +7,12 @@ import com.jonatanbengtsson.gymprogresstracker.data.FakeActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeExercisesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeWorkoutsRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FinishedWorkout
-import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExercise
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutSet
 import com.jonatanbengtsson.gymprogresstracker.data.testId
 import com.jonatanbengtsson.gymprogresstracker.ui.login.MainDispatcherRule
-import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -40,7 +38,7 @@ class WorkoutViewModelTest {
     private val startedAt = Instant.parse("2026-10-04T17:00:00Z")
     private val now = Instant.parse("2026-10-04T18:00:00Z")
 
-    // Created lazily so each test can set up the fakes before the view model refreshes on init.
+    // Created lazily so each test can set up the fakes first.
     private val viewModel by lazy {
         WorkoutViewModel(exercisesRepository, activeWorkoutRepository, workoutsRepository, Clock.fixed(now, ZoneOffset.UTC))
     }
@@ -58,82 +56,13 @@ class WorkoutViewModelTest {
     }
 
     @Test
-    fun `refreshes the exercises on creation`() {
-        viewModel
-
-        assertEquals(1, exercisesRepository.refreshes)
-        assertEquals(WorkoutUiState(isLoadingExercises = true), viewModel.uiState)
-    }
-
-    @Test
-    fun `stored exercises show while they're being refreshed`() {
-        exercisesRepository.exercises.value = listOf(benchPress, squat)
-
-        assertEquals(WorkoutUiState(isLoadingExercises = true, exercises = listOf(benchPress, squat)), viewModel.uiState)
-    }
-
-    @Test
-    fun `refreshed exercises replace the stored ones`() {
+    fun `shows the stored exercises`() {
         exercisesRepository.exercises.value = listOf(squat)
         viewModel
 
         exercisesRepository.exercises.value = listOf(benchPress, squat)
-        exercisesRepository.refreshResult.complete(RefreshResult.Success)
 
         assertEquals(WorkoutUiState(exercises = listOf(benchPress, squat)), viewModel.uiState)
-    }
-
-    @Test
-    fun `network error shows network error`() {
-        assertErrorFor(RefreshResult.NetworkError, R.string.workout_exercises_error_network)
-    }
-
-    @Test
-    fun `server error shows server error`() {
-        assertErrorFor(RefreshResult.ServerError, R.string.workout_exercises_error_server)
-    }
-
-    @Test
-    fun `a failed refresh keeps showing the stored exercises`() {
-        exercisesRepository.exercises.value = listOf(benchPress, squat)
-        viewModel
-
-        exercisesRepository.refreshResult.complete(RefreshResult.NetworkError)
-
-        assertEquals(
-            WorkoutUiState(exercises = listOf(benchPress, squat), exercisesErrorMessage = R.string.workout_exercises_error_network),
-            viewModel.uiState
-        )
-    }
-
-    @Test
-    fun `no session shows no error`() {
-        viewModel
-        exercisesRepository.refreshResult.complete(RefreshResult.NotLoggedIn)
-
-        assertEquals(WorkoutUiState(), viewModel.uiState)
-    }
-
-    @Test
-    fun `reload is ignored while a refresh is in flight`() {
-        viewModel.loadExercises()
-
-        assertEquals(1, exercisesRepository.refreshes)
-    }
-
-    @Test
-    fun `retrying after an error clears the error and refreshes again`() {
-        viewModel
-        exercisesRepository.refreshResult.complete(RefreshResult.NetworkError)
-        exercisesRepository.refreshResult = CompletableDeferred()
-
-        viewModel.loadExercises()
-
-        assertEquals(WorkoutUiState(isLoadingExercises = true), viewModel.uiState)
-        exercisesRepository.exercises.value = listOf(squat)
-        exercisesRepository.refreshResult.complete(RefreshResult.Success)
-        assertEquals(WorkoutUiState(exercises = listOf(squat)), viewModel.uiState)
-        assertEquals(2, exercisesRepository.refreshes)
     }
 
     @Test
@@ -154,14 +83,10 @@ class WorkoutViewModelTest {
     }
 
     @Test
-    fun `added exercises survive reloading the exercise list`() {
+    fun `added exercises survive the stored exercises changing`() {
         viewModel.addExercise(squat)
-        exercisesRepository.refreshResult.complete(RefreshResult.NetworkError)
-        exercisesRepository.refreshResult = CompletableDeferred()
 
-        viewModel.loadExercises()
         exercisesRepository.exercises.value = listOf(benchPress, squat)
-        exercisesRepository.refreshResult.complete(RefreshResult.Success)
 
         assertEquals(listOf(squat), workoutExercises())
     }
@@ -241,7 +166,6 @@ class WorkoutViewModelTest {
     @Test
     fun `a workout discarded elsewhere is gone, but the exercises to pick from are kept`() {
         exercisesRepository.exercises.value = listOf(benchPress, squat)
-        exercisesRepository.refreshResult.complete(RefreshResult.Success)
         viewModel.addExercise(squat)
         viewModel.updateReps(squat.id, 0, "5")
 
@@ -512,7 +436,7 @@ class WorkoutViewModelTest {
         viewModel.discardWorkout()
 
         assertEquals(ActiveWorkout(), activeWorkoutRepository.workout.value)
-        assertEquals(WorkoutUiState(isLoadingExercises = true), viewModel.uiState)
+        assertEquals(WorkoutUiState(), viewModel.uiState)
         assertEquals(emptyList<Any>(), workoutsRepository.saves)
     }
 
@@ -556,11 +480,4 @@ class WorkoutViewModelTest {
 
     private fun setsOf(exercise: Exercise) =
         viewModel.uiState.workoutExercises.single { it.exercise == exercise }.sets
-
-    private fun assertErrorFor(result: RefreshResult, expectedMessage: Int) {
-        viewModel
-        exercisesRepository.refreshResult.complete(result)
-
-        assertEquals(WorkoutUiState(exercisesErrorMessage = expectedMessage), viewModel.uiState)
-    }
 }

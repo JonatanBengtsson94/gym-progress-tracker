@@ -23,9 +23,6 @@
         <item quantity="other">%1$d exercises</item>
     </plurals>
     <string name="start_workout_no_templates">No templates yet. Finish a workout to save it as a template.</string>
-    <string name="start_workout_error_network">Could not load your templates. Check your connection and try again.</string>
-    <string name="start_workout_error_server">Something went wrong loading your templates.</string>
-    <string name="start_workout_retry">Try again</string>
     <plurals name="start_workout_pending">
         <item quantity="one">%1$d workout waiting to sync</item>
         <item quantity="other">%1$d workouts waiting to sync</item>
@@ -52,9 +49,7 @@
     <string name="workout_complete_set" tools:ignore="PluralsCandidate">Set %1$d completed</string>
     <string name="workout_remove_set">Remove set %1$d</string>
     <string name="workout_search_no_results">No exercises match \"%1$s\"</string>
-    <string name="workout_exercises_error_network">Could not load exercises. Check your connection and try again.</string>
-    <string name="workout_exercises_error_server">Something went wrong loading exercises.</string>
-    <string name="workout_exercises_retry">Try again</string>
+    <string name="workout_no_exercises">No exercises yet. Sync to download them.</string>
     <string name="workout_save">Save workout</string>
     <string name="workout_save_incomplete_title">Save workout?</string>
     <plurals name="workout_save_incomplete_text">
@@ -74,7 +69,7 @@
     <string name="user_all_synced">All workouts are synced</string>
     <string name="user_sync">Sync</string>
     <string name="user_sync_error_network">Could not sync. Check your connection and try again.</string>
-    <string name="user_sync_error_server">Some workouts could not be synced.</string>
+    <string name="user_sync_error_server">Something went wrong while syncing.</string>
     <string name="navigation_workout">Workout</string>
     <string name="navigation_user">User</string>
 </resources>

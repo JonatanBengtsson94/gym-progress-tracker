@@ -5,17 +5,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlin.uuid.Uuid
 
-/** How sending the saved workouts to the server went. */
-enum class SyncResult {
-    Success,
-    /** There's no session, or the server ended it. The workouts not yet sent are kept. */
-    NotLoggedIn,
-    NetworkError,
-    /** The server rejected at least one workout. The others were sent. */
-    ServerError
-}
-
-/** Finished workouts, saved on the device and sent to the server by [sync]. */
+/** Finished workouts, saved on the device and sent to the server by [send]. */
 interface WorkoutsRepository {
     /** How many saved workouts haven't been sent to the server yet. */
     val pendingCount: Flow<Int>
@@ -30,9 +20,9 @@ interface WorkoutsRepository {
     /**
      * Sends the saved workouts to the server, oldest first, creating their templates first where needed,
      * and removes each one the server accepts. Stops at the first network error, leaving the rest for
-     * next time.
+     * next time. [SyncResult.ServerError] means the server rejected at least one; the others were sent.
      */
-    suspend fun sync(): SyncResult
+    suspend fun send(): SyncResult
 }
 
 class ApiWorkoutsRepository(
@@ -54,9 +44,8 @@ class ApiWorkoutsRepository(
         pendingWorkoutsRepository.add(PendingWorkout(workoutId, existing ?: Uuid.random(), templateIsNew, workout))
     }
 
-    override suspend fun sync(): SyncResult {
+    override suspend fun send(): SyncResult {
         var rejected = false
-        var sent = false
         for (pending in pendingWorkoutsRepository.workouts.first()) {
             val templateId = if (pending.templateIsNew) {
                 when (val created = templatesApi.createTemplate(pending.templateId, pending.workout.name)) {
@@ -72,16 +61,12 @@ class ApiWorkoutsRepository(
                 pending.templateId
             }
             when (workoutsApi.putWorkout(pending.workoutId, templateId, pending.workout)) {
-                is ApiResult.Success -> {
-                    pendingWorkoutsRepository.remove(pending.workoutId)
-                    sent = true
-                }
+                is ApiResult.Success -> pendingWorkoutsRepository.remove(pending.workoutId)
                 ApiResult.ServerError -> rejected = true
                 ApiResult.NetworkError -> return SyncResult.NetworkError
                 ApiResult.Unauthorized -> return SyncResult.NotLoggedIn
             }
         }
-        if (sent) templatesRepository.refresh()
         return if (rejected) SyncResult.ServerError else SyncResult.Success
     }
 }

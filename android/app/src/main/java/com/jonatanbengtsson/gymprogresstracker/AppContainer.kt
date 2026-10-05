@@ -11,6 +11,7 @@ import com.jonatanbengtsson.gymprogresstracker.data.ApiWorkoutsRepository
 import com.jonatanbengtsson.gymprogresstracker.data.ApiClient
 import com.jonatanbengtsson.gymprogresstracker.data.AuthApi
 import com.jonatanbengtsson.gymprogresstracker.data.DataStoreSessionRepository
+import com.jonatanbengtsson.gymprogresstracker.data.DefaultSyncRepository
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.HttpAuthApi
 import com.jonatanbengtsson.gymprogresstracker.data.HttpExercisesApi
@@ -22,6 +23,7 @@ import com.jonatanbengtsson.gymprogresstracker.data.RoomExercisesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RoomPendingWorkoutsRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RoomTemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
+import com.jonatanbengtsson.gymprogresstracker.data.SyncRepository
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesApi
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutsRepository
@@ -60,6 +62,8 @@ class AppContainer(context: Context) {
 
     val workoutsRepository: WorkoutsRepository =
         ApiWorkoutsRepository(HttpWorkoutsApi(apiClient), templatesApi, pendingWorkoutsRepository, templatesRepository)
+
+    val syncRepository: SyncRepository = DefaultSyncRepository(workoutsRepository, templatesRepository, exercisesRepository)
 }
 
 /** The app's [AppContainer], for view model factories. */

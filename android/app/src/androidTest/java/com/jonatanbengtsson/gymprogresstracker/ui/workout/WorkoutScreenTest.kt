@@ -30,8 +30,6 @@ import com.jonatanbengtsson.gymprogresstracker.data.FinishedWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.RoomPendingWorkoutsRepository
 import com.jonatanbengtsson.gymprogresstracker.data.RoomTemplatesRepository
-import com.jonatanbengtsson.gymprogresstracker.data.SessionRepository
-import com.jonatanbengtsson.gymprogresstracker.data.SessionState
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesApi
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutsApi
 import com.jonatanbengtsson.gymprogresstracker.data.local.GymDatabase
@@ -67,22 +65,6 @@ class WorkoutScreenTest {
         }
     }
 
-    private class FakeSessionRepository : SessionRepository {
-        override val session = MutableStateFlow<SessionState>(SessionState.LoggedIn("session-123"))
-
-        override suspend fun logIn(username: String, sessionId: String) {
-            session.value = SessionState.LoggedIn(sessionId)
-        }
-
-        override suspend fun endSession(sessionId: String) {
-            session.value = SessionState.LoggedOut
-        }
-
-        override suspend fun logOut() {
-            session.value = SessionState.LoggedOut
-        }
-    }
-
     private val squat = Exercise(testId(1), "Squat (Barbell)")
 
     private lateinit var database: GymDatabase
@@ -91,7 +73,6 @@ class WorkoutScreenTest {
     @Before
     fun setUp() {
         val activeWorkoutRepository = FakeActiveWorkoutRepository()
-        val sessionRepository = FakeSessionRepository()
         database = Room.inMemoryDatabaseBuilder(ApplicationProvider.getApplicationContext(), GymDatabase::class.java).build()
         val pendingWorkoutsRepository = RoomPendingWorkoutsRepository(database.pendingWorkoutDao())
         // Offline, so whatever is saved stays waiting to sync.
@@ -110,7 +91,7 @@ class WorkoutScreenTest {
         }
         // On the main thread, like viewModel() would, since both update their state as they start.
         val startWorkoutViewModel = composeRule.runOnUiThread {
-            StartWorkoutViewModel(templatesRepository, activeWorkoutRepository, sessionRepository, workoutsRepository)
+            StartWorkoutViewModel(templatesRepository, activeWorkoutRepository, workoutsRepository)
         }
         workoutViewModel = composeRule.runOnUiThread {
             WorkoutViewModel(exercisesRepository, activeWorkoutRepository, workoutsRepository)
@@ -151,6 +132,9 @@ class WorkoutScreenTest {
     private fun str(@StringRes id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
+    private fun waitingToSync(count: Int) =
+        InstrumentationRegistry.getInstrumentation().targetContext.resources.getQuantityString(R.plurals.start_workout_pending, count, count)
+
     private fun addSquat() = composeRule.runOnIdle { workoutViewModel.addExercise(squat) }
 
     @Test
@@ -167,8 +151,8 @@ class WorkoutScreenTest {
         composeRule.onNodeWithText(str(R.string.start_workout_continue)).assertDoesNotExist()
         composeRule.onNodeWithText(str(R.string.start_workout_new)).assertIsDisplayed()
         // Room saves off the main thread, which the test doesn't wait for by itself.
-        composeRule.waitUntil { composeRule.onAllNodesWithText(str(R.string.start_workout_sync)).fetchSemanticsNodes().isNotEmpty() }
-        composeRule.onNodeWithText(str(R.string.start_workout_sync)).assertIsDisplayed()
+        composeRule.waitUntil { composeRule.onAllNodesWithText(waitingToSync(1)).fetchSemanticsNodes().isNotEmpty() }
+        composeRule.onNodeWithText(waitingToSync(1)).assertIsDisplayed()
     }
 
     @Test
@@ -213,7 +197,7 @@ class WorkoutScreenTest {
 
         composeRule.onNodeWithText(str(R.string.start_workout_continue)).assertDoesNotExist()
         composeRule.onNodeWithText(str(R.string.start_workout_new)).assertIsDisplayed()
-        composeRule.onNodeWithText(str(R.string.start_workout_sync)).assertDoesNotExist()
+        composeRule.onNodeWithText(waitingToSync(1)).assertDoesNotExist()
     }
 
     @Test

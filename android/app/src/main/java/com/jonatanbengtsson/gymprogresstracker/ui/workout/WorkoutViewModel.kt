@@ -15,7 +15,6 @@ import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.ExercisesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FinishedWorkout
-import com.jonatanbengtsson.gymprogresstracker.data.RefreshResult
 import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExercise
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
@@ -36,12 +35,8 @@ data class WorkoutUiState(
     val name: String = "",
     /** The exercises added to the workout, in the order they were added. */
     val workoutExercises: List<WorkoutExerciseEntry> = emptyList(),
-    /** True while the exercises to pick from are being fetched from the server. */
-    val isLoadingExercises: Boolean = false,
-    /** The exercises stored on the device, shown even while they're being fetched or when that fails. */
+    /** The exercises stored on the device, to pick from. */
     val exercises: List<Exercise> = emptyList(),
-    /** Why fetching the exercises failed last time. */
-    @StringRes val exercisesErrorMessage: Int? = null,
     /** True while the workout is being saved. */
     val isSaving: Boolean = false,
     /** Why the workout couldn't be saved last time. */
@@ -83,7 +78,6 @@ class WorkoutViewModel(
         viewModelScope.launch {
             exercisesRepository.exercises.collect { exercises -> uiState = uiState.copy(exercises = exercises) }
         }
-        loadExercises()
     }
 
     /** Ignores names longer than a template name can be. */
@@ -184,24 +178,6 @@ class WorkoutViewModel(
             val cleared = activeWorkoutRepository.workout.value == workout
             if (cleared) activeWorkoutRepository.update { ActiveWorkout() }
             uiState = uiState.copy(isSaving = false, isSaved = cleared)
-        }
-    }
-
-    /** Fetches the exercises from the server, replacing the stored ones. */
-    fun loadExercises() {
-        if (uiState.isLoadingExercises) return
-        uiState = uiState.copy(isLoadingExercises = true, exercisesErrorMessage = null)
-
-        viewModelScope.launch {
-            val result = exercisesRepository.refresh()
-            uiState = uiState.copy(
-                isLoadingExercises = false,
-                exercisesErrorMessage = when (result) {
-                    RefreshResult.NetworkError -> R.string.workout_exercises_error_network
-                    RefreshResult.ServerError -> R.string.workout_exercises_error_server
-                    RefreshResult.Success, RefreshResult.NotLoggedIn -> null
-                }
-            )
         }
     }
 

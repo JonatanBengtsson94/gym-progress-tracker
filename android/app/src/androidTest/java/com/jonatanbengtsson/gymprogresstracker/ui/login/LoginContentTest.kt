@@ -9,6 +9,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasProgressBarRangeInfo
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -32,10 +33,11 @@ class LoginContentTest {
 
     private val submitted = mutableListOf<Pair<String, String>>()
 
-    private fun setContent(isLoading: Boolean = false, @StringRes errorMessage: Int? = null) {
+    private fun setContent(ownerUsername: String? = null, isLoading: Boolean = false, @StringRes errorMessage: Int? = null) {
         composeRule.setContent {
             GymProgressTrackerTheme {
                 LoginContent(
+                    ownerUsername = ownerUsername,
                     isLoading = isLoading,
                     errorMessage = errorMessage,
                     onLogin = { username, password -> submitted += username to password }
@@ -62,6 +64,19 @@ class LoginContentTest {
 
         passwordField().performTextInput("pw")
         loginButton().assertIsEnabled()
+    }
+
+    @Test
+    fun theOwnersUsernameIsFilledInAndCantBeChanged() {
+        setContent(ownerUsername = "alice")
+
+        usernameField().assertTextContains("alice").assertIsNotEnabled()
+        loginButton().assertIsNotEnabled()
+
+        passwordField().performTextInput("pw")
+        loginButton().performClick()
+
+        assertEquals(listOf("alice" to "pw"), submitted)
     }
 
     @Test

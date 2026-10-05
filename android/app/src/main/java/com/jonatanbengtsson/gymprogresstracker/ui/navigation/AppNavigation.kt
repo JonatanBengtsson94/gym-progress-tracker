@@ -42,42 +42,31 @@ sealed interface Screen : NavKey {
 }
 
 /**
- * Navigates between the app's screens, starting at [Screen.StartWorkout]. A navigation bar switches
- * between the start screen and [Screen.User], and is hidden on the other screens. [Screen.Login] opens
- * over the screen that needs a session and closes once the user has logged in. Each screen gets its own
- * view models, cleared when the screen is popped or this leaves the composition.
+ * Navigates between the app's screens, starting at [Screen.StartWorkout], or at [Screen.Login] when
+ * [startAtLogin] is true, as on the device's first launch. A navigation bar switches between the start
+ * screen and [Screen.User], and is hidden on the other screens. Later, [Screen.Login] opens over the
+ * screen that needs a session and closes once the user has logged in. Each screen gets its own view
+ * models, cleared when the screen is popped or this leaves the composition.
  */
 @Composable
-fun AppNavigation(modifier: Modifier = Modifier) {
-    val backStack = rememberNavBackStack(Screen.StartWorkout)
+fun AppNavigation(startAtLogin: Boolean, modifier: Modifier = Modifier) {
+    val backStack = rememberNavBackStack(if (startAtLogin) Screen.Login else Screen.StartWorkout)
     val currentScreen = backStack.last()
-
-    // A second tap can land while the screen it opens is still animating in.
-    fun navigateTo(screen: Screen) {
-        if (backStack.lastOrNull() != screen) backStack.add(screen)
-    }
-
-    // The start screen stays at the bottom of the back stack, so back from any other tab returns to it.
-    fun selectTab(screen: Screen) {
-        if (currentScreen == screen) return
-        while (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
-        if (screen != Screen.StartWorkout) backStack.add(screen)
-    }
 
     Scaffold(
         modifier = modifier,
         bottomBar = {
-            if (currentScreen == Screen.StartWorkout || currentScreen == Screen.User) {
+            if (backStack.showsNavigationBar) {
                 NavigationBar {
                     NavigationBarItem(
                         selected = currentScreen == Screen.StartWorkout,
-                        onClick = { selectTab(Screen.StartWorkout) },
+                        onClick = { backStack.selectTab(Screen.StartWorkout) },
                         icon = { Icon(painterResource(R.drawable.ic_fitness_center), contentDescription = null) },
                         label = { Text(stringResource(R.string.navigation_workout)) }
                     )
                     NavigationBarItem(
                         selected = currentScreen == Screen.User,
-                        onClick = { selectTab(Screen.User) },
+                        onClick = { backStack.selectTab(Screen.User) },
                         icon = { Icon(Icons.Filled.Person, contentDescription = null) },
                         label = { Text(stringResource(R.string.navigation_user)) }
                     )
@@ -95,8 +84,8 @@ fun AppNavigation(modifier: Modifier = Modifier) {
             entryProvider = entryProvider {
                 entry<Screen.StartWorkout> {
                     StartWorkoutScreen(
-                        onStartNewWorkout = { navigateTo(Screen.Workout) },
-                        onContinueWorkout = { navigateTo(Screen.Workout) },
+                        onStartNewWorkout = { backStack.navigateTo(Screen.Workout) },
+                        onContinueWorkout = { backStack.navigateTo(Screen.Workout) },
                         // TODO: open the workout screen prefilled from the template.
                         onStartFromTemplate = {}
                     )
@@ -108,10 +97,10 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                     )
                 }
                 entry<Screen.User> {
-                    UserScreen(onLogIn = { navigateTo(Screen.Login) })
+                    UserScreen(onLogIn = { backStack.navigateTo(Screen.Login) })
                 }
                 entry<Screen.Login> {
-                    LoginScreen(onLoggedIn = { backStack.remove(Screen.Login) })
+                    LoginScreen(onLoggedIn = { backStack.closeLogin() })
                 }
             }
         )

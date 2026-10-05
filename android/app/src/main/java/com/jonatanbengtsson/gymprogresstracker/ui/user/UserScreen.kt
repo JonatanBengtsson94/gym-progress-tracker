@@ -87,7 +87,7 @@ private fun SyncSection(pendingWorkouts: Int, isSyncing: Boolean, @StringRes err
         )
         Button(
             onClick = onSync,
-            enabled = pendingWorkouts > 0 && !isSyncing,
+            enabled = !isSyncing,
             modifier = Modifier.fillMaxWidth()
         ) {
             if (isSyncing) {

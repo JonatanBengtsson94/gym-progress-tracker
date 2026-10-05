@@ -226,6 +226,8 @@ class RoomTemplatesRepositoryTest {
         }
         val templatesRepository = RoomTemplatesRepository(templatesApi, dao, pendingWorkoutsRepository)
         val workoutsRepository = ApiWorkoutsRepository(workoutsApi, templatesApi, pendingWorkoutsRepository, templatesRepository)
+        val exercisesRepository = FakeExercisesRepository().apply { refreshResult.complete(RefreshResult.Success) }
+        val syncRepository = DefaultSyncRepository(workoutsRepository, templatesRepository, exercisesRepository)
         templatesRepository.refresh()
         val chestDay = FinishedWorkout("Chest Day", Instant.parse("2026-10-04T17:00:00Z"), Instant.parse("2026-10-04T18:00:00Z"), listOf(squat))
 
@@ -235,7 +237,7 @@ class RoomTemplatesRepositoryTest {
         assertEquals(listOf("Chest Day", "Push Day", "Leg Day"), beforeSync.map { it.name })
         assertEquals(LatestWorkout(testId(30), chestDay.startedAt, chestDay.completedAt, chestDay.exercises), beforeSync[0].latestWorkout)
 
-        workoutsRepository.sync()
+        syncRepository.sync()
 
         val afterSync = templatesRepository.templates.first()
         assertEquals(listOf(chestDayId, pushDay.id, legDay.id), afterSync.map { it.id })

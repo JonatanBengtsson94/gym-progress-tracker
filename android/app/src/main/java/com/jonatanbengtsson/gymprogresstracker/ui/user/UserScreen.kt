@@ -1,6 +1,5 @@
 package com.jonatanbengtsson.gymprogresstracker.ui.user
 
-import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -68,46 +67,43 @@ fun UserContent(
             }
         }
         HorizontalDivider()
-        SyncSection(
-            pendingWorkouts = uiState.pendingWorkouts,
-            isSyncing = uiState.isSyncing,
-            errorMessage = uiState.syncErrorMessage,
-            onSync = onSync
-        )
+        SyncSection(uiState = uiState, onSync = onSync)
     }
 }
 
 @Composable
-private fun SyncSection(pendingWorkouts: Int, isSyncing: Boolean, @StringRes errorMessage: Int?, onSync: () -> Unit) {
+private fun SyncSection(uiState: UserUiState, onSync: () -> Unit) {
+    val pendingWorkouts = uiState.pendingWorkouts
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = if (pendingWorkouts > 0) {
-                pluralStringResource(R.plurals.user_pending, pendingWorkouts, pendingWorkouts)
-            } else {
-                stringResource(R.string.user_all_synced)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        if (pendingWorkouts > 0) {
+            StatusText(pluralStringResource(R.plurals.user_pending, pendingWorkouts, pendingWorkouts))
+        } else if (uiState.username != null) {
+            StatusText(stringResource(R.string.user_all_synced))
+        }
         Button(
             onClick = onSync,
-            enabled = !isSyncing,
+            enabled = !uiState.isSyncing,
             modifier = Modifier.fillMaxWidth()
         ) {
-            if (isSyncing) {
+            if (uiState.isSyncing) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
             } else {
-                Text(stringResource(R.string.user_sync))
+                Text(stringResource(if (uiState.isLoggedIn) R.string.user_sync else R.string.user_log_in_to_sync))
             }
         }
-        if (errorMessage != null) {
+        if (uiState.syncErrorMessage != null) {
             Text(
-                text = stringResource(errorMessage),
+                text = stringResource(uiState.syncErrorMessage),
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodyMedium
             )
         }
     }
+}
+
+@Composable
+private fun StatusText(text: String) {
+    Text(text = text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @Preview(showBackground = true)

@@ -55,7 +55,50 @@ class UserContentTest {
 
         composeRule.onNodeWithText(str(R.string.user_not_logged_in)).assertIsDisplayed()
         composeRule.onNodeWithText(str(R.string.user_logged_out)).assertDoesNotExist()
-        composeRule.onNodeWithText(str(R.string.user_sync)).assertIsDisplayed()
+    }
+
+    @Test
+    fun beforeAnyoneHasLoggedInNothingClaimsToBeSynced() {
+        setContent(UserUiState())
+
+        composeRule.onNodeWithText(str(R.string.user_all_synced)).assertDoesNotExist()
+    }
+
+    @Test
+    fun beforeAnyoneHasLoggedInWaitingWorkoutsStillShow() {
+        setContent(UserUiState(pendingWorkouts = 2))
+
+        composeRule.onNodeWithText(waitingToSync(2)).assertIsDisplayed()
+    }
+
+    @Test
+    fun beforeAnyoneHasLoggedInTheButtonLogsInToSync() {
+        setContent(UserUiState())
+
+        composeRule.onNodeWithText(str(R.string.user_sync)).assertDoesNotExist()
+        composeRule.onNodeWithText(str(R.string.user_log_in_to_sync)).performClick()
+
+        assertEquals(1, syncClicks)
+    }
+
+    @Test
+    fun loggedOutTheButtonLogsInToSync() {
+        setContent(UserUiState(username = "alice"))
+
+        composeRule.onNodeWithText(str(R.string.user_sync)).assertDoesNotExist()
+        composeRule.onNodeWithText(str(R.string.user_log_in_to_sync)).performClick()
+
+        assertEquals(1, syncClicks)
+    }
+
+    @Test
+    fun loggedInTheButtonSyncs() {
+        setContent(UserUiState(username = "alice", isLoggedIn = true))
+
+        composeRule.onNodeWithText(str(R.string.user_log_in_to_sync)).assertDoesNotExist()
+        composeRule.onNodeWithText(str(R.string.user_sync)).performClick()
+
+        assertEquals(1, syncClicks)
     }
 
     @Test
@@ -77,7 +120,7 @@ class UserContentTest {
 
     @Test
     fun nothingWaitingSaysEverythingIsSyncedAndCanStillSync() {
-        setContent(UserUiState(username = "alice"))
+        setContent(UserUiState(username = "alice", isLoggedIn = true))
 
         composeRule.onNodeWithText(str(R.string.user_all_synced)).assertIsDisplayed()
         composeRule.onNodeWithText(str(R.string.user_sync)).performClick()

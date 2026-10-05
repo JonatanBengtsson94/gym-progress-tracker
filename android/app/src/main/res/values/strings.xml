@@ -69,6 +69,7 @@
     </plurals>
     <string name="user_all_synced">All workouts are synced</string>
     <string name="user_sync">Sync</string>
+    <string name="user_log_in_to_sync">Log in to sync</string>
     <string name="user_sync_error_network">Could not sync. Check your connection and try again.</string>
     <string name="user_sync_error_server">Something went wrong while syncing.</string>
     <string name="navigation_workout">Workout</string>

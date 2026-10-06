@@ -5,7 +5,11 @@ import com.jonatanbengtsson.gymprogresstracker.data.Exercise
 import com.jonatanbengtsson.gymprogresstracker.data.FakeActiveWorkoutRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeTemplatesRepository
 import com.jonatanbengtsson.gymprogresstracker.data.FakeWorkoutsRepository
+import com.jonatanbengtsson.gymprogresstracker.data.LatestWorkout
+import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExercise
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutSet
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
 import com.jonatanbengtsson.gymprogresstracker.data.testId
 import com.jonatanbengtsson.gymprogresstracker.ui.login.MainDispatcherRule
@@ -98,6 +102,68 @@ class StartWorkoutViewModelTest {
         activeWorkoutRepository.workout.value = workout
 
         viewModel.startNewWorkout()
+
+        assertEquals(workout, activeWorkoutRepository.workout.value)
+    }
+
+    @Test
+    fun `starting from a template fills in its latest workout's sets without completing them`() {
+        val bench = Exercise(testId(2), "Bench Press (Barbell)")
+        val pullUp = Exercise(testId(3), "Pull Up")
+        val template = WorkoutTemplate(
+            id = testId(1),
+            name = "Push Day",
+            latestWorkout = LatestWorkout(
+                workoutId = testId(7),
+                startedAt = startedAt,
+                completedAt = startedAt.plusSeconds(3600),
+                exercises = listOf(
+                    WorkoutExercise(bench.id, bench.name, listOf(WorkoutSet(8, 60000), WorkoutSet(6, 62500), WorkoutSet(5, 62250))),
+                    WorkoutExercise(pullUp.id, pullUp.name, listOf(WorkoutSet(10, 0)))
+                )
+            )
+        )
+
+        viewModel.startFromTemplate(template)
+
+        assertEquals(
+            ActiveWorkout(
+                startedAt = now,
+                name = "Push Day",
+                exercises = listOf(
+                    WorkoutExerciseEntry(
+                        bench,
+                        listOf(SetEntry("60", "8", id = 0), SetEntry("62.5", "6", id = 1), SetEntry("62.25", "5", id = 2))
+                    ),
+                    WorkoutExerciseEntry(pullUp, listOf(SetEntry("", "10", id = 0)))
+                )
+            ),
+            activeWorkoutRepository.workout.value
+        )
+        assertTrue(viewModel.uiState.workoutInProgress)
+    }
+
+    @Test
+    fun `starting from a template never performed starts an empty workout named after it`() {
+        viewModel.startFromTemplate(templates[1])
+
+        assertEquals(ActiveWorkout(startedAt = now, name = "Leg Day"), activeWorkoutRepository.workout.value)
+    }
+
+    @Test
+    fun `starting from a template restarts a workout that has no exercises`() {
+        activeWorkoutRepository.workout.value = ActiveWorkout(startedAt, name = "Push day")
+
+        viewModel.startFromTemplate(templates[1])
+
+        assertEquals(ActiveWorkout(startedAt = now, name = "Leg Day"), activeWorkoutRepository.workout.value)
+    }
+
+    @Test
+    fun `starting from a template keeps a workout in progress`() {
+        activeWorkoutRepository.workout.value = workout
+
+        viewModel.startFromTemplate(templates[1])
 
         assertEquals(workout, activeWorkoutRepository.workout.value)
     }

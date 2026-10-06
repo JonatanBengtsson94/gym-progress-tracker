@@ -69,7 +69,10 @@ fun StartWorkoutScreen(
         },
         onContinueWorkout = onContinueWorkout,
         onDiscardWorkout = viewModel::discardWorkout,
-        onStartFromTemplate = onStartFromTemplate,
+        onStartFromTemplate = { template ->
+            viewModel.startFromTemplate(template)
+            onStartFromTemplate(template)
+        },
         modifier = modifier
     )
 }
@@ -165,7 +168,11 @@ fun StartWorkoutContent(
             uiState.templates.isNotEmpty() -> itemsIndexed(uiState.templates, key = { _, template -> template.id.toString() }) { index, template ->
                 Column {
                     if (index > 0) HorizontalDivider(modifier = Modifier.padding(bottom = 12.dp))
-                    TemplateRow(template = template, onClick = { onStartFromTemplate(template) })
+                    TemplateRow(
+                        template = template,
+                        canStart = !uiState.workoutInProgress,
+                        onClick = { onStartFromTemplate(template) }
+                    )
                 }
             }
             else -> item {
@@ -190,7 +197,7 @@ fun StartWorkoutContent(
 }
 
 @Composable
-private fun TemplateRow(template: WorkoutTemplate, onClick: () -> Unit) {
+private fun TemplateRow(template: WorkoutTemplate, canStart: Boolean, onClick: () -> Unit) {
     val dateFormatter = remember {
         DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withZone(ZoneId.systemDefault())
     }
@@ -201,7 +208,7 @@ private fun TemplateRow(template: WorkoutTemplate, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = canStart, onClick = onClick)
             .padding(vertical = 8.dp)
     ) {
         Text(text = template.name, style = MaterialTheme.typography.titleMedium)

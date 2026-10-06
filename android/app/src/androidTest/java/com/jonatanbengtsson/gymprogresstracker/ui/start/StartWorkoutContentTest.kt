@@ -189,6 +189,24 @@ class StartWorkoutContentTest {
     }
 
     @Test
+    fun templatesCanNotBeStartedWhileAWorkoutIsInProgress() {
+        setContent(StartWorkoutUiState(templates = listOf(pushDay, legDay), workoutInProgress = true))
+
+        composeRule.onNodeWithText("Leg Day").performClick()
+
+        assertEquals(emptyList<WorkoutTemplate>(), startedTemplates)
+    }
+
+    @Test
+    fun templatesCanStillBeExpandedWhileAWorkoutIsInProgress() {
+        setContent(StartWorkoutUiState(templates = listOf(pushDay), workoutInProgress = true))
+
+        composeRule.onNodeWithText("2 exercises").performClick()
+
+        composeRule.onNodeWithText("Bench Press (Barbell)").assertIsDisplayed()
+    }
+
+    @Test
     fun templatesShowTheirLatestWorkout() {
         setContent(StartWorkoutUiState(templates = listOf(pushDay, legDay)))
 

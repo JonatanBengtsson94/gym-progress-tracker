@@ -10,10 +10,15 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.jonatanbengtsson.gymprogresstracker.appContainer
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkout
 import com.jonatanbengtsson.gymprogresstracker.data.ActiveWorkoutRepository
+import com.jonatanbengtsson.gymprogresstracker.data.Exercise
+import com.jonatanbengtsson.gymprogresstracker.data.SetEntry
 import com.jonatanbengtsson.gymprogresstracker.data.TemplatesRepository
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutExerciseEntry
+import com.jonatanbengtsson.gymprogresstracker.data.WorkoutSet
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutTemplate
 import com.jonatanbengtsson.gymprogresstracker.data.WorkoutsRepository
 import kotlinx.coroutines.launch
+import java.math.BigDecimal
 import java.time.Clock
 import java.time.Instant
 
@@ -63,8 +68,33 @@ class StartWorkoutViewModel(
         if (workout.exercises.isEmpty()) ActiveWorkout(startedAt = clock.instant()) else workout
     }
 
+    /**
+     * Starts a workout now named after [template], with the exercises and sets of its latest workout
+     * filled in but not completed, unless one is already in progress.
+     */
+    fun startFromTemplate(template: WorkoutTemplate) = activeWorkoutRepository.update { workout ->
+        if (workout.exercises.isNotEmpty()) return@update workout
+        ActiveWorkout(
+            startedAt = clock.instant(),
+            name = template.name,
+            exercises = template.latestWorkout?.exercises.orEmpty().map { exercise ->
+                WorkoutExerciseEntry(
+                    exercise = Exercise(exercise.exerciseId, exercise.name),
+                    sets = exercise.sets.mapIndexed { index, set -> set.toEntry(id = index) }
+                )
+            }
+        )
+    }
+
     /** Throws away the workout in progress. */
     fun discardWorkout() = activeWorkoutRepository.update { ActiveWorkout() }
+
+    /** The set as it would have been typed, with no weight left empty. */
+    private fun WorkoutSet.toEntry(id: Int) = SetEntry(
+        weightKg = if (weightGrams == 0) "" else BigDecimal(weightGrams).movePointLeft(3).stripTrailingZeros().toPlainString(),
+        reps = reps.toString(),
+        id = id
+    )
 
     companion object {
         val Factory = viewModelFactory {

@@ -85,8 +85,7 @@ fun AppNavigation(modifier: Modifier = Modifier) {
                     StartWorkoutScreen(
                         onStartNewWorkout = { backStack.navigateTo(Screen.Workout) },
                         onContinueWorkout = { backStack.navigateTo(Screen.Workout) },
-                        // TODO: open the workout screen prefilled from the template.
-                        onStartFromTemplate = {}
+                        onStartFromTemplate = { backStack.navigateTo(Screen.Workout) }
                     )
                 }
                 entry<Screen.Workout> {

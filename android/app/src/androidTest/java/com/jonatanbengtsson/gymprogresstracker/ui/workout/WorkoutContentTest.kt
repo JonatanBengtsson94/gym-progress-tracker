@@ -1,6 +1,10 @@
 package com.jonatanbengtsson.gymprogresstracker.ui.workout
 
 import androidx.annotation.StringRes
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -20,6 +24,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextInputSelection
+import androidx.compose.ui.text.TextRange
 import androidx.test.espresso.Espresso
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -34,6 +40,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.time.Instant
+import kotlin.uuid.Uuid
 
 @RunWith(AndroidJUnit4::class)
 class WorkoutContentTest {
@@ -47,19 +54,38 @@ class WorkoutContentTest {
     private val selectedExercises = mutableListOf<Exercise>()
     private val setEvents = mutableListOf<String>()
 
+    // Holds what's typed like the view model does, since a text field reverts to the value it's given.
     private fun setContent(uiState: WorkoutUiState) {
         composeRule.setContent {
+            var state by remember { mutableStateOf(uiState) }
+            fun updateSet(exerciseId: Uuid, setIndex: Int, transform: (SetEntry) -> SetEntry) {
+                state = state.copy(
+                    workoutExercises = state.workoutExercises.map { entry ->
+                        if (entry.exercise.id != exerciseId) entry
+                        else entry.copy(sets = entry.sets.mapIndexed { index, set -> if (index == setIndex) transform(set) else set })
+                    }
+                )
+            }
             GymProgressTrackerTheme {
                 WorkoutContent(
-                    uiState = uiState,
-                    onNameChange = { setEvents += "name $it" },
+                    uiState = state,
+                    onNameChange = {
+                        setEvents += "name $it"
+                        state = state.copy(name = it)
+                    },
                     onExerciseSelected = { selectedExercises += it },
                     onRemoveExercise = { setEvents += "remove exercise $it" },
                     onAddSet = { setEvents += "add $it" },
                     onRemoveSet = { id, index -> setEvents += "remove $id $index" },
                     onToggleSetCompleted = { id, index -> setEvents += "complete $id $index" },
-                    onWeightChange = { id, index, kg -> setEvents += "weight $id $index $kg" },
-                    onRepsChange = { id, index, reps -> setEvents += "reps $id $index $reps" },
+                    onWeightChange = { id, index, kg ->
+                        setEvents += "weight $id $index $kg"
+                        updateSet(id, index) { it.copy(weightKg = kg) }
+                    },
+                    onRepsChange = { id, index, reps ->
+                        setEvents += "reps $id $index $reps"
+                        updateSet(id, index) { it.copy(reps = reps) }
+                    },
                     onSave = { setEvents += "save" },
                     onDiscard = { setEvents += "discard" }
                 )
@@ -99,6 +125,7 @@ class WorkoutContentTest {
         setContent(WorkoutUiState(name = "Push"))
 
         composeRule.onNodeWithContentDescription(str(R.string.workout_name_description)).assert(hasText("Push"))
+        composeRule.onNodeWithContentDescription(str(R.string.workout_name_description)).performTextInputSelection(TextRange(4))
         composeRule.onNodeWithContentDescription(str(R.string.workout_name_description)).performTextInput(" day")
 
         assertEquals(listOf("name Push day"), setEvents)

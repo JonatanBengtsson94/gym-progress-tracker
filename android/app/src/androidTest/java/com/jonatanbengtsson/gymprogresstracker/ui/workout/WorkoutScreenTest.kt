@@ -219,7 +219,7 @@ class WorkoutScreenTest {
         Espresso.pressBack()
 
         composeRule.onNodeWithText(str(R.string.discard_workout)).performClick()
-        composeRule.onNodeWithText(str(R.string.discard_workout_confirm)).performClick()
+        composeRule.onNode(hasText(str(R.string.discard_workout_confirm)) and hasAnyAncestor(isDialog())).performClick()
         composeRule.onNodeWithText(str(R.string.start_workout_new)).performClick()
 
         composeRule.onNodeWithText(squat.name).assertDoesNotExist()

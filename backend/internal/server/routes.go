@@ -5,6 +5,7 @@ import (
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/auth"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/exercise"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/health"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/httpx"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/template"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/user"
@@ -18,8 +19,10 @@ func NewRouter(
 	templateHandler *template.TemplateHandler,
 	authHandler *auth.AuthHandler,
 	authMiddleware *auth.AuthMiddleware,
+	healthHandler *health.HealthHandler,
 ) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /health", healthHandler.GetHealth)
 	mux.Handle("GET /users/me", authMiddleware.RequireAuth(http.HandlerFunc(userHandler.GetUserFromSession)))
 	mux.HandleFunc("GET /global-exercises", exerciseHandler.GetGlobalExercises)
 	mux.Handle("GET /exercises", authMiddleware.RequireAuth(http.HandlerFunc(exerciseHandler.GetExercises)))

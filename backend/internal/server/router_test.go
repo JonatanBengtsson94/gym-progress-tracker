@@ -17,6 +17,7 @@ import (
 
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/auth"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/exercise"
+	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/health"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/server"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/template"
 	"github.com/JonatanBengtsson94/gym-progress-tracker/backend/internal/testutil"
@@ -83,7 +84,9 @@ func newTestRouter(t *testing.T) http.Handler {
 	authHandler := auth.NewAuthHandler(authService)
 	authMiddleware := auth.NewAuthMiddleware(authService)
 
-	return server.NewRouter(userHandler, exerciseHandler, workoutHandler, templateHandler, authHandler, authMiddleware)
+	healthHandler := health.NewHealthHandler(testPool)
+
+	return server.NewRouter(userHandler, exerciseHandler, workoutHandler, templateHandler, authHandler, authMiddleware, healthHandler)
 }
 
 func TestIntegration_LoginAndAccessProtectedRoute(t *testing.T) {
@@ -137,6 +140,21 @@ func TestIntegration_LoginAndAccessProtectedRoute(t *testing.T) {
 		if e.ExerciseId == benchPressId {
 			t.Errorf("expected only alice's own exercises, got the global %+v", e)
 		}
+	}
+}
+
+func TestIntegration_Health_NeedsNoToken(t *testing.T) {
+	router := newTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Result().StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Result().StatusCode)
+	}
+	if status := decodeBody[health.HealthResponse](t, rec).Status; status != "ok" {
+		t.Errorf("expected status \"ok\", got %q", status)
 	}
 }
 

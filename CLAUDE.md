@@ -16,14 +16,3 @@ A comment is still worth writing when it states what something is or does (a KDo
 - `// Added after the navigation's back handling, so system back closes the picker before the screen.`
 
 When unsure, leave the comment out.
-
-# Database schemas
-
-Neither the backend's database nor the app is deployed anywhere yet, so there is no data to migrate:
-
-- Schema changes go into the existing files in `database/migrations` rather than a new numbered migration. Reset the local database afterwards with `docker compose down -v && docker compose up -d --build`, since migrations only run when it's first created.
-- The app's Room database stays at version 1, with no migrations. Change the entities directly and commit the regenerated `android/app/schemas/.../1.json`. Installed builds need their app data cleared.
-
-Backend tests check counts that depend on what the migrations insert, such as the 48 global exercises in `backend/internal/exercise/repository_test.go`, so update them in the same change.
-
-Once either is deployed, this flips: existing migrations and Room versions are never edited, and every change gets a new, data-preserving migration.

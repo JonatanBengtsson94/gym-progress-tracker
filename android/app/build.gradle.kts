@@ -22,6 +22,9 @@ val gitVersionName: String = providers.exec {
     commandLine("git", "describe", "--tags", "--always", "--dirty")
 }.standardOutput.asText.get().trim().removePrefix("v")
 
+// Release builds are signed only when RELEASE_KEYSTORE points at the keystore, which stays out of the repo.
+val releaseKeystore: String? = providers.environmentVariable("RELEASE_KEYSTORE").orNull
+
 val gitCommitCount: Int = providers.exec {
     commandLine("git", "rev-list", "--count", "HEAD")
 }.standardOutput.asText.get().trim().toInt()
@@ -42,13 +45,26 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = providers.environmentVariable("RELEASE_KEYSTORE_PASSWORD").get()
+                keyAlias = "release"
+                // keytool's default PKCS12 format uses the keystore's password for the key too.
+                keyPassword = storePassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
             buildConfigField("String", "BASE_URL", "\"$devBaseUrl\"")
         }
         release {
-            // TODO: replace with the production backend URL. Must be HTTPS.
-            buildConfigField("String", "BASE_URL", "\"https://api.example.com\"")
+            // Must be HTTPS, since only debug builds allow plain HTTP.
+            buildConfigField("String", "BASE_URL", "\"https://gym-api.jonatanbengtsson.com\"")
+            signingConfig = signingConfigs.findByName("release")
             optimization {
                 enable = false
             }

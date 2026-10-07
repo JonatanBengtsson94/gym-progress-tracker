@@ -1,0 +1,16 @@
+services:
+  backend:
+    build:
+      context: ../backend
+      args:
+        VERSION: ${VERSION:-dev}
+    restart: unless-stopped
+    environment:
+      DB_USER: ${DB_USER}
+      DB_PWD: ${DB_PWD}
+      DB_NAME: ${DB_NAME}
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      SESSION_DURATION: ${SESSION_DURATION}
+    ports:
+      - "127.0.0.1:8080:8080"

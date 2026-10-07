@@ -1,9 +1,6 @@
 services:
   backend:
-    build:
-      context: ../backend
-      args:
-        VERSION: ${VERSION:-dev}
+    image: ghcr.io/jonatanbengtsson94/gym-progress-tracker-backend:${VERSION:?set VERSION in .env}
     restart: unless-stopped
     environment:
       DB_USER: ${DB_USER}

@@ -59,6 +59,8 @@ android {
 
     buildTypes {
         debug {
+            // Lets a debug build be installed next to the release build.
+            applicationIdSuffix = ".debug"
             buildConfigField("String", "BASE_URL", "\"$devBaseUrl\"")
         }
         release {

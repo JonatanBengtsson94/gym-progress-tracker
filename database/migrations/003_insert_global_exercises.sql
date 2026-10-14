@@ -5,4 +5,4 @@ INSERT INTO exercises (exercise_name) VALUES ('Seated Calf Raise (Machine)');
 INSERT INTO exercises (exercise_name) VALUES ('Leg Press');
 INSERT INTO exercises (exercise_name) VALUES ('Hack Squat (Barbell)');
 INSERT INTO exercises (exercise_name) VALUES ('Hack Squat (Machine)');
-
+INSERT INTO exercises (exercise_name) VALUES ('Lat Pulldown - Narrow Grip (Cable)');

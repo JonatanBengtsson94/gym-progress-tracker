@@ -284,6 +284,18 @@ class WorkoutContentTest {
     }
 
     @Test
+    fun tappingASetFieldSelectsItsValueSoTypingReplacesIt() {
+        setContent(WorkoutUiState(workoutExercises = listOf(WorkoutExerciseEntry(squat, listOf(SetEntry("100", "5"))))))
+
+        val weight = composeRule.onNodeWithContentDescription(str(R.string.workout_set_weight_description, 1))
+        weight.performClick()
+        composeRule.waitForIdle()
+        weight.performTextInput("80")
+
+        assertEquals(listOf("weight ${squat.id} 0 80"), setEvents)
+    }
+
+    @Test
     fun addAndRemoveSetReportTheExerciseAndSet() {
         setContent(
             WorkoutUiState(

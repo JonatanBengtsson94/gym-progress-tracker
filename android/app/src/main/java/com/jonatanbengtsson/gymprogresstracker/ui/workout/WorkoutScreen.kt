@@ -71,9 +71,11 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -504,9 +506,20 @@ private fun SetField(
         if (completed) LocalContentColor.current else MaterialTheme.colorScheme.onSurface
     )
 
+    var fieldValue by remember { mutableStateOf(TextFieldValue(value)) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    // Runs after the tap that focused the field has placed the cursor, so the selection isn't overwritten.
+    LaunchedEffect(focused) {
+        if (focused) fieldValue = fieldValue.copy(selection = TextRange(0, fieldValue.text.length))
+    }
+
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = fieldValue.copy(text = value),
+        onValueChange = {
+            fieldValue = it
+            if (it.text != value) onValueChange(it.text)
+        },
         modifier = modifier
             .height(40.dp)
             .background(backgroundColor, MaterialTheme.shapes.small)
@@ -516,6 +529,7 @@ private fun SetField(
             textAlign = TextAlign.Center
         ),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = ImeAction.Next),
+        interactionSource = interactionSource,
         singleLine = true,
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         decorationBox = { innerTextField ->
